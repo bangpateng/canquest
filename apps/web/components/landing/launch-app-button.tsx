@@ -48,14 +48,14 @@ export function LaunchAppButton({ size = "sm", className }: LaunchAppButtonProps
 
   if (authed) {
     return (
-      <Link href="/overview" className={classes}>
+      <Link href="/ecosystem" className={classes}>
         {label}
       </Link>
     );
   }
 
   return (
-    <button type="button" className={classes} onClick={() => openAuth("login", "/overview")}>
+    <button type="button" className={classes} onClick={() => openAuth("login", "/ecosystem")}>
       {label}
     </button>
   );

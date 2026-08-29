@@ -1,10 +1,10 @@
-import { DashboardView } from "@/components/app/dashboard/dashboard-view";
 import { PlatformPage } from "@/components/platform/platform-page";
+import { EcosystemPage } from "@/components/app/ecosystem/ecosystem-page";
 
-export default function OverviewPage() {
+export default function EcosystemRoutePage() {
   return (
     <PlatformPage className="space-y-8">
-      <DashboardView />
+      <EcosystemPage />
     </PlatformPage>
   );
 }

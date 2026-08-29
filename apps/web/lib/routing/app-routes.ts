@@ -7,6 +7,8 @@ import { slugify } from "@/lib/routing/slug";
  * - Menu **Quest** → `/quests` → CanQuest Quest hub (daily / social tasks)
  */
 export const ROUTES = {
+  /** Ecosystem partner directory — open from Ecosystem menu */
+  ecosystem: "/ecosystem",
   /** Partner campaigns — open from Earn menu */
   campaignQuests: "/earn",
   campaignQuest: (questId: string, slug?: string) =>

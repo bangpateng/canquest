@@ -11,6 +11,7 @@ import { OneSwapModule } from './oneswap/oneswap.module';
 import { PartyModule } from './party/party.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QuestsModule } from './quests/quests.module';
+import { PartnersModule } from './partners/partners.module';
 import { AdminModule } from './admin/admin.module';
 import { PublicModule } from './public/public.module';
 import { EarnModule } from './earn/earn.module';
@@ -46,6 +47,7 @@ const resolveApiEnvPaths = (): string[] => [
     OneSwapModule, // @Global: OneSwapClient (DEX swap + token list for pricing)
     PartyModule,
     QuestsModule,
+    PartnersModule,
     EarnModule,
     AdminModule,
     // ── New modules ─────────────────────────────────────────────

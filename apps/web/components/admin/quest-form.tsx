@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/services/api/client";
 import { useRouter } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
@@ -204,6 +204,19 @@ export function QuestForm({
   const [socialLinks, setSocialLinks] = useState<QuestSocialLink[]>(
     initialData?.socialLinks ?? [],
   );
+  // Ecosystem partner link (optional) — daftar dimuat dari admin API.
+  const [partnerId, setPartnerId] = useState<string>(
+    (initialData as { partnerId?: string } | undefined)?.partnerId ?? "",
+  );
+  const [partnerOptions, setPartnerOptions] = useState<
+    Array<{ id: string; name: string; logoUrl?: string | null }>
+  >([]);
+  useEffect(() => {
+    fetch("/api/admin/partners", { cache: "no-store" })
+      .then(async (res) => (res.ok ? res.json() : []))
+      .then((rows) => setPartnerOptions(rows))
+      .catch(() => setPartnerOptions([]));
+  }, []);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string[] | null>(null);
@@ -435,6 +448,8 @@ export function QuestForm({
 
       const payload = {
         title: form.title,
+        // Ecosystem partner link — null = lepas link (legacy quest tanpa partner).
+        ...(partnerId !== "" ? { partnerId } : questKind === "CAMPAIGN" ? { partnerId: null } : {}),
         ...(questKind === "CAMPAIGN" && {
           projectName: form.projectName.trim() || null,
         }),
@@ -608,6 +623,36 @@ export function QuestForm({
                 Slug is auto-generated from the first letters of each word (up
                 to 4 chars), e.g. &ldquo;Digital Asset Collective&rdquo; &rarr;
                 &ldquo;DAC&rdquo;. Shown on cards when no logo.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">
+                Ecosystem partner (optional)
+              </label>
+              <select
+                value={partnerId}
+                onChange={(e) => {
+                  const id = e.target.value || null;
+                  setPartnerId(id);
+                  const p = partnerOptions.find((o) => o.id === id);
+                  if (p) {
+                    // Autofill dari profil partner — tetap bisa diedit manual.
+                    updateField("org", p.name);
+                    if (p.logoUrl) updateField("logoUrl", p.logoUrl);
+                  }
+                }}
+                className={inputCls}
+              >
+                <option value="">— none —</option>
+                {partnerOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                Link campaign ke profil /ecosystem — org, logo &amp; socials
+                diisi otomatis dari partner.
               </p>
             </div>
             <div>

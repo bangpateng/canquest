@@ -170,3 +170,57 @@ export const EmailNotificationStatus = {
   FAILED: 'FAILED' as EmailNotificationStatus,
   SKIPPED: 'SKIPPED' as EmailNotificationStatus,
 };
+
+/** Kategori direktori ecosystem partner — match enum prisma PartnerCategory. */
+export type PartnerCategory =
+  | 'COMPLIANCE'
+  | 'CUSTODY'
+  | 'DATA_ANALYTICS'
+  | 'DEVELOPER_TOOLS'
+  | 'EXCHANGES'
+  | 'FINANCING'
+  | 'FORENSICS_SECURITY'
+  | 'INTEROPERABILITY'
+  | 'LIQUIDITY'
+  | 'NAAS'
+  | 'PAYMENTS'
+  | 'STABLECOINS'
+  | 'TOKENIZED_ASSETS'
+  | 'WALLETS';
+export const PARTNER_CATEGORIES: PartnerCategory[] = [
+  'COMPLIANCE',
+  'CUSTODY',
+  'DATA_ANALYTICS',
+  'DEVELOPER_TOOLS',
+  'EXCHANGES',
+  'FINANCING',
+  'FORENSICS_SECURITY',
+  'INTEROPERABILITY',
+  'LIQUIDITY',
+  'NAAS',
+  'PAYMENTS',
+  'STABLECOINS',
+  'TOKENIZED_ASSETS',
+  'WALLETS',
+];
+export function isPartnerCategory(v: string): v is PartnerCategory {
+  return (PARTNER_CATEGORIES as string[]).includes(v);
+}
+
+/** Label tampilan kategori partner (UI web & admin). */
+export const PARTNER_CATEGORY_LABELS: Record<PartnerCategory, string> = {
+  COMPLIANCE: 'Compliance',
+  CUSTODY: 'Custody',
+  DATA_ANALYTICS: 'Data & Analytics',
+  DEVELOPER_TOOLS: 'Developer Tools',
+  EXCHANGES: 'Exchanges',
+  FINANCING: 'Financing',
+  FORENSICS_SECURITY: 'Forensics & Security',
+  INTEROPERABILITY: 'Interoperability',
+  LIQUIDITY: 'Liquidity',
+  NAAS: 'NaaS',
+  PAYMENTS: 'Payments',
+  STABLECOINS: 'Stablecoins',
+  TOKENIZED_ASSETS: 'Tokenized Assets',
+  WALLETS: 'Wallets',
+};

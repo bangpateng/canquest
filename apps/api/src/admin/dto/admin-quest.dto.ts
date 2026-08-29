@@ -144,6 +144,11 @@ abstract class QuestMoneyFields {
 }
 
 export class CreateQuestDto extends QuestMoneyFields {
+  /** Optional ecosystem partner link — when set, org/logo/socials are denormalized from the partner profile. */
+  @IsOptional()
+  @IsString()
+  partnerId?: string | null;
+
   /** Max winners / FCFS slots — create path: number only (no null). */
   @IsOptional()
   @IsInt()
@@ -271,6 +276,11 @@ export class CreateQuestDto extends QuestMoneyFields {
 }
 
 export class UpdateQuestDto extends QuestMoneyFields {
+  /** Optional ecosystem partner link — null clears the link. */
+  @IsOptional()
+  @IsString()
+  partnerId?: string | null;
+
   /** Max winners / FCFS slots — update path allows null to clear the value. */
   @IsOptional()
   @IsInt()

@@ -27,6 +27,7 @@ import {
   UpdateQuestDto,
   UpdateTaskDto,
 } from './dto/admin-quest.dto';
+import { AdminPartnerDto } from './dto/admin-partner.dto';
 
 @Controller('admin')
 @UseGuards(AuthGuard('admin-jwt'), AdminGuard)
@@ -81,6 +82,31 @@ export class AdminController {
   @Delete('quests/:questId')
   deleteQuest(@Param('questId') questId: string) {
     return this.admin.deleteQuest(questId);
+  }
+
+  /* ── Ecosystem Partner CRUD ── */
+
+  @Get('partners')
+  listPartners() {
+    return this.admin.listPartners();
+  }
+
+  @Post('partners')
+  createPartner(@Body() body: AdminPartnerDto) {
+    return this.admin.createPartner(body);
+  }
+
+  @Patch('partners/:partnerId')
+  updatePartner(
+    @Param('partnerId') partnerId: string,
+    @Body() body: AdminPartnerDto,
+  ) {
+    return this.admin.updatePartner(partnerId, body);
+  }
+
+  @Delete('partners/:partnerId')
+  deletePartner(@Param('partnerId') partnerId: string) {
+    return this.admin.deletePartner(partnerId);
   }
 
   /* ── Task CRUD ── */

@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   EntryGateMode,
+  PartnerCategory,
   QuestKind,
   QuestStatus,
   RewardType,
@@ -511,6 +512,8 @@ export class AdminService {
     projectName?: string | null;
     org: string;
     orgSlug: string;
+    /** Optional ecosystem partner — overrides org/logo/socials from profile. */
+    partnerId?: string | null;
     description: string;
     banner?: string;
     bannerImageUrl?: string | null;
@@ -548,6 +551,13 @@ export class AdminService {
     }>;
   }) {
     this.assertQuestSchedule(data.startsAt, data.endsAt);
+    // Optional ecosystem partner link — denormalize org/logo/socials dari profil.
+    const partner = data.partnerId
+      ? await this.prisma.partner.findUnique({ where: { id: data.partnerId } })
+      : null;
+    if (data.partnerId && !partner) {
+      throw new NotFoundException('Partner not found');
+    }
     const questKind = data.questKind ?? QuestKind.CAMPAIGN;
     this.assertCcFcfsMaxWinners(data.rewardType, data.maxWinners, questKind);
     if (questKind === QuestKind.EARN_HUB) {
@@ -564,12 +574,12 @@ export class AdminService {
       data: {
         title: data.title,
         projectName: data.projectName?.trim() || null,
-        org: data.org,
+        org: partner?.name ?? data.org,
         orgSlug: data.orgSlug,
         description: data.description,
         banner: data.banner ?? 'linear-gradient(135deg,#1e293b,#0f172a)',
         bannerImageUrl: data.bannerImageUrl ?? null,
-        logoUrl: data.logoUrl ?? null,
+        logoUrl: partner?.logoUrl ?? data.logoUrl ?? null,
         rewardCc: data.rewardCc ?? 0,
         // Token reward: "CC" (default) atau "USDCx". Normalize supaya aman dari input kosong.
         rewardToken:
@@ -619,9 +629,12 @@ export class AdminService {
               ? (data.entryCostPoints ?? 200)
               : 0,
         tags: JSON.stringify(data.tags ?? []),
-        socialLinks: serializeQuestSocialLinks(
-          normalizeQuestSocialLinksForSave(data.socialLinks ?? []),
-        ),
+        socialLinks: partner
+          ? partner.socialLinks
+          : serializeQuestSocialLinks(
+              normalizeQuestSocialLinksForSave(data.socialLinks ?? []),
+            ),
+        partnerId: partner?.id ?? null,
         tasks: data.tasks
           ? {
               create: data.tasks.map((t, i) => ({
@@ -789,12 +802,28 @@ export class AdminService {
       entryGateMode?: EntryGateMode;
       entryCcLock?: number | null;
       entryCostPoints?: number | null;
+      /** Optional ecosystem partner link — null clears (keeps legacy fields). */
+      partnerId?: string | null;
     },
   ) {
     const existing = await this.prisma.quest.findUnique({
       where: { id: questId },
     });
     if (!existing) throw new NotFoundException('Quest not found');
+
+    // Optional ecosystem partner — resolve & denormalize org/logo/socials.
+    let partner: { id: string; name: string; logoUrl: string | null; socialLinks: string } | null = null;
+    if (data.partnerId !== undefined) {
+      if (data.partnerId === null) {
+        partner = null;
+      } else {
+        const found = await this.prisma.partner.findUnique({
+          where: { id: data.partnerId },
+        });
+        if (!found) throw new NotFoundException('Partner not found');
+        partner = found;
+      }
+    }
 
     const nextStarts =
       data.startsAt !== undefined
@@ -823,6 +852,8 @@ export class AdminService {
     const updated = await this.prisma.quest.update({
       where: { id: questId },
       data: {
+        ...(partner && { partnerId: partner.id, org: partner.name }),
+        ...(data.partnerId === null && { partnerId: null }),
         ...(data.title !== undefined && { title: data.title }),
         ...(data.projectName !== undefined && {
           projectName: data.projectName?.trim() || null,
@@ -837,6 +868,8 @@ export class AdminService {
           bannerImageUrl: data.bannerImageUrl,
         }),
         ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
+        // Partner link overrides logo/socials (denormalized from profile).
+        ...(partner?.logoUrl && { logoUrl: partner.logoUrl }),
         ...(data.rewardCc !== undefined && { rewardCc: data.rewardCc }),
         ...(data.rewardToken !== undefined && {
           rewardToken:
@@ -911,6 +944,7 @@ export class AdminService {
             normalizeQuestSocialLinksForSave(data.socialLinks),
           ),
         }),
+        ...(partner && { socialLinks: partner.socialLinks }),
       },
     });
 
@@ -2602,5 +2636,124 @@ export class AdminService {
       }
       return code;
     });
+  }
+
+  /* ── Ecosystem Partner CRUD (off-chain, /ecosystem directory) ── */
+
+  /** Semua partner (termasuk unpublished) untuk admin panel. */
+  async listPartners() {
+    return this.prisma.partner.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: {
+          select: { quests: { where: { questKind: QuestKind.CAMPAIGN } } },
+        },
+      },
+    });
+  }
+
+  async createPartner(data: {
+    name: string;
+    initials: string;
+    logoUrl?: string;
+    category: PartnerCategory;
+    about?: string;
+    website?: string;
+    socialLinks?: Array<{ platform: string; url: string }>;
+    team?: Array<{
+      initials: string;
+      name: string;
+      role: string;
+      socials?: Array<{ platform: string; url: string }>;
+    }>;
+    appsFeatured?: Array<{ name: string; description?: string; url?: string }>;
+    features?: Array<{ title: string; description?: string }>;
+    published?: boolean;
+  }) {
+    const partner = await this.prisma.partner.create({
+      data: {
+        name: data.name,
+        initials: data.initials.toUpperCase(),
+        logoUrl: data.logoUrl ?? null,
+        category: data.category,
+        about: data.about ?? '',
+        website: data.website ?? null,
+        socialLinks: JSON.stringify(data.socialLinks ?? []),
+        team: JSON.stringify(data.team ?? []),
+        appsFeatured: JSON.stringify(data.appsFeatured ?? []),
+        features: JSON.stringify(data.features ?? []),
+        published: data.published ?? true,
+      },
+    });
+    this.logger.log(`Partner created: ${partner.name} (${partner.id})`);
+    return partner;
+  }
+
+  async updatePartner(
+    partnerId: string,
+    data: Partial<{
+      name: string;
+      initials: string;
+      logoUrl: string | null;
+      category: PartnerCategory;
+      about: string;
+      website: string | null;
+      socialLinks: Array<{ platform: string; url: string }>;
+      team: Array<{
+        initials: string;
+        name: string;
+        role: string;
+        socials?: Array<{ platform: string; url: string }>;
+      }>;
+      appsFeatured: Array<{
+        name: string;
+        description?: string;
+        url?: string;
+      }>;
+      features: Array<{ title: string; description?: string }>;
+      published: boolean;
+    }>,
+  ) {
+    const existing = await this.prisma.partner.findUnique({
+      where: { id: partnerId },
+    });
+    if (!existing) throw new NotFoundException('Partner not found');
+    const partner = await this.prisma.partner.update({
+      where: { id: partnerId },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.initials !== undefined && {
+          initials: data.initials.toUpperCase(),
+        }),
+        ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
+        ...(data.category !== undefined && { category: data.category }),
+        ...(data.about !== undefined && { about: data.about }),
+        ...(data.website !== undefined && { website: data.website }),
+        ...(data.socialLinks !== undefined && {
+          socialLinks: JSON.stringify(data.socialLinks),
+        }),
+        ...(data.team !== undefined && { team: JSON.stringify(data.team) }),
+        ...(data.appsFeatured !== undefined && {
+          appsFeatured: JSON.stringify(data.appsFeatured),
+        }),
+        ...(data.features !== undefined && {
+          features: JSON.stringify(data.features),
+        }),
+        ...(data.published !== undefined && { published: data.published }),
+      },
+    });
+    this.logger.log(`Partner updated: ${partner.name} (${partner.id})`);
+    return partner;
+  }
+
+  async deletePartner(partnerId: string) {
+    const existing = await this.prisma.partner.findUnique({
+      where: { id: partnerId },
+    });
+    if (!existing) throw new NotFoundException('Partner not found');
+    // Quest link dilepas (ON DELETE SET NULL) — quest tidak ikut terhapus.
+    await this.prisma.partner.delete({ where: { id: partnerId } });
+    this.logger.log(`Partner deleted: ${existing.name} (${partnerId})`);
+    return { ok: true };
   }
 }

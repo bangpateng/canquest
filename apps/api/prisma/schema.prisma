@@ -15,99 +15,99 @@ datasource db {
 
 /// Application state: auth, quests, earn entries, etc.
 model User {
-  id                      String                @id @default(cuid())
-  email                   String                @unique
-  displayName             String?
+  id                        String                 @id @default(cuid())
+  email                     String                 @unique
+  displayName               String?
   /// Relative path under uploads root, e.g. avatars/{userId}.jpg
-  avatarPath              String?
-  passwordHash            String
-  inviteCode              String?
+  avatarPath                String?
+  passwordHash              String
+  inviteCode                String?
   /// Unique code this user shares for friend referrals (e.g. CQ8X4K2M).
-  referralCode            String?               @unique
+  referralCode              String?                @unique
   /// Set when the user registered with someone else's referralCode.
-  referredById            String?
-  referredBy              User?                 @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
-  referredUsers           User[]                @relation("UserReferrals")
-  emailVerified           Boolean               @default(false)
-  otpCodeHash             String?
-  otpExpiresAt            DateTime?
+  referredById              String?
+  referredBy                User?                  @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referredUsers             User[]                 @relation("UserReferrals")
+  emailVerified             Boolean                @default(false)
+  otpCodeHash               String?
+  otpExpiresAt              DateTime?
   /// Failed OTP verification attempts for the current pending code. Reset to 0 on each new code; >=5 clears the OTP.
-  otpAttempts             Int                   @default(0)
-  username                String?               @unique
+  otpAttempts               Int                    @default(0)
+  username                  String?                @unique
   /// Canton ledger party identifier after binding — follow Participant / Ledger API contracts.
   /// SECURITY (H6): @unique enforces 1 wallet ↔ 1 account at the DB level. Without
   /// this, a single Canton wallet could be bound to many accounts, letting one
   /// attacker claim quest rewards / FCFS slots / raffle entries N times via N
   /// email accounts sharing one funded wallet. The app-layer findByPartyId check
   /// in party.controller is a TOCTOU guard; this constraint is the source of truth.
-  cantonPartyId           String?               @unique
+  cantonPartyId             String?                @unique
   /// Model custody wallet: null = belum ada wallet, "custodial" = party lama di
   /// namespace validator (kunci server), "external" = non-custodial (kunci Ed25519
   /// di browser user; tanda tangan transaksi wajib dari user — terverifikasi M0).
-  walletKind              String?
+  walletKind                String?
   /// Kapan user menyelesaikan verifikasi backup kunci (key ceremony: ketik ulang
   /// karakter raw hex). Wajib terisi untuk walletKind "external".
-  backupVerifiedAt        DateTime?
+  backupVerifiedAt          DateTime?
   /// M4: party custodial lama sebelum upgrade ke non-custodial (audit trail;
   /// party lama dibiarkan kosong di chain). Null = belum pernah upgrade.
-  legacyPartyId           String?
+  legacyPartyId             String?
   /// Keycloak user UUID (sub) — identity bridge between web2 User and on-chain Ledger API user.
-  keycloakId              String?               @unique
+  keycloakId                String?                @unique
   /// Last time user toggled preapproval (enable/disable). Cooldown 7 hari anti-spam burn.
-  preapprovalToggleAt     DateTime?
+  preapprovalToggleAt       DateTime?
   /// Admin flag — set via ADMIN_EMAILS env or manually.
-  isAdmin                 Boolean               @default(false)
+  isAdmin                   Boolean                @default(false)
   /// Account access status (ACTIVE = full access). Additive — defaults ACTIVE so existing users are unaffected.
-  status                  UserStatus            @default(ACTIVE)
+  status                    UserStatus             @default(ACTIVE)
   /// Timestamp of the most recent ban/suspend (null when ACTIVE).
-  bannedAt                DateTime?
+  bannedAt                  DateTime?
   /// Admin-supplied reason for the current ban/suspend (null when ACTIVE).
-  banReason               String?
+  banReason                 String?
   /// Lifetime earn points (quest/earn tasks, completion bonus, referral) — synced via PointsService.
-  earnPoints              Int                   @default(0)
+  earnPoints                Int                    @default(0)
   /// Linked X (Twitter) handle for social task verification (twitterapi.io).
-  twitterUsername         String?               @unique
+  twitterUsername           String?                @unique
   /// M4b: backup kunci dompet terenkripsi (sync antar-browser, opt-out-able).
   /// Blob = AES-256-GCM atas seed Ed25519; kunci derive dari PASSPHRASE user
   /// (PBKDF2 310k). Server TIDAK pernah punya passphrase — dekripsi 100% client.
-  walletKeyBackup         WalletKeyBackup?
-  twitterUserId           String?
+  walletKeyBackup           WalletKeyBackup?
+  twitterUserId             String?
   /// High-res X avatar URL (pbs.twimg.com, _400x400) — not stored on VPS disk.
-  twitterAvatarUrl        String?
-  twitterConnectedAt      DateTime?
+  twitterAvatarUrl          String?
+  twitterConnectedAt        DateTime?
   /// Last time the user opened or dismissed in-app CC notifications (bell).
-  notificationsLastSeenAt DateTime?
+  notificationsLastSeenAt   DateTime?
   /// Email campaign notifications (new campaign / raffle winner / not selected).
   /// Target link "Manage email preferences" di footer email — dihormati semua
   /// query penerima email campaign.
-  emailNotificationsEnabled Boolean               @default(true)
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
-  refreshTokens           RefreshToken[]
-  passwordResets          PasswordReset[]       @relation("UserPasswordResets")
-  ccBalance               CcBalance?
-  ccTransactions          CcTransaction[]
-  questCompletions        QuestCompletion[]
-  questSubmissions        QuestSubmission[]
-  winnerDraws             WinnerDraw[]
-  assignedCodes           InviteCodePool[]
-  referralRewardsGiven    ReferralReward[]      @relation("ReferralRewardsGiven")
-  referralRewardReceived  ReferralReward?       @relation("ReferralRewardReceived")
-  walletAllocations       WalletAllocationLog[]
-  redeemedWalletInvites   WalletInviteCode[]    @relation("WalletInviteRedemptions")
-  ccLocks                 CcLock[]
-  earnEntries             EarnEntry[]
+  emailNotificationsEnabled Boolean                @default(true)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  refreshTokens             RefreshToken[]
+  passwordResets            PasswordReset[]        @relation("UserPasswordResets")
+  ccBalance                 CcBalance?
+  ccTransactions            CcTransaction[]
+  questCompletions          QuestCompletion[]
+  questSubmissions          QuestSubmission[]
+  winnerDraws               WinnerDraw[]
+  assignedCodes             InviteCodePool[]
+  referralRewardsGiven      ReferralReward[]       @relation("ReferralRewardsGiven")
+  referralRewardReceived    ReferralReward?        @relation("ReferralRewardReceived")
+  walletAllocations         WalletAllocationLog[]
+  redeemedWalletInvites     WalletInviteCode[]     @relation("WalletInviteRedemptions")
+  ccLocks                   CcLock[]
+  earnEntries               EarnEntry[]
   /// Off-chain custody: saldo token non-CC user di Cantex trading account shared.
-  cantexTokenBalances     CantexTokenBalance[]
+  cantexTokenBalances       CantexTokenBalance[]
   /// Riwayat P2P transfer token non-CC on-chain (CIP-0056 two-step).
-  tokenTransactions       TokenTransaction[]
+  tokenTransactions         TokenTransaction[]
   /// Riwayat swap CC ↔ token Cantex DEX.
-  swapTransactions        SwapTransaction[]
+  swapTransactions          SwapTransaction[]
   /// Delivery token/CC tertunda dari swap yang gagal di-deliver on-chain.
   /// OAuth / external identity links (Google, dst). 1 user bisa banyak provider.
-  accounts                Account[]
+  accounts                  Account[]
   /// Outbox email notifikasi campaign (Resend) — 1 baris = 1 email per (user, quest, type).
-  emailNotificationLogs   EmailNotificationLog[]
+  emailNotificationLogs     EmailNotificationLog[]
 }
 
 /// OAuth account link — binds a User to an external identity provider.
@@ -268,9 +268,9 @@ model CcTransaction {
   /// Jumlah asli (CC) yang dibatalkan/ditolak — hanya diisi untuk OFFER_WITHDRAWN /
   /// OFFER_REJECTED. Saldo tidak bergerak (amountMicroCc=0), tapi amount asli
   /// offer disimpan di sini agar Activity & badge bisa menampilkan "cancelled 5 CC".
-  cancelledAmountCc      Decimal?          @db.Decimal(20, 10)
+  cancelledAmountCc     Decimal? @db.Decimal(20, 10)
   /// Instrument id token (mis. "USDCx") bila offer yang dibatalkan adalah token.
-  cancelledInstrumentId  String?
+  cancelledInstrumentId String?
 
   @@unique([userId, ledgerTxId])
   @@index([cantonUpdateId])
@@ -328,15 +328,15 @@ model CantexTokenBalance {
 /// Sumber kebenaran saldo token = ON-CHAIN (queryTokenHoldings). CantexTokenBalance
 /// (DB) jadi cache/UI-only — BUKAN dipakai untuk validate send-token.
 model TokenTransaction {
-  id                     String       @id @default(cuid())
+  id                     String      @id @default(cuid())
   userId                 String
-  user                   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Cantex instrument id, mis. "USDCX", "TokenX". "Amulet" jika dipakai untuk CC.
   instrumentId           String
   /// Cantex instrument admin party, mis. "DSO::1220...".
   instrumentAdmin        String
   /// Jumlah token (positive = credit masuk, negatif = debit keluar). Decimal-string compatible.
-  amount                 Decimal      @db.Decimal(38, 18)
+  amount                 Decimal     @db.Decimal(38, 18)
   type                   TokenTxType
   description            String?
   /// Reference (counterparty party id, contract id, dsb).
@@ -346,14 +346,14 @@ model TokenTransaction {
   /// Ledger update ID dari submit-and-wait (CantonScan link).
   cantonUpdateId         String?
   transferInstructionCid String?
-  status                 String       @default("COMPLETED") // COMPLETED | PENDING | REJECTED
-  createdAt              DateTime     @default(now())
+  status                 String      @default("COMPLETED") // COMPLETED | PENDING | REJECTED
+  createdAt              DateTime    @default(now())
 
   /// Jumlah asli (token) yang dibatalkan/ditarik — hanya diisi untuk
   /// TOKEN_OFFER_WITHDRAWN / TOKEN_OFFER_REJECTED. Saldo tidak bergerak (amount=0),
   /// tapi amount asli offer disimpan di sini agar Activity & badge bisa menampilkan
   /// "cancelled 5 USDCx".
-  cancelledAmount        Decimal?     @db.Decimal(38, 18)
+  cancelledAmount Decimal? @db.Decimal(38, 18)
 
   @@unique([userId, ledgerTxId])
   @@index([cantonUpdateId])
@@ -382,20 +382,20 @@ enum TokenTxType {
 
 /// Audit trail lengkap untuk setiap swap CC ↔ token Cantex DEX (multi-leg).
 model SwapTransaction {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   userId              String
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// "CC_TO_TOKEN" (swap CC → token) | "TOKEN_TO_CC" (swap token → CC).
   direction           String
   /// Instrumen yang dijual.
   sellInstrumentId    String
   sellInstrumentAdmin String
-  sellAmount          Decimal  @db.Decimal(38, 18)
+  sellAmount          Decimal   @db.Decimal(38, 18)
   /// Instrumen yang dibeli.
   buyInstrumentId     String
   buyInstrumentAdmin  String
   /// Jumlah yang dibeli — null sampai Cantex SwapExecuted event diterima.
-  buyAmount           Decimal? @db.Decimal(38, 18)
+  buyAmount           Decimal?  @db.Decimal(38, 18)
   /// Cantex pool contract id (opsional, untuk referensi).
   poolContractId      String?
   /// id dari /v1/intent/build/pool/swap (build response).
@@ -403,12 +403,12 @@ model SwapTransaction {
   /// Canton update id untuk leg CC (transfer user↔trading account).
   ccLedgerTxId        String?
   /// PENDING (sedang diproses) | EXECUTED (sukses) | FAILED (gagal).
-  status              String   @default("PENDING")
+  status              String    @default("PENDING")
   /// Idempotency key dari client — mencegah double-submit swap yang sama.
-  clientNonce         String   @unique
+  clientNonce         String    @unique
   swapExecutedAt      DateTime?
   errorMessage        String?
-  createdAt           DateTime @default(now())
+  createdAt           DateTime  @default(now())
 
   /// Delivery tertunda bila token/CC gagal dikirim on-chain ke user.
 
@@ -445,63 +445,63 @@ model CcLock {
 /// 20260722120000_earn_hub_singleton_unique). App-layer findFirst guard di
 /// admin.service tetap sebagai defense-in-depth.
 model Quest {
-  id               String            @id @default(cuid())
-  title            String
+  id                 String            @id @default(cuid())
+  title              String
   /// Short partner name for social task titles (Follow X, Join Discord, etc.). Falls back to title when empty.
-  projectName      String?
-  org              String
-  orgSlug          String
-  description      String
-  banner           String            @default("linear-gradient(135deg,#1e293b,#0f172a)")
+  projectName        String?
+  org                String
+  orgSlug            String
+  description        String
+  banner             String            @default("linear-gradient(135deg,#1e293b,#0f172a)")
   /// Optional image URL (e.g. /quest-media/uuid.webp) shown as quest card/header banner; overrides gradient when set.
-  bannerImageUrl   String?
+  bannerImageUrl     String?
   /// Square project logo; falls back to org initials when absent.
-  logoUrl          String?
-  rewardCc         Float             @default(0)
+  logoUrl            String?
+  rewardCc           Float             @default(0)
   /// Token reward campaign ini. "CC" = Amulet (default); "USDCx" = utility-registry.
   /// Fee claim tetap CC (lihat claimFeeCc). rewardToken hanya menentukan token REWARD-nya.
-  rewardToken      String            @default("CC")
-  rewardPool       String            @default("0 CC")
-  deadline         String?
+  rewardToken        String            @default("CC")
+  rewardPool         String            @default("0 CC")
+  deadline           String?
   /// Optional ISO timeline — quest hidden before startsAt / after endsAt when set.
-  startsAt         DateTime?
-  endsAt           DateTime?
-  status           QuestStatus       @default(ACTIVE)
-  tags             String            @default("[]")
+  startsAt           DateTime?
+  endsAt             DateTime?
+  status             QuestStatus       @default(ACTIVE)
+  tags               String            @default("[]")
   /// JSON array of { platform, url } — shown under About on campaign detail (admin-configured).
-  socialLinks      String            @default("[]")
+  socialLinks        String            @default("[]")
   /// Reward category: waitlist email, random invite, FCFS invite, CC, or CC + invite
-  rewardType       RewardType        @default(CC_ONLY)
+  rewardType         RewardType        @default(CC_ONLY)
   /// Max number of winners (null = unlimited / all completers rewarded)
-  maxWinners       Int?
+  maxWinners         Int?
   /// CC_AND_CODE_RAFFLE: berapa pemenang yang dapat CODE (sisanya dapat CC). Null = semua pemenang dapat keduanya (perilaku lama).
-  codeWinnersQuota Int?
+  codeWinnersQuota   Int?
   /// On-chain claim fee (CC) before user receives code/CC; null = use reward-type default (2 code / 3 token FCFS).
-  claimFeeCc       Float?
+  claimFeeCc         Float?
   /// Custom message shown to raffle/email winners (admin dashboard).
-  winnerMessage    String?
+  winnerMessage      String?
   /// Link register/landing proyek untuk redeem code (shown in "How to use your code" reveal).
-  redeemUrl        String?
+  redeemUrl          String?
   /// Instruksi custom redeem (multi-line). Kosong = pakai template 3-step default (Register → Use code → Done).
   redeemInstructions String?
   /// CAMPAIGN = partner campaigns (user menu Earn). EARN_HUB = CanQuest daily tasks (user menu Quest).
-  questKind        QuestKind         @default(CAMPAIGN)
+  questKind          QuestKind         @default(CAMPAIGN)
   /// DAML QuestCampaign contract ID on Canton ledger (set after admin creates quest).
   /// Used by claimFcfsSlot() / drawRaffleWinner() to reference the on-chain campaign.
   /// v29 dedupe (pengganti contract keys): unique — 1 quest ↔ 1 kontrak on-chain.
-  ledgerCampaignId String? @unique
+  ledgerCampaignId   String?           @unique
   /// Version-pinning (cutover v28→v29): nama paket DAML kontrak on-chain
   /// (mis. 'canquest-v29'). Null + ledgerCampaignId terisi = dibuat backend
   /// lama = 'canquest-v28' — claim path memilih template/payload per versi.
-  ledgerPackage    String?
+  ledgerPackage      String?
   /// Mode gate akses Earn per-campaign (configurable dari dashboard admin).
   /// CC_OR_POINTS (default) = lock CC atau spend points (perilaku lama).
   /// CC_ONLY / POINTS_ONLY / NONE = admin pilih per-event.
-  entryGateMode    EntryGateMode     @default(CC_OR_POINTS)
+  entryGateMode      EntryGateMode     @default(CC_OR_POINTS)
   /// Override jumlah CC yang harus di-lock (jalur cc_lock). Null = pakai default global (LOCK_TIER_FULL, 30).
-  entryCcLock      Int?
+  entryCcLock        Int?
   /// Override biaya points (jalur points). Null = pakai default global (earn_entry_cost_points AppSetting / 200).
-  entryCostPoints  Int?
+  entryCostPoints    Int?
   /// v25 DAML eligibility type utk on-chain claim guard. Backend map dari entryGateMode:
   ///   CC_ONLY → "LOCK_CC", POINTS_ONLY → "POINTS", CC_OR_POINTS/NONE → "NONE".
   /// "NONE" = siapa saja bisa klaim (no on-chain eligibility check).
@@ -509,13 +509,65 @@ model Quest {
   /// v25 DAML min amount utk eligibility (CC locked utk LOCK_CC, points utk POINTS). 0 bila NONE.
   /// Backend isi dari entryCcLock (LOCK_CC) atau entryCostPoints (POINTS).
   eligibilityAmount  Float             @default(0)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  tasks            QuestTask[]
-  completions      QuestCompletion[]
-  submissions      QuestSubmission[]
-  inviteCodes      InviteCodePool[]
-  winnerDraws      WinnerDraw[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  tasks              QuestTask[]
+  completions        QuestCompletion[]
+  submissions        QuestSubmission[]
+  inviteCodes        InviteCodePool[]
+  winnerDraws        WinnerDraw[]
+  /// Optional ecosystem partner link — when set, org/logo/social are denormalized from Partner at admin save time.
+  partnerId          String?
+  partner            Partner?          @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
+}
+
+/// Ecosystem partner directory category (fixed list — used by /ecosystem filters).
+enum PartnerCategory {
+  COMPLIANCE
+  CUSTODY
+  DATA_ANALYTICS
+  DEVELOPER_TOOLS
+  EXCHANGES
+  FINANCING
+  FORENSICS_SECURITY
+  INTEROPERABILITY
+  LIQUIDITY
+  NAAS
+  PAYMENTS
+  STABLECOINS
+  TOKENIZED_ASSETS
+  WALLETS
+}
+
+/// Ecosystem partner profile — shown on /ecosystem directory (off-chain, admin-managed).
+/// Quests may optionally link to a partner (Quest.partnerId); partner edits never touch DAML.
+model Partner {
+  id           String          @id @default(cuid())
+  name         String
+  /// Display name fallback for logo square when logoUrl absent.
+  initials     String
+  /// Square logo URL (e.g. /partner-media/uuid.webp); falls back to initials.
+  logoUrl      String?
+  category     PartnerCategory
+  /// Free-text description shown on the About tab of partner detail.
+  about        String          @default("")
+  website      String?
+  /// JSON array of { platform, url } — social media row under partner name.
+  socialLinks  String          @default("[]")
+  /// JSON array of { initials, name, role, socials: [{platform,url}] } — Team tab.
+  team         String          @default("[]")
+  /// JSON array of { name, description, url } — App Featured tab.
+  appsFeatured String          @default("[]")
+  /// JSON array of { title, description } — Features tab (partner highlights).
+  features     String          @default("[]")
+  /// When false, hidden from /ecosystem (admin draft toggle).
+  published    Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  /// Quests linked to this partner (optional — legacy quests have none).
+  quests       Quest[]
 }
 
 enum RewardType {
@@ -720,11 +772,11 @@ model QuestCompletion {
 // Dibuat backend SETELAH verifikasi lock CC / points utk quest claim.
 // Source of truth on-chain; tabel ini cache + lookup utk eligibilityCid di claim path.
 model CampaignEligibilityLedger {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   questId         String
   userId          String
   /// DAML CampaignEligibility contract id (Main:CampaignEligibility).
-  contractId      String   @unique
+  contractId      String    @unique
   /// "LOCK_CC" | "POINTS" (match DAML eligibilityType).
   eligibilityType String
   /// Jumlah CC locked atau points (match DAML amount field).
@@ -732,14 +784,14 @@ model CampaignEligibilityLedger {
   /// Timestamp lock CC (LOCK_CC); null bila POINTS. Source: ccLocks.lockedAt.
   lockedAt        DateTime?
   /// "ELIGIBLE" | "REVOKED" | "EXPIRED" (match DAML status).
-  status          String   @default("ELIGIBLE")
+  status          String    @default("ELIGIBLE")
   /// v29 [FIX-11]: lockId yang dicocokkan on-chain dgn CoinLock.lockId
   /// (format "lock:<questId>:<userId>", deterministik). Null utk POINTS.
   lockId          String?
   /// v29: CoinLock contract id (Main:CoinLock) utk choice arg ClaimSlot/DrawWinner.
   coinLockCid     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([questId, userId])
   @@index([userId, status])
@@ -760,21 +812,21 @@ model CampaignEligibilityLedger {
 // terpanggil dua kali (create + COMING_SOON→ACTIVE), atau Bull retry tidak
 // pernah mengirim email yang sama dua kali untuk user yang sama.
 model EmailNotificationLog {
-  id        String                   @id @default(cuid())
+  id        String                  @id @default(cuid())
   userId    String
-  user      User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   questId   String
   /// Snapshot alamat email saat enqueue (audit — email user bisa berubah).
   email     String
   type      EmailNotificationType
-  status    EmailNotificationStatus  @default(PENDING)
+  status    EmailNotificationStatus @default(PENDING)
   /// Snapshot data template (judul quest, reward label, dst) — worker tidak
   /// perlu re-query quest; konten email dibekukan per penerima.
   payload   Json?
   /// Resend email id (trace di dashboard Resend).
   resendId  String?
   error     String?
-  createdAt DateTime                 @default(now())
+  createdAt DateTime                @default(now())
   sentAt    DateTime?
 
   @@unique([userId, questId, type])
