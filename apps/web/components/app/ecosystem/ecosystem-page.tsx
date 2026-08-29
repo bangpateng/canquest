@@ -204,77 +204,81 @@ export function EcosystemPage() {
         </p>
       </div>
 
-      {/* ── Search + kategori (mobile: stacked full-width — mirror mockup) ── */}
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5 sm:flex-row sm:gap-2.5">
-        <div className="flex h-12 min-w-0 flex-1 items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--card)] px-4 shadow-[var(--shadow-card)] transition-colors focus-within:border-[rgb(111_230_0/0.45)] sm:h-[52px] sm:px-5">
+      {/* ── Search + kategori — SELALU sejajar satu baris (mobile juga);
+            menu dropdown melebar penuh mengikuti toolbar (tidak terpotong). ── */}
+      <div
+        ref={ddRef}
+        className="relative mx-auto flex w-full max-w-3xl flex-row items-center gap-2.5"
+      >
+        <div className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-4 shadow-[var(--shadow-card)] transition-colors focus-within:border-[rgb(111_230_0/0.45)] sm:h-[52px] sm:gap-3 sm:px-5">
           <Search className="h-[18px] w-[18px] shrink-0 text-[var(--muted-foreground)]" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search partners, categories…"
+            placeholder="Search partners…"
             className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
           />
         </div>
-        <div ref={ddRef} className="relative w-full shrink-0 sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setDdOpen((v) => !v)}
-            className="flex h-12 w-full items-center justify-between gap-3 rounded-full border border-[var(--border)] bg-[var(--card)] px-4 text-sm font-semibold shadow-[var(--shadow-card)] transition-colors hover:border-[rgb(111_230_0/0.35)] sm:h-[52px] sm:px-5 sm:pr-4"
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <span
-                className={cn(
-                  "h-[7px] w-[7px] shrink-0 rounded-full transition-colors",
-                  category === "all"
-                    ? "bg-[var(--primary)]"
-                    : categoryFamily(category).dot,
-                )}
-              />
-              <span className="truncate">{activeCategoryLabel}</span>
-            </span>
-            <ChevronDown
+        <button
+          type="button"
+          onClick={() => setDdOpen((v) => !v)}
+          className="flex h-12 shrink-0 items-center justify-between gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] pl-3.5 pr-3 text-sm font-semibold shadow-[var(--shadow-card)] transition-colors hover:border-[rgb(111_230_0/0.35)] sm:h-[52px] sm:gap-2.5 sm:pl-4"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <span
               className={cn(
-                "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
-                ddOpen && "rotate-180",
+                "h-[7px] w-[7px] shrink-0 rounded-full transition-colors",
+                category === "all"
+                  ? "bg-[var(--primary)]"
+                  : categoryFamily(category).dot,
               )}
             />
-          </button>
-          {ddOpen && (
-            <div className="absolute inset-x-0 top-[calc(100%+8px)] z-40 max-h-[320px] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)] sm:inset-x-auto sm:right-0 sm:w-60">
-              {[{ value: "all", label: "All Categories" }, ...PARTNER_CATEGORIES].map(
-                (c) => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => {
-                      setCategory(c.value);
-                      setDdOpen(false);
-                    }}
+            <span className="max-w-[92px] truncate sm:max-w-[150px]">
+              {activeCategoryLabel}
+            </span>
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
+              ddOpen && "rotate-180",
+            )}
+          />
+        </button>
+        {ddOpen && (
+          <div className="absolute inset-x-0 top-[calc(100%+8px)] z-40 max-h-[320px] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)]">
+            {[{ value: "all", label: "All Categories" }, ...PARTNER_CATEGORIES].map(
+              (c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => {
+                    setCategory(c.value);
+                    setDdOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors hover:bg-[rgb(111_230_0/0.10)]",
+                    category === c.value
+                      ? "font-semibold text-canton"
+                      : "font-medium text-[var(--foreground)]",
+                  )}
+                >
+                  <span
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors hover:bg-[rgb(111_230_0/0.10)]",
-                      category === c.value
-                        ? "font-semibold text-canton"
-                        : "font-medium text-[var(--foreground)]",
+                      "h-[7px] w-[7px] shrink-0 rounded-full",
+                      c.value === "all"
+                        ? "bg-[var(--primary)]"
+                        : categoryFamily(c.value).dot,
                     )}
-                  >
-                    <span
-                      className={cn(
-                        "h-[7px] w-[7px] shrink-0 rounded-full",
-                        c.value === "all"
-                          ? "bg-[var(--primary)]"
-                          : categoryFamily(c.value).dot,
-                      )}
-                    />
-                    {c.label}
-                    {category === c.value && (
-                      <Check className="ml-auto h-3.5 w-3.5 shrink-0" />
-                    )}
-                  </button>
-                ),
-              )}
-            </div>
-          )}
-        </div>
+                  />
+                  {c.label}
+                  {category === c.value && (
+                    <Check className="ml-auto h-3.5 w-3.5 shrink-0" />
+                  )}
+                </button>
+              ),
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Section head ── */}
