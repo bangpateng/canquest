@@ -438,14 +438,83 @@ export class BalanceEventHandlerService
       return;
     }
 
-    // STEP 3: Kalau controller belum catat, skip history insert untuk token
-    // (TokenTransaction di-handle controller via recordTokenTransaction).
-    // Token history row tidak di-insert oleh handler untuk hindari kompleksitas
-    // cross-table dedup — controller (acceptOffer/sendToken) sudah reliable.
-    if (DEBUG_LEDGER) {
-      this.logger.debug(
-        `BalanceEventHandler: token history untuk ${tk.instrumentId} +${tk.amount} tidak di-insert handler (controller akan handle)`,
-      );
+    // STEP 3 (mirror CC applyCcIncrement): kalau controller/relay TIDAK
+    // mencatat row utk update ini (kasus nyata: transfer DIRECT via
+    // preapproval — receiver CanQuest tidak men-sign apa pun; atau offer
+    // di-accept di wallet EXTERNAL), handler insert TOKEN_TRANSFER_IN
+    // supaya "Received USDCx" muncul di Activity + badge notif
+    // (transaction:new via recordTokenTransaction). Sebelumnya step ini
+    // di-skip total — tidak pernah ada row TOKEN_TRANSFER_IN dari WSS
+    // (bukti: 0 row sepanjang sejarah produksi).
+    //
+    // EXCLUDE swap delivery CC→token: OneSwap sudah mencatat SWAP_IN
+    // (CcTransaction, non-silent) + push swap:completed — tanpa exclusion
+    // ini satu swap muncul 2 row di unified Activity (SWAP_IN + Received).
+    // Deteksi: SwapTransaction EXECUTED arah CC_TO_TOKEN, instrument sama,
+    // buyAmount ≈ amount, selesai ≤15 menit lalu (delivery settle bersamaan
+    // dengan completion).
+    try {
+      // Race-aware: delivery token settle on-chain (WSS, instan) SEBELUM
+      // swap.service menandai EXECUTED (polling OneSwap, detik-detik
+      // kemudian) → cek juga swap PENDING yang masih in-flight. Jendela
+      // 30 menit sejak submit + 15 menit selesai menutup kedua fase.
+      const recentSwap = await this.prisma.swapTransaction.findFirst({
+        where: {
+          userId: tk.userId,
+          direction: 'CC_TO_TOKEN',
+          buyInstrumentId: {
+            equals: tk.instrumentId,
+            mode: 'insensitive',
+          },
+          status: { in: ['PENDING', 'EXECUTED'] },
+          OR: [
+            { swapExecutedAt: { gte: new Date(Date.now() - 15 * 60 * 1000) } },
+            { createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) } },
+          ],
+        },
+        select: { buyAmount: true, status: true },
+      });
+      // EXECUTED → bandingkan amount (kuat). PENDING → buyAmount belum ada,
+      // anggap swap delivery (lemah tapi jarang false-negative: transfer
+      // P2P pas datang saat swap in-flight — saldo tetap benar via STEP 1).
+      const isSwapDelivery =
+        recentSwap != null &&
+        (recentSwap.status === 'PENDING' ||
+          (recentSwap.buyAmount != null &&
+            Math.abs(Number(recentSwap.buyAmount) - tk.amount) < 1e-6));
+      if (isSwapDelivery) {
+        if (DEBUG_LEDGER) {
+          this.logger.debug(
+            `BalanceEventHandler: skip TOKEN_TRANSFER_IN insert ${tk.instrumentId} +${tk.amount} (swap delivery — SWAP_IN row sudah ada)`,
+          );
+        }
+        return;
+      }
+      await this.users.recordTokenTransaction({
+        userId: tk.userId,
+        instrumentId: tk.instrumentId,
+        instrumentAdmin: tk.instrumentAdmin,
+        amount: tk.amount,
+        type: 'TOKEN_TRANSFER_IN',
+        description: `Received ${tk.amount} ${tk.instrumentId}`,
+        referenceId: null,
+        // Idempotent via @@unique([userId, ledgerTxId]); STEP 2 sudah
+        // skip bila controller/relay mencatat dgn updateId yang sama.
+        ledgerTxId: `wss:${updateId}`,
+        cantonUpdateId: updateId,
+        status: 'COMPLETED',
+      });
+      this.realtime.push(tk.userId, 'balance:changed', null);
+    } catch (err) {
+      const errMsg = String(err);
+      if (
+        !errMsg.includes('P2002') &&
+        !errMsg.includes('Unique constraint')
+      ) {
+        this.logger.warn(
+          `TOKEN_TRANSFER_IN record failed (balance already updated): ${errMsg.slice(0, 120)}`,
+        );
+      }
     }
   }
 
