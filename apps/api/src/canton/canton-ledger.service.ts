@@ -1700,18 +1700,13 @@ export class CantonLedgerService {
     ).toISOString();
     const nowIso = now.toISOString();
 
-    // GROUP BY INSTRUMENT: registry SEKALI per instrument — factory untuk
-    // instrument sama adalah contract yang identik; exercise dua kali dari
-    // factory berbeda utk instrument sama → CONTRACT_NOT_FOUND.
-    const instrumentRegistries = new Map<
-      string,
-      {
-        factoryId: string;
-        choiceContextData: Record<string, unknown>;
-        disclosedContracts: unknown[];
-        transferKind: string;
-      }
-    >();
+    // FACTORY PER INSTRUMENT: factory utk instrument sama adalah contract
+    // yang identik — dua exercise pada factory sama (choice non-consuming)
+    // diperbolehkan dalam satu tx; factory BERBEDA utk instrument sama →
+    // CONTRACT_NOT_FOUND. REGISTRY dipanggil PER LEG (bukan per instrument)
+    // — lihat catatan besar di dalam loop.
+    const factoryByInstrument = new Map<string, string>();
+    const nonAmuletSeen = new Set<string>();
     const allDisclosedContracts: unknown[] = [];
     let lastTransferKind = 'direct';
 
@@ -1827,68 +1822,89 @@ export class CantonLedgerService {
 
     for (const t of transfers) {
       const instrumentKey = `${t.instrumentAdmin}|${t.instrumentId}`;
-      let registry = instrumentRegistries.get(instrumentKey);
-      if (!registry) {
-        const isAmulet = t.instrumentId.toLowerCase() === 'amulet';
-        const inputHoldingCids = isAmulet
-          ? fullAmuletCids
-          : (await this.getTokenHoldingCids(senderPartyId, t.instrumentId)).map(
-              (h) => h.contractId,
-            );
-        if (inputHoldingCids.length === 0) {
+      // ── REGISTRY PER LEG (FIX ForOwner mismatch, MainNet 2026-08-29) ──
+      // choiceContextData dari registry berisi preapproval cid SPESIFIK
+      // RECEIVER (transferPreapprovalContextKey). DAML 0.7.0
+      // (ExternalPartyAmuletRules:357-359) mem-fetchChecked preapproval itu
+      // dengan grup ForOwner{owner=transfer.receiver} — memakai context leg
+      // lain (mis. preapproval MEXC utk leg fee ke canquest-fee) menghasilkan
+      // "Contract group identifier mismatch: expected ForOwner{owner=fee},
+      // got ForOwner{owner=mexc}". Context HARUS dibangun per receiver.
+      const isAmuletProto = t.instrumentId.toLowerCase() === 'amulet';
+      if (!isAmuletProto) {
+        if (nonAmuletSeen.has(t.instrumentId)) {
           return {
             ok: false,
-            error: `Sender has no ${t.instrumentId} holdings for leg to ${t.receiverPartyId.split('::')[0]}`,
+            error: `Multiple ${t.instrumentId} legs not supported (holdings overlap)`,
           };
         }
-        const protoTransferSpec = {
-          sender: senderPartyId,
-          receiver: t.receiverPartyId,
-          amount: t.amount.toFixed(10),
-          instrumentId: { admin: t.instrumentAdmin, id: t.instrumentId },
-          lock: null,
-          requestedAt: nowIso,
-          executeBefore,
-          inputHoldingCids,
-          meta: {
-            values: t.description
-              ? { 'splice.lfdecentralizedtrust.org/reason': t.description }
-              : {},
-          },
+        nonAmuletSeen.add(t.instrumentId);
+      }
+      const protoHoldingCids = isAmuletProto
+        ? fullAmuletCids
+        : (
+            await this.getTokenHoldingCids(senderPartyId, t.instrumentId)
+          ).map((h) => h.contractId);
+      if (protoHoldingCids.length === 0) {
+        return {
+          ok: false,
+          error: `Sender has no ${t.instrumentId} holdings for leg to ${t.receiverPartyId.split('::')[0]}`,
         };
-        const regRes = await this.callTransferFactoryRegistry(
-          {
-            expectedAdmin: t.instrumentAdmin,
-            transfer: protoTransferSpec,
-            extraArgs: { context: { values: {} }, meta: { values: {} } },
-          },
-          t.instrumentAdmin,
-        );
-        if (!regRes) {
-          return {
-            ok: false,
-            error: `Registry call failed for ${t.instrumentId} leg to ${t.receiverPartyId.split('::')[0]}`,
-          };
-        }
-        registry = {
-          factoryId: regRes.factoryId,
-          choiceContextData: regRes.choiceContextData,
-          disclosedContracts: regRes.disclosedContracts,
-          transferKind: regRes.transferKind,
+      }
+      const protoTransferSpec = {
+        sender: senderPartyId,
+        receiver: t.receiverPartyId,
+        amount: t.amount.toFixed(10),
+        instrumentId: { admin: t.instrumentAdmin, id: t.instrumentId },
+        lock: null,
+        requestedAt: nowIso,
+        executeBefore,
+        inputHoldingCids: protoHoldingCids,
+        meta: {
+          values: t.description
+            ? { 'splice.lfdecentralizedtrust.org/reason': t.description }
+            : {},
+        },
+      };
+      const regRes = await this.callTransferFactoryRegistry(
+        {
+          expectedAdmin: t.instrumentAdmin,
+          transfer: protoTransferSpec,
+          extraArgs: { context: { values: {} }, meta: { values: {} } },
+        },
+        t.instrumentAdmin,
+      );
+      if (!regRes) {
+        return {
+          ok: false,
+          error: `Registry call failed for ${t.instrumentId} leg to ${t.receiverPartyId.split('::')[0]}`,
         };
-        instrumentRegistries.set(instrumentKey, registry);
-        lastTransferKind = registry.transferKind;
-        // Dedupe by contractId (key `contractId`, bukan `contract`) —
-        // lihat catatan fix yang sama di executeProxyBatchTransferMulti.
-        for (const dc of registry.disclosedContracts) {
-          const dcRec = dc as Record<string, unknown>;
-          const dcCid = dcRec.contractId ?? dcRec.contract;
-          const exists = allDisclosedContracts.some((existing) => {
-            const ex = existing as Record<string, unknown>;
-            return (ex.contractId ?? ex.contract) === dcCid;
-          });
-          if (!exists) allDisclosedContracts.push(dc);
-        }
+      }
+      const knownFactory = factoryByInstrument.get(instrumentKey);
+      if (knownFactory && knownFactory !== regRes.factoryId) {
+        return {
+          ok: false,
+          error: `Factory mismatch for ${t.instrumentId} legs — cannot exercise two factories for one instrument`,
+        };
+      }
+      factoryByInstrument.set(instrumentKey, regRes.factoryId);
+      const registry = {
+        factoryId: regRes.factoryId,
+        choiceContextData: regRes.choiceContextData,
+        disclosedContracts: regRes.disclosedContracts,
+        transferKind: regRes.transferKind,
+      };
+      lastTransferKind = registry.transferKind;
+      // Dedupe by contractId (key `contractId`, bukan `contract`) —
+      // lihat catatan fix yang sama di executeProxyBatchTransferMulti.
+      for (const dc of registry.disclosedContracts) {
+        const dcRec = dc as Record<string, unknown>;
+        const dcCid = dcRec.contractId ?? dcRec.contract;
+        const exists = allDisclosedContracts.some((existing) => {
+          const ex = existing as Record<string, unknown>;
+          return (ex.contractId ?? ex.contract) === dcCid;
+        });
+        if (!exists) allDisclosedContracts.push(dc);
       }
       // ALOKASI HOLDINGS per leg — lihat komentar POOL AMULET di atas.
       const isAmuletLeg = t.instrumentId.toLowerCase() === 'amulet';
@@ -1925,14 +1941,8 @@ export class CantonLedgerService {
         }
         amuletLegsAssigned++;
       } else {
-        // Non-Amulet: satu leg per instrument (leg sama instrument ke-2 tidak
-        // didukung tanpa overlap → fallback).
-        if (instrumentRegistries.has(instrumentKey)) {
-          return {
-            ok: false,
-            error: `Multiple ${t.instrumentId} legs not supported (holdings overlap)`,
-          };
-        }
+        // Non-Amulet: satu leg per instrument (guard duplikat ada di atas,
+        // sebelum registry call).
         const th = await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
         if (th.length === 0) {
           return {
