@@ -1720,12 +1720,19 @@ export class CantonLedgerService {
       choiceArg: Record<string, unknown>;
     }> = [];
 
-    // ── POOL AMULET utk alokasi DISJOINT antar leg CC ──────────────────
-    // DAML Transfer wajib inputHoldingCids non-kosong per leg, dan satu
-    // holding TIDAK BOLEH dipakai dua leg (leg pertama meng-archive-nya →
-    // CONTRACT_NOT_ACTIVE di leg kedua; tidak ada auto-threading change).
-    // Karena itu tiap leg CC dialokasikan holdings yang TIDAK SALING
-    // OVERLAP (best-fit: single-fit dulu, merge hanya bila perlu).
+    // ── POOL AMULET utk alokasi antar leg CC ────────────────────────────
+    // Dua strategi, sesuai kemampuan WalletUserProxy yang ter-deploy
+    // (MainNet 2026-08-29: splice-util-featured-app-proxies 1.2.4 —
+    // package 88bcea6e…, commit batch-transfer #3018/#3216):
+    //
+    //   1. DISJOINT (utama): tiap leg CC bawa holdings sendiri yang tidak
+    //      overlap (best-fit: single-fit dulu, merge hanya bila perlu).
+    //   2. THREADING (fallback): WUP 1.2.4 men-thread senderChangeCids leg
+    //      sebelumnya sebagai input tambahan leg berikutnya (senderChangeMap).
+    //      Wallet single-holding (mayoritas user!) TIDAK MUNGKIN disjoint →
+    //      leg CC pertama bawa best-fit holdings, leg CC berikutnya
+    //      inputHoldingCids KOSONG (change leg-1 otomatis jadi input).
+    //      Syarat kumulatif: total eff pool >= total amount semua leg CC.
     //
     // INDEX-LAG GUARD: queryAmuletHoldingsRaw membaca ACS pada offset
     // ledger-end — transaksi yang settle 1-3 detik lalu (mis. atomic send
@@ -1734,6 +1741,8 @@ export class CantonLedgerService {
     // bila gagal, tunggu 3s, re-fetch pool, coba sekali lagi.
     let amuletPool: Array<{ contractId: string; eff: number }> = [];
     let fullAmuletCids: string[] = [];
+    /** 'disjoint' = per-leg holdings terpisah; 'threading' = leg-1 bawa semua, leg berikut kosong. */
+    let amuletMode: 'disjoint' | 'threading' = 'disjoint';
     const hasAmuletLeg = transfers.some(
       (t) => t.instrumentId.toLowerCase() === 'amulet',
     );
@@ -1775,22 +1784,33 @@ export class CantonLedgerService {
         }
         return true;
       };
+      /** Cek kumulatif utk mode threading — total pool >= total kebutuhan. */
+      const canCoverCumulative = (
+        pool: Array<{ contractId: string; eff: number }>,
+      ): boolean =>
+        pool.reduce((s, h) => s + h.eff, 0) >=
+        amuletLegs.reduce((s, l) => s + l.amount, 0) - 1e-9;
       try {
         amuletPool = await buildPool();
         if (!canCoverDisjoint(amuletPool)) {
           // Retry sekali setelah 3s — beri waktu ACS index mengejar.
           await new Promise((r) => setTimeout(r, 3_000));
           amuletPool = await buildPool();
-          if (!canCoverDisjoint(amuletPool)) {
-            return {
-              ok: false,
-              error:
-                'Insufficient holdings to cover legs disjointly (re-checked after index catch-up) — falling back',
-            };
-          }
+        }
+        if (canCoverDisjoint(amuletPool)) {
+          // jalur utama — terbukti MainNet
+        } else if (canCoverCumulative(amuletPool)) {
+          // Wallet single-/few-holding → WUP 1.2.4 threading change antar leg.
+          amuletMode = 'threading';
           this.logger.log(
-            'Amulet pool index-lag detected — pool rebuilt after 3s wait, allocation now feasible',
+            `Amulet allocation: DISJOINT tidak feasible (pool ${amuletPool.length} holding) → mode THREADING (WUP 1.2.4 senderChangeMap)`,
           );
+        } else {
+          return {
+            ok: false,
+            error:
+              'Insufficient holdings to cover legs (re-checked after index catch-up) — falling back',
+          };
         }
         fullAmuletCids = amuletPool.map((h) => h.contractId);
       } catch {
@@ -1802,6 +1822,8 @@ export class CantonLedgerService {
     // menentukan direct vs offer (semua CC return "direct"). Biarkan ledger
     // yang memvalidasi: [offer+direct] lolos, [direct+direct] ditolak DAML
     // → signing-relay fallback ke legacy secara graceful.
+
+    let amuletLegsAssigned = 0; // utk mode threading: hanya leg CC pertama bawa input
 
     for (const t of transfers) {
       const instrumentKey = `${t.instrumentAdmin}|${t.instrumentId}`;
@@ -1871,7 +1893,13 @@ export class CantonLedgerService {
       // ALOKASI HOLDINGS per leg — lihat komentar POOL AMULET di atas.
       const isAmuletLeg = t.instrumentId.toLowerCase() === 'amulet';
       let legInputCids: string[];
-      if (isAmuletLeg) {
+      if (isAmuletLeg && amuletMode === 'threading' && amuletLegsAssigned > 0) {
+        // MODE THREADING, leg CC ke-2+: inputHoldingCids KOSONG — WUP 1.2.4
+        // otomatis menambahkan senderChangeCids leg sebelumnya (senderChangeMap)
+        // sebagai input leg ini saat interpretasi.
+        legInputCids = [];
+        amuletLegsAssigned++;
+      } else if (isAmuletLeg) {
         // BEST-FIT: prioritaskan SATU holding terkecil yang eff >= amount
         // (pool ascending). Gabung beberapa hanya bila tidak ada single-fit —
         // decay membuat holding nominal-exact bisa eff-nya sedikit di bawah
@@ -1891,10 +1919,11 @@ export class CantonLedgerService {
           if (acc < t.amount) {
             return {
               ok: false,
-              error: `Insufficient holdings to cover leg disjointly (${acc.toFixed(4)} < ${t.amount} ${t.instrumentId}) — falling back`,
+              error: `Insufficient holdings to cover leg (${acc.toFixed(4)} < ${t.amount} ${t.instrumentId}) — falling back`,
             };
           }
         }
+        amuletLegsAssigned++;
       } else {
         // Non-Amulet: satu leg per instrument (leg sama instrument ke-2 tidak
         // didukung tanpa overlap → fallback).
