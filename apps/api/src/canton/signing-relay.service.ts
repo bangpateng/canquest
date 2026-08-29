@@ -1013,15 +1013,57 @@ export class SigningRelayService {
   }
 
   /**
+   * Operator party platform Utilities (DA) — dipakai field `operator`
+   * TransferPreapproval registry (kontrak: signatory receiver, OBSERVER =
+   * operator ini). Sumber: GET {UTILITY_REGISTRY_BASE_URL}/api/utilities/v0/
+   * operator (pola resmi docs "Transfer Preapproval API Example" — operator
+   * TIDAK boleh diisi registrar/receiver). Cache 1 jam per proses.
+   * Terbukti MainNet 2026-08-29: operator salah (registrar) → registry
+   * mengabaikan preapproval → transfer tetap offer.
+   */
+  private utilitiesOperatorCache: { party: string; exp: number } | null = null;
+  private async getUtilitiesOperator(): Promise<string | null> {
+    const cached = this.utilitiesOperatorCache;
+    if (cached && Date.now() < cached.exp) return cached.party;
+    const base = (
+      this.config.get<string>('UTILITY_REGISTRY_BASE_URL') ??
+      'https://api.utilities.digitalasset.com'
+    ).replace(/\/$/, '');
+    try {
+      const res = await fetch(`${base}/api/utilities/v0/operator`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok) {
+        const j = (await res.json()) as { partyId?: string };
+        if (j.partyId) {
+          this.utilitiesOperatorCache = {
+            party: j.partyId,
+            exp: Date.now() + 60 * 60 * 1000,
+          };
+          return j.partyId;
+        }
+      }
+      this.logger.warn(
+        `Utilities operator endpoint tidak balas partyId (status ${res.status})`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Utilities operator fetch gagal: ${String(err).slice(0, 120)}`,
+      );
+    }
+    return null;
+  }
+
+  /**
    * Flow: usdcx_preapproval_enable — buat TransferPreapproval TOKEN REGISTRY
    * (USDCx) agar transfer masuk one-step tanpa Accept (CIP-0056 generic).
    *
    * Template Utility.Registry.App.V0.Model.TransferPreapproval — signatory =
    * RECEIVER → CreateCommand cukup SATU signature user (interactive prepare,
    * tanpa disclosed contracts). instrumentAllowances kosong = SEMUA instrument
-   * milik instrumentAdmin (registrar USDCx). `operator` = party yang
-   * mendisclose contract saat transfer direct — default registrar; override
-   * via CANTON_USDCX_PREAPPROVAL_OPERATOR.
+   * milik instrumentAdmin (registrar USDCx). `operator` = operator party
+   * platform Utilities (getUtilitiesOperator) — WAJIB benar agar registry
+   * memakai preapproval saat matching transfer direct.
    */
   private async buildRegistryPreapprovalEnable(user: {
     userId: string;
@@ -1041,7 +1083,8 @@ export class SigningRelayService {
       'decentralized-usdc-interchain-rep::12208115f1e168dd7e792320be9c4ca720c751a02a3053c7606e1c1cd3dad9bf60ef';
     const operator =
       this.config.get<string>('CANTON_USDCX_PREAPPROVAL_OPERATOR')?.trim() ||
-      instrumentAdmin;
+      (await this.getUtilitiesOperator()) ||
+      instrumentAdmin; // last-resort fallback ( Salah — registry takkan match.)
     const pkgId =
       this.config.get<string>('CANTON_USDCX_PREAPPROVAL_PACKAGE_ID')?.trim() ||
       // utility-registry-app-v0 MainNet (verified /v2/packages — satu-satunya
