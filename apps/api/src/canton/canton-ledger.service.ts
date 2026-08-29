@@ -2731,11 +2731,15 @@ export class CantonLedgerService {
 
     let lastErr = 'unknown';
     for (const actAs of actAsCandidates) {
+      // DAML: choice TransferPreapproval_Cancel with { p : Party } — p wajib
+      // receiver atau provider DAN menjadi controller (= actAs kita).
+      // MainNet 2026-08-29: arg kosong → COMMAND_PREPROCESSING_FAILED
+      // "Missing non-optional fields: Set(p)".
       const { ok, status, text } = await this.exerciseChoice(
         c.contractId,
         c.templateId,
         'TransferPreapproval_Cancel',
-        {},
+        { p: actAs },
         [actAs],
       );
       if (ok) {
