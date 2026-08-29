@@ -398,14 +398,20 @@ export function TransactionDetailContent({
           </ReceiptField>
 
           {txId ? (() => {
-            // Link explorer ccview.io/updates/{id}/ — pakai cantonUpdateId (update id
-            // on-chain) sebagai prioritas, fallback ke txId. Strip suffix :N kalau ada
-            // (eventId bisa bawa suffix round). id null → tdk ada link (internal marker).
-            const rawForUrl = detail.cantonUpdateId ?? txId;
-            const urlId = rawForUrl ? rawForUrl.replace(/:[0-9]+$/, "") : null;
-            const explorerUrl = urlId
-              ? `https://ccview.io/updates/${encodeURIComponent(urlId)}/`
-              : null;
+            // Link explorer: PRIORITAS cantonScanUrl dari backend (Modo —
+            // cc.modo.link, netral utk semua instrument CC/USDCx/CBTC).
+            // Fallback ccview.io dengan cantonUpdateId/txId. (Sebelumnya
+            // ccview di-hardcode — tx USDCx kelihatan "link CC" padahal
+            // tx-nya benar.) Strip suffix :N (eventId bisa bawa round).
+            const fallbackId = (detail.cantonUpdateId ?? txId)?.replace(
+              /:[0-9]+$/,
+              "",
+            );
+            const explorerUrl =
+              detail.cantonScanUrl ??
+              (fallbackId
+                ? `https://ccview.io/updates/${encodeURIComponent(fallbackId)}/`
+                : null);
             return (
               <ReceiptField label="Tx ID" mono>
                 <span className="inline-flex items-center justify-end gap-1.5">
@@ -429,8 +435,8 @@ export function TransactionDetailContent({
                       target="_blank"
                       rel="noopener noreferrer"
                       className={iconButtonClass("h-7 w-7 shrink-0 text-canton")}
-                      aria-label="View on ccview.io"
-                      title="View on ccview.io"
+                      aria-label="View on explorer"
+                      title="View on explorer"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </a>
