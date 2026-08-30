@@ -8,7 +8,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   EntryGateMode,
-  PartnerCategory,
   QuestKind,
   QuestStatus,
   RewardType,
@@ -2656,7 +2655,7 @@ export class AdminService {
     name: string;
     initials: string;
     logoUrl?: string;
-    category: PartnerCategory;
+    category: string;
     about?: string;
     website?: string;
     socialLinks?: Array<{ platform: string; url: string }>;
@@ -2664,6 +2663,7 @@ export class AdminService {
       initials: string;
       name: string;
       role: string;
+      photoUrl?: string;
       socials?: Array<{ platform: string; url: string }>;
     }>;
     appsFeatured?: Array<{ name: string; description?: string; url?: string }>;
@@ -2703,7 +2703,7 @@ export class AdminService {
       name: string;
       initials: string;
       logoUrl: string | null;
-      category: PartnerCategory;
+      category: string;
       about: string;
       website: string | null;
       socialLinks: Array<{ platform: string; url: string }>;
@@ -2711,6 +2711,7 @@ export class AdminService {
         initials: string;
         name: string;
         role: string;
+        photoUrl?: string;
         socials?: Array<{ platform: string; url: string }>;
       }>;
       appsFeatured: Array<{
@@ -2762,6 +2763,100 @@ export class AdminService {
     });
     this.logger.log(`Partner updated: ${partner.name} (${partner.id})`);
     return partner;
+  }
+
+  /* ── Ecosystem categories (admin-managed dropdown & tags) ── */
+
+  listEcosystemCategories() {
+    return this.prisma.ecosystemCategory.findMany({
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  async createEcosystemCategory(data: {
+    value: string;
+    label: string;
+    sortOrder?: number;
+  }) {
+    const value = data.value.trim().toUpperCase().replace(/\s+/g, '_');
+    if (!value) throw new BadRequestException('Category value is required');
+    const existing = await this.prisma.ecosystemCategory.findUnique({
+      where: { value },
+    });
+    if (existing) throw new ConflictException('Category value already exists');
+    return this.prisma.ecosystemCategory.create({
+      data: {
+        value,
+        label: data.label.trim() || value,
+        sortOrder: data.sortOrder ?? 0,
+      },
+    });
+  }
+
+  async updateEcosystemCategory(
+    id: string,
+    data: { label?: string; sortOrder?: number },
+  ) {
+    const existing = await this.prisma.ecosystemCategory.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('Category not found');
+    return this.prisma.ecosystemCategory.update({
+      where: { id },
+      data: {
+        ...(data.label !== undefined && { label: data.label.trim() }),
+        ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
+      },
+    });
+  }
+
+  async deleteEcosystemCategory(id: string) {
+    const existing = await this.prisma.ecosystemCategory.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('Category not found');
+    const inUse = await this.prisma.partner.count({
+      where: { category: existing.value },
+    });
+    if (inUse > 0) {
+      throw new ConflictException(
+        `Category used by ${inUse} partner(s) — move them first.`,
+      );
+    }
+    await this.prisma.ecosystemCategory.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  /* ── Ecosystem global settings (social links) ── */
+
+  async getEcosystemSettings(): Promise<{
+    socialLinks: Array<{ platform: string; url: string }>;
+  }> {
+    const setting = await this.prisma.appSetting.findUnique({
+      where: { key: 'ecosystem_social_links' },
+    });
+    let socialLinks: Array<{ platform: string; url: string }> = [];
+    if (setting?.value) {
+      try {
+        const parsed = JSON.parse(setting.value);
+        if (Array.isArray(parsed)) socialLinks = parsed;
+      } catch {
+        socialLinks = [];
+      }
+    }
+    return { socialLinks };
+  }
+
+  async setEcosystemSettings(data: {
+    socialLinks?: Array<{ platform: string; url: string }>;
+  }) {
+    const value = JSON.stringify(data.socialLinks ?? []);
+    await this.prisma.appSetting.upsert({
+      where: { key: 'ecosystem_social_links' },
+      update: { value },
+      create: { key: 'ecosystem_social_links', value },
+    });
+    return { ok: true };
   }
 
   async deletePartner(partnerId: string) {

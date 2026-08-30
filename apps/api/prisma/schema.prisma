@@ -108,6 +108,7 @@ model User {
   accounts                  Account[]
   /// Outbox email notifikasi campaign (Resend) — 1 baris = 1 email per (user, quest, type).
   emailNotificationLogs     EmailNotificationLog[]
+  partnerLikes              PartnerLike[]
 }
 
 /// OAuth account link — binds a User to an external identity provider.
@@ -523,53 +524,60 @@ model Quest {
   @@index([partnerId])
 }
 
-/// Ecosystem partner directory category (fixed list — used by /ecosystem filters).
-enum PartnerCategory {
-  COMPLIANCE
-  CUSTODY
-  DATA_ANALYTICS
-  DEVELOPER_TOOLS
-  EXCHANGES
-  FINANCING
-  FORENSICS_SECURITY
-  INTEROPERABILITY
-  LIQUIDITY
-  NAAS
-  PAYMENTS
-  STABLECOINS
-  TOKENIZED_ASSETS
-  WALLETS
-}
-
 /// Ecosystem partner profile — shown on /ecosystem directory (off-chain, admin-managed).
 /// Quests may optionally link to a partner (Quest.partnerId); partner edits never touch DAML.
 model Partner {
-  id           String          @id @default(cuid())
+  id           String        @id @default(cuid())
   name         String
   /// Display name fallback for logo square when logoUrl absent.
   initials     String
   /// Square logo URL (e.g. /partner-media/uuid.webp); falls back to initials.
   logoUrl      String?
-  category     PartnerCategory
+  /// Category value — references EcosystemCategory.value (managed in admin panel).
+  category     String
   /// Free-text description shown on the About tab of partner detail.
-  about        String          @default("")
+  about        String        @default("")
   website      String?
   /// JSON array of { platform, url } — social media row under partner name.
-  socialLinks  String          @default("[]")
+  socialLinks  String        @default("[]")
   /// JSON array of { initials, name, role, socials: [{platform,url}] } — Team tab.
-  team         String          @default("[]")
+  team         String        @default("[]")
   /// JSON array of { name, description, url } — App Featured tab.
-  appsFeatured String          @default("[]")
+  appsFeatured String        @default("[]")
   /// JSON array of { title, description } — Features tab (partner highlights).
-  features     String          @default("[]")
+  features     String        @default("[]")
   /// JSON array of { label, partyId, network, status, explorerUrl } — Validator tab (party ID cards).
-  validators   String          @default("[]")
+  validators   String        @default("[]")
   /// When false, hidden from /ecosystem (admin draft toggle).
-  published    Boolean         @default(true)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  published    Boolean       @default(true)
+  /// Denormalized like counter (toggled via PartnerLike rows, one per user).
+  likes        Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   /// Quests linked to this partner (optional — legacy quests have none).
   quests       Quest[]
+  likesBy      PartnerLike[]
+}
+
+/// Ecosystem directory categories — fully admin-managed (dropdown + tags).
+model EcosystemCategory {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  label     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// One like per user per partner (toggle; keeps Partner.likes counter honest).
+model PartnerLike {
+  partnerId String
+  userId    String
+  createdAt DateTime @default(now())
+  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([partnerId, userId])
 }
 
 enum RewardType {

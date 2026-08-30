@@ -13,6 +13,7 @@ import {
   FileText,
   Mail,
   Search,
+  Heart,
   ShieldCheck,
   Copy,
   ExternalLink,
@@ -116,6 +117,23 @@ export function EcosystemPage() {
   const [selected, setSelected] = useState<Partner | null>(null);
   const [tab, setTab] = useState<DetailTab>("about");
   const [copied, setCopied] = useState<string | null>(null);
+  const [categories, setCategories] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [globalSocials, setGlobalSocials] = useState<
+    Array<{ platform: string; url: string }>
+  >([]);
+
+  useEffect(() => {
+    fetch("/api/partners/meta", { credentials: "include" })
+      .then(async (res) => (res.ok ? res.json() : null))
+      .then((meta) => {
+        if (!meta) return;
+        if (Array.isArray(meta.categories)) setCategories(meta.categories);
+        if (Array.isArray(meta.socialLinks)) setGlobalSocials(meta.socialLinks);
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -167,7 +185,7 @@ export function EcosystemPage() {
     if (category !== "all" && p.category !== category) return false;
     if (
       q &&
-      !`${p.name} ${partnerCategoryLabel(p.category)} ${p.about}`
+      !`${p.name} ${partnerCategoryLabel(p.category, categories)} ${p.about}`
         .toLowerCase()
         .includes(q)
     )
@@ -183,6 +201,33 @@ export function EcosystemPage() {
   const openDetail = (p: Partner) => {
     setSelected(p);
     setTab("about");
+  };
+
+  const toggleLike = async (p: Partner) => {
+    // Optimistic — balikin kalau gagal.
+    const prev = partners;
+    setPartners((list) =>
+      list.map((x) =>
+        x.id === p.id
+          ? { ...x, liked: !x.liked, likes: x.likes + (x.liked ? -1 : 1) }
+          : x,
+      ),
+    );
+    try {
+      const res = await fetch(`/api/partners/${p.id}/like`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = (await res.json()) as { likes: number; liked: boolean };
+      setPartners((list) =>
+        list.map((x) =>
+          x.id === p.id ? { ...x, likes: data.likes, liked: data.liked } : x,
+        ),
+      );
+    } catch {
+      setPartners(prev);
+    }
   };
 
   const copyPartyId = async (partyId: string) => {
@@ -260,7 +305,13 @@ export function EcosystemPage() {
         </div>
         {ddOpen && (
           <div className="absolute inset-x-3 top-[calc(100%-4px)] z-40 max-h-[320px] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)] sm:inset-x-4">
-            {[{ value: "all", label: "All Categories" }, ...PARTNER_CATEGORIES].map(
+            {[
+            {
+              value: "all",
+              label: "All Categories",
+            },
+            ...(categories.length > 0 ? categories : PARTNER_CATEGORIES),
+          ].map(
               (c) => (
                 <button
                   key={c.value}
@@ -350,7 +401,7 @@ export function EcosystemPage() {
                     categoryFamily(p.category).chip,
                   )}
                 >
-                  {partnerCategoryLabel(p.category)}
+                  {partnerCategoryLabel(p.category, categories)}
                 </span>
                 <span className="rounded-full border border-[var(--border)] px-3 py-[5px] text-[11.5px] font-medium text-[var(--foreground)]">
                   {p.activeQuestCount != null && p.activeQuestCount > 0
@@ -364,12 +415,28 @@ export function EcosystemPage() {
                 {cardSummary(p)}
               </p>
               <div className="mt-[2px] flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)]">
-                  <ShieldCheck className="h-4 w-4" />
-                  {(p.validators?.length ?? 0) > 0
-                    ? `${p.validators.length} party ID${p.validators.length === 1 ? "" : "s"}`
-                    : "View profile"}
-                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void toggleLike(p);
+                  }}
+                  aria-label={p.liked ? "Unlike" : "Like"}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-0.5 text-xs font-semibold transition-colors",
+                    p.liked
+                      ? "text-[rgb(220_38_38)]"
+                      : "text-[var(--muted-foreground)] hover:text-[rgb(220_38_38)]",
+                  )}
+                >
+                  <Heart
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      p.liked && "scale-110 fill-[rgb(220_38_38)]",
+                    )}
+                  />
+                  {p.likes}
+                </button>
                 <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] border border-[var(--border)] text-[var(--muted-foreground)] transition-all group-hover:border-[rgb(111_230_0/0.4)] group-hover:bg-[rgb(111_230_0/0.10)] group-hover:text-canton">
                   <ChevronRight className="h-3.5 w-3.5" />
                 </span>
@@ -414,12 +481,18 @@ export function EcosystemPage() {
                   {selected.name}
                 </h2>
                 <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                  {partnerCategoryLabel(selected.category)}
+                  {partnerCategoryLabel(selected.category, categories)}
                   {selected.website ? ` · ${selected.website}` : ""}
                 </p>
-                {selected.socialLinks.length > 0 && (
+                {(selected.socialLinks.length > 0
+                  ? selected.socialLinks
+                  : globalSocials
+                ).length > 0 && (
                   <div className="mt-2.5 flex flex-wrap gap-2">
-                    {selected.socialLinks.map((s, i) => (
+                    {(selected.socialLinks.length > 0
+                      ? selected.socialLinks
+                      : globalSocials
+                    ).map((s, i) => (
                       <a
                         key={i}
                         href={s.url}
@@ -576,8 +649,17 @@ export function EcosystemPage() {
                   {selected.team.length > 0 ? (
                     selected.team.map((t, i) => (
                       <div key={i} className="w-[76px] text-center">
-                        <div className="mx-auto mb-1.5 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-gradient-brand font-[family-name:var(--font-space)] text-sm font-bold text-[var(--primary-foreground)]">
-                          {t.initials.slice(0, 2).toUpperCase()}
+                        <div className="mx-auto mb-1.5 flex h-[52px] w-[52px] items-center justify-center overflow-hidden rounded-full bg-gradient-brand font-[family-name:var(--font-space)] text-sm font-bold text-[var(--primary-foreground)]">
+                          {t.photoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={t.photoUrl}
+                              alt={t.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            t.initials.slice(0, 2).toUpperCase()
+                          )}
                         </div>
                         <p className="text-[11px] font-semibold leading-tight">
                           {t.name}

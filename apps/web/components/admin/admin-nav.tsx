@@ -19,6 +19,7 @@ const NAV_ITEMS: {
   { href: "/admin/users", label: "Users", icon: Users, exact: false },
   { href: "/admin/referrals", label: "Referral audit", icon: UserCheck, exact: false },
   { href: "/admin/wallet-invites", label: "Generate wallet codes", icon: KeyRound, exact: false },
+  { href: "/admin/settings/ecosystem", label: "Ecosystem settings", icon: Globe, exact: false },
   { href: "/admin/settings/maintenance", label: "Settings", icon: Settings, exact: false },
 ];
 

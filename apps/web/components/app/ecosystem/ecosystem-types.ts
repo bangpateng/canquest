@@ -6,6 +6,8 @@ export type PartnerTeamMember = {
   initials: string;
   name: string;
   role: string;
+  /** Foto profil (URL gambar/API) — fallback initials gradient. */
+  photoUrl?: string;
   socials?: PartnerSocialLink[];
 };
 
@@ -30,6 +32,8 @@ export type Partner = {
   validators: PartnerValidator[];
   createdAt: string;
   activeQuestCount?: number;
+  likes: number;
+  liked: boolean;
 };
 
 export type PartnerFeature = { title: string; description?: string };
@@ -60,6 +64,13 @@ export const PARTNER_CATEGORIES: ReadonlyArray<{ value: string; label: string }>
   { value: "WALLETS", label: "Wallets" },
 ];
 
-export function partnerCategoryLabel(value: string): string {
-  return PARTNER_CATEGORIES.find((c) => c.value === value)?.label ?? value;
+/** Label lookup — utamanya dari kategori dinamis (admin-managed), fallback konstanta. */
+export function partnerCategoryLabel(
+  value: string,
+  dynamic?: Array<{ value: string; label: string }>,
+): string {
+  return (
+    (dynamic ?? PARTNER_CATEGORIES).find((c) => c.value === value)?.label ??
+    value
+  );
 }

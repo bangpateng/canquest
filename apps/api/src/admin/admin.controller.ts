@@ -28,6 +28,11 @@ import {
   UpdateTaskDto,
 } from './dto/admin-quest.dto';
 import { AdminPartnerDto } from './dto/admin-partner.dto';
+import {
+  AdminEcosystemCategoryDto,
+  AdminEcosystemCategoryPatchDto,
+  AdminEcosystemSettingsDto,
+} from './dto/admin-ecosystem.dto';
 
 @Controller('admin')
 @UseGuards(AuthGuard('admin-jwt'), AdminGuard)
@@ -107,6 +112,43 @@ export class AdminController {
   @Delete('partners/:partnerId')
   deletePartner(@Param('partnerId') partnerId: string) {
     return this.admin.deletePartner(partnerId);
+  }
+
+  /* ── Ecosystem categories (dropdown & tags) ── */
+
+  @Get('ecosystem/categories')
+  listEcosystemCategories() {
+    return this.admin.listEcosystemCategories();
+  }
+
+  @Post('ecosystem/categories')
+  createEcosystemCategory(@Body() body: AdminEcosystemCategoryDto) {
+    return this.admin.createEcosystemCategory(body);
+  }
+
+  @Patch('ecosystem/categories/:id')
+  updateEcosystemCategory(
+    @Param('id') id: string,
+    @Body() body: AdminEcosystemCategoryPatchDto,
+  ) {
+    return this.admin.updateEcosystemCategory(id, body);
+  }
+
+  @Delete('ecosystem/categories/:id')
+  deleteEcosystemCategory(@Param('id') id: string) {
+    return this.admin.deleteEcosystemCategory(id);
+  }
+
+  /* ── Ecosystem global settings (social links) ── */
+
+  @Get('ecosystem/settings')
+  getEcosystemSettings() {
+    return this.admin.getEcosystemSettings();
+  }
+
+  @Put('ecosystem/settings')
+  setEcosystemSettings(@Body() body: AdminEcosystemSettingsDto) {
+    return this.admin.setEcosystemSettings(body);
   }
 
   /* ── Task CRUD ── */

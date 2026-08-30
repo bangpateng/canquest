@@ -2,7 +2,6 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
-  IsIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -11,7 +10,6 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-import { PARTNER_CATEGORIES, PartnerCategory } from '../../common/prisma-types';
 
 /** Sub-DTO social link { platform, url } — dipakai partner & team member. */
 export class PartnerSocialLinkDto {
@@ -42,6 +40,12 @@ export class PartnerTeamMemberDto {
   @MinLength(1)
   @MaxLength(100)
   role!: string;
+
+  /** Foto profil anggota — tautan gambar/API (fallback initials). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  photoUrl?: string;
 
   @IsOptional()
   @IsArray()
@@ -127,8 +131,11 @@ export class AdminPartnerDto {
   @MaxLength(500)
   logoUrl?: string;
 
-  @IsIn(PARTNER_CATEGORIES)
-  category!: PartnerCategory;
+  /** Category value — harus cocok dengan EcosystemCategory.value (dikelola admin). */
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  category!: string;
 
   @IsOptional()
   @IsString()
