@@ -51,7 +51,7 @@ export default function AdminPartnersPage() {
         <button
           type="button"
           onClick={() => void load()}
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "ml-auto gap-2")}
+          className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "ml-auto gap-2")}
         >
           <RefreshCw className="h-4 w-4" /> Refresh
         </button>

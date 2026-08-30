@@ -21,6 +21,13 @@ export interface PartnerDto {
   }>;
   appsFeatured: Array<{ name: string; description: string; url: string }>;
   features: Array<{ title: string; description: string }>;
+  validators: Array<{
+    label: string;
+    partyId: string;
+    network?: string;
+    status?: string;
+    explorerUrl?: string;
+  }>;
   createdAt: Date;
   activeQuestCount?: number;
 }
@@ -53,6 +60,7 @@ export class PartnersService {
       team: string;
       appsFeatured: string;
       features: string;
+      validators: string;
       createdAt: Date;
       quests?: Array<{ status: string; questKind: string }>;
     },
@@ -70,6 +78,7 @@ export class PartnersService {
       team: parseJsonArray(p.team),
       appsFeatured: parseJsonArray(p.appsFeatured),
       features: parseJsonArray(p.features),
+      validators: parseJsonArray(p.validators),
       createdAt: p.createdAt,
     };
     if (withQuestCount) {

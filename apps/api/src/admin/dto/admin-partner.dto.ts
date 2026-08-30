@@ -82,6 +82,34 @@ export class PartnerFeatureDto {
   description?: string;
 }
 
+/** Sub-DTO validator party ID { label, partyId, network, status, explorerUrl }. */
+export class PartnerValidatorDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  label!: string;
+
+  @IsString()
+  @MinLength(4)
+  @MaxLength(200)
+  partyId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  network?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  explorerUrl?: string;
+}
+
 /** Body create/update partner (admin). Semua field divalidasi ketat. */
 export class AdminPartnerDto {
   @IsString()
@@ -139,6 +167,13 @@ export class AdminPartnerDto {
   @ValidateNested({ each: true })
   @Type(() => PartnerFeatureDto)
   features?: PartnerFeatureDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => PartnerValidatorDto)
+  validators?: PartnerValidatorDto[];
 
   @IsOptional()
   @IsBoolean()

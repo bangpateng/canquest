@@ -2668,6 +2668,13 @@ export class AdminService {
     }>;
     appsFeatured?: Array<{ name: string; description?: string; url?: string }>;
     features?: Array<{ title: string; description?: string }>;
+    validators?: Array<{
+      label: string;
+      partyId: string;
+      network?: string;
+      status?: string;
+      explorerUrl?: string;
+    }>;
     published?: boolean;
   }) {
     const partner = await this.prisma.partner.create({
@@ -2682,6 +2689,7 @@ export class AdminService {
         team: JSON.stringify(data.team ?? []),
         appsFeatured: JSON.stringify(data.appsFeatured ?? []),
         features: JSON.stringify(data.features ?? []),
+        validators: JSON.stringify(data.validators ?? []),
         published: data.published ?? true,
       },
     });
@@ -2711,6 +2719,13 @@ export class AdminService {
         url?: string;
       }>;
       features: Array<{ title: string; description?: string }>;
+      validators: Array<{
+        label: string;
+        partyId: string;
+        network?: string;
+        status?: string;
+        explorerUrl?: string;
+      }>;
       published: boolean;
     }>,
   ) {
@@ -2738,6 +2753,9 @@ export class AdminService {
         }),
         ...(data.features !== undefined && {
           features: JSON.stringify(data.features),
+        }),
+        ...(data.validators !== undefined && {
+          validators: JSON.stringify(data.validators),
         }),
         ...(data.published !== undefined && { published: data.published }),
       },

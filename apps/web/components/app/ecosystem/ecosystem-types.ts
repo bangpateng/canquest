@@ -27,11 +27,20 @@ export type Partner = {
   team: PartnerTeamMember[];
   appsFeatured: PartnerAppFeatured[];
   features: PartnerFeature[];
+  validators: PartnerValidator[];
   createdAt: string;
   activeQuestCount?: number;
 };
 
 export type PartnerFeature = { title: string; description?: string };
+
+export type PartnerValidator = {
+  label: string;
+  partyId: string;
+  network?: string;
+  status?: string;
+  explorerUrl?: string;
+};
 
 /** Kategori tetap — harus match PARTNER_CATEGORIES di apps/api/src/common/prisma-types.ts. */
 export const PARTNER_CATEGORIES: ReadonlyArray<{ value: string; label: string }> = [

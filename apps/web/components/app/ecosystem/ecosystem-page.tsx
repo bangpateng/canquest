@@ -13,6 +13,9 @@ import {
   FileText,
   Mail,
   Search,
+  ShieldCheck,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { Card } from "@/components/ui/card";
@@ -22,7 +25,7 @@ import {
   type Partner,
 } from "./ecosystem-types";
 
-type DetailTab = "about" | "features" | "apps" | "team";
+type DetailTab = "about" | "validator" | "team";
 
 /**
  * Variasi warna kategori — 4 keluarga warna (green/cyan/violet/amber, mirror
@@ -112,6 +115,7 @@ export function EcosystemPage() {
   const ddRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<Partner | null>(null);
   const [tab, setTab] = useState<DetailTab>("about");
+  const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -179,6 +183,16 @@ export function EcosystemPage() {
   const openDetail = (p: Partner) => {
     setSelected(p);
     setTab("about");
+  };
+
+  const copyPartyId = async (partyId: string) => {
+    try {
+      await navigator.clipboard.writeText(partyId);
+      setCopied(partyId);
+      setTimeout(() => setCopied(null), 1400);
+    } catch {
+      /* clipboard unavailable */
+    }
   };
 
   return (
@@ -291,13 +305,13 @@ export function EcosystemPage() {
         </span>
       </div>
 
-      {/* ── Grid partner — gap konsisten dgn grid Earn ── */}
+      {/* ── List partner vertikal (mockup baru: kartu lebar, logo bulat, tag, like) ── */}
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="flex flex-col gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
-              className="h-[150px] animate-pulse rounded-[1.25rem] border border-[var(--border)] bg-[var(--card)]"
+              className="h-[190px] animate-pulse rounded-[1.25rem] border border-[var(--border)] bg-[var(--card)]"
             />
           ))}
         </div>
@@ -310,7 +324,7 @@ export function EcosystemPage() {
           No partners found{q ? ` for “${query.trim()}”` : ""}.
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="flex flex-col gap-4">
           {visible.map((p) => (
             <Card
               key={p.id}
@@ -321,28 +335,43 @@ export function EcosystemPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") openDetail(p);
               }}
-              className="flex cursor-pointer flex-col p-4"
+              className="flex cursor-pointer flex-col gap-4 px-[22px] pb-5 pt-[22px]"
             >
-              <div className="flex items-center gap-3">
-                <PartnerLogo partner={p} className="h-11 w-11 text-sm" />
-                <h3 className="min-w-0 truncate font-[family-name:var(--font-space)] text-[15px] font-bold leading-tight tracking-[-0.01em]">
+              <div className="flex items-center gap-3.5">
+                <PartnerLogo partner={p} className="h-14 w-14 rounded-full text-[17px]" />
+                <h3 className="min-w-0 truncate font-[family-name:var(--font-space)] text-[19px] font-bold tracking-[-0.01em]">
                   {p.name}
                 </h3>
               </div>
-              <p className="mt-2.5 line-clamp-2 text-xs leading-[1.5] text-[var(--muted-foreground)]">
-                {cardSummary(p)}
-              </p>
-              <div className="mt-auto flex items-center justify-between gap-1.5 pt-3">
+              <div className="flex flex-wrap gap-2">
                 <span
                   className={cn(
-                    "text-[11px] font-semibold",
-                    categoryFamily(p.category).text,
+                    "rounded-full border border-[rgb(111_230_0/0.28)] px-3 py-[5px] text-[11.5px] font-semibold",
+                    categoryFamily(p.category).chip,
                   )}
                 >
                   {partnerCategoryLabel(p.category)}
                 </span>
-                <span className="flex h-[26px] w-[26px] items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] transition-all group-hover:border-[rgb(111_230_0/0.4)] group-hover:bg-[rgb(111_230_0/0.10)] group-hover:text-canton">
-                  <ChevronRight className="h-4 w-4" />
+                <span className="rounded-full border border-[var(--border)] px-3 py-[5px] text-[11.5px] font-medium text-[var(--foreground)]">
+                  {p.activeQuestCount != null && p.activeQuestCount > 0
+                    ? `${p.activeQuestCount} active ${
+                        p.activeQuestCount === 1 ? "campaign" : "campaigns"
+                      }`
+                    : "Ecosystem partner"}
+                </span>
+              </div>
+              <p className="line-clamp-2 text-sm leading-[1.55] text-[var(--muted-foreground)]">
+                {cardSummary(p)}
+              </p>
+              <div className="mt-[2px] flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)]">
+                  <ShieldCheck className="h-4 w-4" />
+                  {(p.validators?.length ?? 0) > 0
+                    ? `${p.validators.length} party ID${p.validators.length === 1 ? "" : "s"}`
+                    : "View profile"}
+                </span>
+                <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] border border-[var(--border)] text-[var(--muted-foreground)] transition-all group-hover:border-[rgb(111_230_0/0.4)] group-hover:bg-[rgb(111_230_0/0.10)] group-hover:text-canton">
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </span>
               </div>
             </Card>
@@ -420,8 +449,7 @@ export function EcosystemPage() {
               {(
                 [
                   ["about", "About"],
-                  ["features", "Features"],
-                  ["apps", "App Featured"],
+                  ["validator", "Validator"],
                   ["team", "Team"],
                 ] as Array<[DetailTab, string]>
               ).map(([key, label]) => (
@@ -469,69 +497,75 @@ export function EcosystemPage() {
                 </div>
               )}
 
-              {tab === "features" && (
-                <div className="space-y-2">
-                  {selected.features.length > 0 ? (
-                    selected.features.map((feat, i) => (
+              {tab === "validator" && (
+                <div className="flex flex-col gap-3">
+                  {(selected.validators?.length ?? 0) > 0 ? (
+                    selected.validators.map((v, i) => (
                       <div
                         key={i}
-                        className="flex gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3"
+                        className="rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[var(--card)] to-[var(--background)] p-4 transition-all hover:-translate-y-px hover:border-[rgb(111_230_0/0.35)] hover:shadow-[var(--shadow-card)]"
                       >
-                        <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-[rgb(111_230_0/0.10)] text-canton">
-                          <Check className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[12.5px] font-bold">{feat.title}</p>
-                          {feat.description && (
-                            <p className="mt-0.5 text-[11.5px] leading-snug text-[var(--muted-foreground)]">
-                              {feat.description}
-                            </p>
+                        <div className="mb-3 flex items-center gap-2.5">
+                          <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-gradient-brand text-[var(--primary-foreground)] shadow-[0_6px_14px_-8px_rgb(111_230_0/0.55)]">
+                            <ShieldCheck className="h-[17px] w-[17px]" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="block text-[13px] font-bold">
+                              {v.label}
+                            </span>
+                            {v.network && (
+                              <span className="block text-[10.5px] font-semibold text-[var(--muted-foreground)]">
+                                {v.network}
+                              </span>
+                            )}
+                          </div>
+                          {v.status && (
+                            <span className="inline-flex shrink-0 items-center gap-[5px] rounded-full bg-[rgb(111_230_0/0.10)] px-2.5 py-1 text-[10.5px] font-bold text-canton">
+                              <span className="h-[6px] w-[6px] animate-pulse rounded-full bg-[var(--primary)]" />
+                              {v.status}
+                            </span>
                           )}
                         </div>
+                        <div className="mb-3 flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-2">
+                          <code className="min-w-0 flex-1 truncate font-[family-name:var(--font-space)] text-[11.5px]">
+                            {v.partyId.length > 22
+                              ? `${v.partyId.slice(0, 10)}…${v.partyId.slice(-8)}`
+                              : v.partyId}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => void copyPartyId(v.partyId)}
+                            title="Copy Party ID"
+                            className={cn(
+                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all",
+                              copied === v.partyId
+                                ? "border-[rgb(111_230_0/0.4)] bg-[rgb(111_230_0/0.10)] text-canton"
+                                : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-[rgb(111_230_0/0.4)] hover:bg-[rgb(111_230_0/0.10)] hover:text-canton",
+                            )}
+                          >
+                            {copied === v.partyId ? (
+                              <Check className="h-[13px] w-[13px]" />
+                            ) : (
+                              <Copy className="h-[13px] w-[13px]" />
+                            )}
+                          </button>
+                        </div>
+                        {v.explorerUrl && (
+                          <a
+                            href={v.explorerUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex w-full items-center justify-center gap-1.5 rounded-[10px] border border-[rgb(111_230_0/0.3)] bg-[rgb(111_230_0/0.10)] px-3 py-[9px] text-xs font-bold text-canton transition-all hover:border-transparent hover:bg-[var(--primary)] hover:text-[var(--primary-foreground)]"
+                          >
+                            View on Explorer
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        )}
                       </div>
                     ))
                   ) : (
                     <p className="py-4 text-center text-[13px] text-[var(--muted-foreground)]">
-                      Partner highlights will be listed here.
-                    </p>
-                  )}
-                </div>
-              )}
-
-{tab === "apps" && (
-                <div className="space-y-2">
-                  {selected.appsFeatured.length > 0 ? (
-                    selected.appsFeatured.map((a, i) => (
-                      <div
-                        key={i}
-                        className="flex gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3"
-                      >
-                        <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-[rgb(0_255_255/0.10)] text-[#00838f]">
-                          <Link2 className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[12.5px] font-bold">{a.name}</p>
-                          {a.description && (
-                            <p className="mt-0.5 text-[11.5px] leading-snug text-[var(--muted-foreground)]">
-                              {a.description}
-                            </p>
-                          )}
-                          {a.url && (
-                            <a
-                              href={a.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-1 inline-flex items-center gap-1 text-[11.5px] font-semibold text-canton hover:underline"
-                            >
-                              Open app <ChevronRight className="h-3 w-3" />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="py-4 text-center text-[13px] text-[var(--muted-foreground)]">
-                      No featured apps yet.
+                      Validator party IDs will be listed here.
                     </p>
                   )}
                 </div>

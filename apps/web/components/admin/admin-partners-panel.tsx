@@ -18,6 +18,7 @@ type AdminPartnerRow = {
   team: string;
   appsFeatured: string;
   features: string;
+  validators: string;
   published: boolean;
   createdAt: string;
   _count?: { quests?: number };
@@ -36,6 +37,7 @@ type PartnerFormState = {
   featuresJson: string;
   appsFeaturedJson: string;
   teamJson: string;
+  validatorsJson: string;
 };
 
 const EMPTY_FORM: PartnerFormState = {
@@ -50,10 +52,18 @@ const EMPTY_FORM: PartnerFormState = {
   featuresJson: "[]",
   appsFeaturedJson: "[]",
   teamJson: "[]",
+  validatorsJson: "[]",
 };
 
 const inputClass =
   "w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-[rgb(111_230_0/0.45)]";
+
+/** Parse JSON yang sudah lolos validasi loop di atas — throw bila invalid. */
+function jsonOr(raw: string): unknown {
+  const parsed = safeParseJson(raw);
+  if (!parsed.ok) throw new Error(parsed.error);
+  return parsed.value;
+}
 
 function safeParseJson(raw: string): { ok: true; value: unknown } | { ok: false; error: string } {
   try {
@@ -93,6 +103,7 @@ export function AdminPartnersPanel({
       featuresJson: JSON.stringify(JSON.parse(r.features || "[]"), null, 0),
       appsFeaturedJson: JSON.stringify(JSON.parse(r.appsFeatured || "[]"), null, 0),
       teamJson: JSON.stringify(JSON.parse(r.team || "[]"), null, 0),
+      validatorsJson: JSON.stringify(JSON.parse(r.validators || "[]"), null, 0),
     });
     setFormError(null);
   };
@@ -105,6 +116,7 @@ export function AdminPartnersPanel({
       ["Features", form.featuresJson],
       ["Apps featured", form.appsFeaturedJson],
       ["Team", form.teamJson],
+      ["Validators", form.validatorsJson],
     ] as const) {
       const parsed = safeParseJson(raw);
       if (!parsed.ok) {
@@ -120,10 +132,11 @@ export function AdminPartnersPanel({
       about: form.about,
       website: form.website.trim() || undefined,
       published: form.published,
-      socialLinks: safeParseJson(form.socialLinksJson).value,
-      features: safeParseJson(form.featuresJson).value,
-      appsFeatured: safeParseJson(form.appsFeaturedJson).value,
-      team: safeParseJson(form.teamJson).value,
+      socialLinks: jsonOr(form.socialLinksJson),
+      features: jsonOr(form.featuresJson),
+      appsFeatured: jsonOr(form.appsFeaturedJson),
+      team: jsonOr(form.teamJson),
+      validators: jsonOr(form.validatorsJson),
     };
     setSaving(true);
     try {
@@ -360,6 +373,11 @@ export function AdminPartnersPanel({
                     "Team JSON",
                     '[{"initials":"AR","name":"Arif","role":"Founder","socials":[]}]',
                   ],
+                  [
+                    "validatorsJson",
+                    "Validators JSON",
+                    '[{"label":"Party Validator","partyId":"1220a3f9…","network":"Mainnet","status":"Active","explorerUrl":"https://…"}]',
+                  ],
                 ] as Array<[keyof PartnerFormState, string, string]>
               ).map(([key, label, placeholder]) => (
                 <label key={key} className="space-y-1 text-sm sm:col-span-2">
@@ -384,7 +402,7 @@ export function AdminPartnersPanel({
               <button
                 type="button"
                 onClick={() => setForm(null)}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
+                className={buttonVariants({ variant: "secondary", size: "sm" })}
               >
                 Cancel
               </button>

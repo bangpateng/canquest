@@ -562,6 +562,8 @@ model Partner {
   appsFeatured String          @default("[]")
   /// JSON array of { title, description } — Features tab (partner highlights).
   features     String          @default("[]")
+  /// JSON array of { label, partyId, network, status, explorerUrl } — Validator tab (party ID cards).
+  validators   String          @default("[]")
   /// When false, hidden from /ecosystem (admin draft toggle).
   published    Boolean         @default(true)
   createdAt    DateTime        @default(now())
