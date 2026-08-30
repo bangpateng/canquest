@@ -155,3 +155,5 @@ MASTER_PLAN.md
 7LOCK_RUNBOOK_VPS1.md
 7TRUST_RUNBOOK_VPS1.md
 HANDOFF_7TRUST_DEPLOY.md
+apps/api/prisma/seed-dapp-demo.cjs
+apps/api/prisma/seed-earn-demo.cjs
