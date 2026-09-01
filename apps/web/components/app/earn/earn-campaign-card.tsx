@@ -241,7 +241,7 @@ export function EarnCampaignCard({
         {isEnded ? <div className="absolute inset-0 bg-[#060a08]/25" /> : null}
         {isSoon ? (
           <div className="absolute inset-0 z-[2] flex items-center justify-center bg-[#060a08]/35 backdrop-blur-[3px] saturate-[0.7]">
-            <span className="rounded-full border border-black/[0.06] bg-white/90 px-3 py-1.5 text-xs font-bold text-[#0f172a] backdrop-blur-md dark:border-white/[0.13] dark:bg-[#060a08]/60 dark:text-[var(--foreground)]">
+            <span className="rounded-full border border-amber-500/40 bg-white/95 px-3 py-[5px] text-[11.5px] font-semibold text-amber-700 dark:bg-[#060a08]/70 dark:text-amber-300">
               Coming soon
             </span>
           </div>
@@ -251,12 +251,12 @@ export function EarnCampaignCard({
         <div className="relative z-[3] flex w-full items-start justify-between px-3.5 py-3">
           <span
             className={cn(
-              "inline-flex items-center gap-[5px] rounded-full border border-black/[0.06] bg-white/85 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-wider text-[#0f172a] backdrop-blur-md dark:border-white/[0.12] dark:bg-[#060a08]/55 dark:text-[var(--foreground)]",
-              quest.status === "ACTIVE" &&
-                !slots.full &&
-                "border-[rgb(var(--canton-rgb)/0.35)] text-canton",
-              quest.status === "COMING_SOON" &&
-                "border-amber-500/30 text-amber-600 dark:text-amber-300",
+              "inline-flex items-center gap-[5px] rounded-full border bg-white/95 px-3 py-[5px] text-[11.5px] font-semibold dark:bg-[#060a08]/70 dark:text-[var(--foreground)]",
+              quest.status === "ACTIVE" && !slots.full
+                ? "border-[rgb(var(--canton-rgb)/0.40)] text-canton"
+                : quest.status === "COMING_SOON"
+                  ? "border-amber-500/40 text-amber-700 dark:text-amber-300"
+                  : "border-black/[0.08] text-[#3d4654] dark:border-white/[0.12]",
             )}
           >
             <span
@@ -273,7 +273,7 @@ export function EarnCampaignCard({
             />
             {statusLabel}
           </span>
-          <span className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/85 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-wider text-[#3d4654] backdrop-blur-md dark:border-white/[0.12] dark:bg-[#060a08]/55 dark:text-[var(--muted-foreground)]">
+          <span className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/95 px-3 py-[5px] text-[11.5px] font-semibold text-[#3d4654] dark:border-white/[0.12] dark:bg-[#060a08]/70 dark:text-[var(--muted-foreground)]">
             {config.shortLabel}
           </span>
         </div>
