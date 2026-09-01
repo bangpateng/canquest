@@ -1,3 +1,4 @@
+import { PageLoading } from "@/components/ui/loading-spinner";
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -43,7 +44,7 @@ export default async function AdminLoginPage() {
             Sign in with the email and password from your API environment — not the same as a normal app user login.
           </p>
         </div>
-        <Suspense fallback={<div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-sm text-[var(--muted-foreground)]">Loading…</div>}>
+        <Suspense fallback={<PageLoading minHeight="min-h-[220px]" />}>
           <AdminLoginForm />
         </Suspense>
       </div>

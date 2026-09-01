@@ -1,4 +1,5 @@
 "use client";
+import { PageLoading } from "@/components/ui/loading-spinner";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Card } from "@/components/ui/card";
 import { useMe } from "@/lib/hooks/use-me";
@@ -240,7 +241,7 @@ export function LeaderboardTable() {
         {/* Table Body */}
         {loading ? (
           <div className="relative flex items-center justify-center py-20 sm:py-24 md:py-28">
-            <LoadingSpinner size="xl" tone="muted" />
+            <PageLoading />
           </div>
         ) : !data || data.rows.length === 0 ? (
           <div className="relative px-5 py-20 sm:py-24 md:py-28 text-center">

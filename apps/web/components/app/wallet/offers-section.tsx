@@ -486,7 +486,7 @@ export function OffersModal({
           {activeTab === "incoming" ? (
             loading ? (
               <div className="flex items-center justify-center py-6">
-                <LoadingSpinner size="sm" tone="muted" />
+                <LoadingSpinner size="sm" />
               </div>
             ) : error ? (
               <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm font-medium text-red-600">
@@ -591,7 +591,7 @@ export function OffersModal({
             )
           ) : sentLoading ? (
             <div className="flex items-center justify-center py-6">
-              <LoadingSpinner size="sm" tone="muted" />
+              <LoadingSpinner size="sm" />
             </div>
           ) : sentError ? (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm font-medium text-red-600">

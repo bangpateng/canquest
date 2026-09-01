@@ -315,7 +315,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <LoadingSpinner size="xl" tone="muted" />
+        <LoadingSpinner size="xl" />
       </div>
     );
   }

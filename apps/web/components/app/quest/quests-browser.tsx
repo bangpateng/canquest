@@ -1,6 +1,6 @@
 "use client";
 
-import { EarnCampaignSkeleton } from "@/components/app/earn/earn-campaign-skeleton";
+import { PageLoading } from "@/components/ui/loading-spinner";
 import { EarnCampaignCard } from "@/components/app/earn/earn-campaign-card";
 import type { Quest, QuestStatus, UserProgress } from "@/lib/quest/quest-types";
 import { QUEST_STATUS_BADGE } from "@/lib/quest/quest-types";
@@ -267,11 +267,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
       ) : null}
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <EarnCampaignSkeleton key={i} />
-          ))}
-        </div>
+        <PageLoading />
       ) : loadError ? (
         <Card className="px-4 py-10 text-center sm:px-6 sm:py-14">
           <p className="text-lg font-bold tracking-tight text-red-600 sm:text-xl md:text-2xl">

@@ -1,5 +1,6 @@
 'use client';
 
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from "@/lib/services/api/client";
 import {
@@ -350,7 +351,7 @@ export function AdminUsersPanel() {
       </p>
 
       {loading && !data ? (
-        <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
+        <div className="flex min-h-[120px] items-center justify-center"><LoadingSpinner size="2xl" /></div>
       ) : !data || data.users.length === 0 ? (
         <p className="text-sm text-[var(--muted-foreground)]">No users found.</p>
       ) : (
@@ -547,7 +548,7 @@ export function AdminUsersPanel() {
 
             <div className="max-h-[60vh] overflow-y-auto p-5">
               {referralsLoading ? (
-                <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
+                <div className="flex min-h-[120px] items-center justify-center"><LoadingSpinner size="2xl" /></div>
               ) : !referrals || referrals.referrals.length === 0 ? (
                 <p className="text-sm text-[var(--muted-foreground)]">
                   No referrals yet.

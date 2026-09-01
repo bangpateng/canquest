@@ -82,7 +82,7 @@ export default function AdminEarnPage() {
 
       {loading && !quests ? (
         <div className="flex items-center justify-center py-16">
-          <LoadingSpinner size="xl" tone="muted" />
+          <LoadingSpinner size="xl" />
         </div>
       ) : (
         <AdminQuestTable

@@ -513,7 +513,7 @@ export function TransactionsView({
             aria-label="Refresh transactions"
           >
             {loading ? (
-              <LoadingSpinner size="sm" tone="muted" />
+              <LoadingSpinner size="sm" />
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}

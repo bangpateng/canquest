@@ -127,7 +127,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
               aria-label="Refresh balance"
             >
               {loading ? (
-                <LoadingSpinner size="sm" tone="muted" />
+                <LoadingSpinner size="sm" />
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}
@@ -176,7 +176,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
             My Tokens
           </p>
           {loading && (
-            <LoadingSpinner size="sm" tone="muted" />
+            <LoadingSpinner size="sm" />
           )}
         </div>
         <div className="space-y-3">

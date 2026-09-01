@@ -22,7 +22,7 @@ export function TurnstileField({ onToken, resetKey = 0 }: TurnstileFieldProps) {
   if (isLoading) {
     return (
       <div className="flex justify-center py-2">
-        <LoadingSpinner size="lg" tone="muted" />
+        <LoadingSpinner size="lg" />
       </div>
     );
   }

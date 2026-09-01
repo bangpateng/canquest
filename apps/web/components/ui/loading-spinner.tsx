@@ -58,10 +58,7 @@ export function PageLoading({
       role="status"
       aria-live="polite"
     >
-      <LoadingSpinner size="xl" tone="brand" />
-      {label ? (
-        <p className="text-sm text-[var(--muted-foreground)]">{label}</p>
-      ) : null}
+      <LoadingSpinner size="2xl" />
     </div>
   );
 }

@@ -88,7 +88,7 @@ export function AdminMaintenancePanel() {
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-        <LoadingSpinner size="md" /> Loading maintenance status…
+        <LoadingSpinner size="md" />
       </div>
     );
   }

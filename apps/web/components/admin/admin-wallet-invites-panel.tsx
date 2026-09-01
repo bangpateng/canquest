@@ -218,8 +218,7 @@ export function AdminWalletInvitesPanel() {
         </div>
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-[var(--muted-foreground)]">
-            <LoadingSpinner size="md" />
-            Loading…
+            <LoadingSpinner size="2xl" />
           </div>
         ) : !data?.codes.length ? (
           <p className="px-5 py-10 text-center text-sm text-[var(--muted-foreground)]">

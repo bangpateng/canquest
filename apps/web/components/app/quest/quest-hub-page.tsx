@@ -1,5 +1,5 @@
 "use client";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { LoadingSpinner, PageLoading } from "@/components/ui/loading-spinner";
 import Link from "next/link";
 import { QuestReferralCard } from "@/components/app/quest/quest-referral-card";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
@@ -98,7 +98,7 @@ export function QuestHubPage() {
         <div>
           {loading ? (
             <div className="flex h-12 items-center">
-              <LoadingSpinner size="lg" tone="muted" />
+              <LoadingSpinner size="2xl" />
             </div>
           ) : (
             <>
@@ -139,10 +139,7 @@ export function QuestHubPage() {
 
       {/* ── Tasks / Hub Content ─────────────────────────────────────────── */}
       {loading ? (
-        <div className="flex items-center justify-center gap-3 py-20 text-base font-medium text-[var(--muted-foreground)] sm:py-24">
-          <LoadingSpinner size="lg" tone="muted" />
-          Loading tasks…
-        </div>
+        <PageLoading />
       ) : hubError || !hub ? (
         <Card className="border-dashed py-16 text-center sm:py-20">
           <div className="flex flex-col items-center gap-4">

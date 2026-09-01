@@ -131,7 +131,7 @@ export function TransactionDetailContent({
   if (loading) {
     return (
       <div className={cn("flex justify-center", compact ? "py-10" : "py-24")}>
-        <LoadingSpinner size="xl" tone="muted" />
+        <LoadingSpinner size="xl" />
       </div>
     );
   }

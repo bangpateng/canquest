@@ -1,5 +1,6 @@
 'use client';
 
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { apiFetch } from "@/lib/services/api/client";
 import { Trash2, RefreshCw, AlertTriangle } from 'lucide-react';
@@ -234,7 +235,7 @@ export function AdminReferralAuditPanel() {
       )}
 
       {loading && !data ? (
-        <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
+        <div className="flex min-h-[120px] items-center justify-center"><LoadingSpinner size="2xl" /></div>
       ) : !data || data.totalFlagged === 0 ? (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 px-5 py-8 text-center">
           <p className="font-semibold text-emerald-600">

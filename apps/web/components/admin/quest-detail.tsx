@@ -1,5 +1,6 @@
 "use client";
 
+import { PageLoading } from "@/components/ui/loading-spinner";
 import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/services/api/client";
 import Link from "next/link";
@@ -201,7 +202,7 @@ export function QuestDetail({ questId }: { questId: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <LoadingSpinner size="xl" tone="muted" />
+        <PageLoading />
       </div>
     );
   }

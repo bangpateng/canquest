@@ -1,5 +1,5 @@
 "use client";
-import { InlineLoading } from "@/components/ui/loading-spinner";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { useCallback, useEffect, useState } from "react";
 import { Copy, Gift, UserPlus } from "lucide-react";
@@ -76,7 +76,7 @@ export function QuestReferralCard() {
 
       <div className="px-6 py-6">
         {loading ? (
-          <InlineLoading label={t("common.loading")} size="md" />
+          <LoadingSpinner size="md" />
         ) : error ? (
           <p className="text-sm font-medium text-red-600">{error}</p>
         ) : stats ? (

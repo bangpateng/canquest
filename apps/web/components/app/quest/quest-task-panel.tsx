@@ -1,5 +1,6 @@
 "use client";
 
+import { PageLoading } from "@/components/ui/loading-spinner";
 import type {
   Quest,
   QuestTask,
@@ -492,7 +493,7 @@ export function QuestTaskPanel({
   if (progressLoading) {
     return (
       <div className="flex items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--card)]/50 py-16">
-        <LoadingSpinner size="xl" tone="muted" />
+        <PageLoading />
       </div>
     );
   }

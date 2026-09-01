@@ -31,7 +31,7 @@ export function WalletRequiredGate({ children }: { children: React.ReactNode }) 
 
   if (loading) {
     return (
-      <PageLoading label={t("common.loading")} minHeight="min-h-[40vh]" />
+      <PageLoading minHeight="min-h-[40vh]" />
     );
   }
 
