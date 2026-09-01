@@ -27,22 +27,21 @@ type PageProps = { params: Promise<{ questId: string }> };
 function StatusPill({ status, label }: { status: Quest["status"]; label: string }) {
   return (
     <span className={cn(
-      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
-      status === "ACTIVE" && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-600",
-      status === "COMING_SOON" && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-600",
-      status === "ENDED" && "border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]",
+      "inline-flex items-center gap-[5px] rounded-full border bg-white/95 px-3 py-[5px] text-[11.5px] font-semibold dark:bg-[#060a08]/70 dark:text-[var(--foreground)]",
+      status === "ACTIVE" && "border-[rgb(var(--canton-rgb)/0.40)] text-canton",
+      status === "COMING_SOON" && "border-amber-500/40 text-amber-700 dark:text-amber-300",
+      status === "ENDED" && "border-black/[0.08] text-[#3d4654] dark:border-white/[0.12]",
     )}>
-      <span className={cn(
-        "relative flex h-1.5 w-1.5",
-        status === "ACTIVE" && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
-        ),
-      )}>
-        <span className={cn(
-          "relative inline-flex h-1.5 w-1.5 rounded-full",
-          status === "ACTIVE" ? "bg-emerald-400" : status === "COMING_SOON" ? "bg-cyan-400" : "bg-[var(--muted-foreground)]",
-        )} />
-      </span>
+      <span
+        className={cn(
+          "h-[6px] w-[6px] rounded-full",
+          status === "ACTIVE"
+            ? "bg-[var(--primary)] shadow-[0_0_0_3px_rgb(var(--canton-rgb)/0.18)]"
+            : status === "COMING_SOON"
+              ? "bg-amber-400"
+              : "bg-[var(--muted-foreground)]",
+        )}
+      />
       {label}
     </span>
   );
@@ -52,7 +51,7 @@ function StatusPill({ status, label }: { status: Quest["status"]; label: string 
  *  di light) — aksen tipografi modern, tema-adaptif via token fg/bg. */
 function TypePill({ config }: { config: ReturnType<typeof getRewardConfig> }) {
   return (
-    <span className="inline-flex items-center rounded-full bg-[var(--foreground)]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--background)]">
+    <span className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/95 px-3 py-[5px] text-[11.5px] font-semibold text-[#3d4654] dark:border-white/[0.12] dark:bg-[#060a08]/70 dark:text-[var(--muted-foreground)]">
       {config.shortLabel}
     </span>
   );
