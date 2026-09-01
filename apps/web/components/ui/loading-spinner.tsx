@@ -37,14 +37,12 @@ export function LoadingSpinner({ className, size, tone, ...props }: LoadingSpinn
 }
 
 type PageLoadingProps = {
-  label?: string;
   className?: string;
   minHeight?: string;
 };
 
 /** Loading halaman penuh / section (tengah). */
 export function PageLoading({
-  label,
   className,
   minHeight = "min-h-[40vh]",
 }: PageLoadingProps) {
@@ -63,24 +61,4 @@ export function PageLoading({
   );
 }
 
-type InlineLoadingProps = {
-  label?: string;
-  className?: string;
-  size?: NonNullable<VariantProps<typeof spinnerVariants>["size"]>;
-};
 
-/** Spinner + teks sejajar (kartu, banner, tombol dengan label). */
-export function InlineLoading({ label, className, size = "sm" }: InlineLoadingProps) {
-  return (
-    <span
-      className={cn("inline-flex items-center gap-2", className)}
-      role="status"
-      aria-live="polite"
-    >
-      <LoadingSpinner size={size} tone="brand" />
-      {label ? (
-        <span className="text-sm text-[var(--muted-foreground)]">{label}</span>
-      ) : null}
-    </span>
-  );
-}

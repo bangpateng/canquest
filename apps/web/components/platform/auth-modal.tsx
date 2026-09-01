@@ -85,7 +85,7 @@ export function AuthModal() {
 
   function requireTurnstile(): boolean {
     if (turnstileRequired === null) {
-      setError("Loading captcha… try again in a moment.");
+      setError("Could not prepare the captcha — try again in a moment.");
       return false;
     }
     if (!turnstileRequired) return true;

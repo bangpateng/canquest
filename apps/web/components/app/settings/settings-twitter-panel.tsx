@@ -56,7 +56,7 @@ export function SettingsTwitterPanel({
     const val = input.trim().replace(/^@/, "");
     if (!val) return;
     if (turnstileRequired === null) {
-      setError("Loading captcha… try again in a moment.");
+      setError("Could not prepare the captcha — try again in a moment.");
       return;
     }
     if (turnstileRequired && !turnstileToken) {

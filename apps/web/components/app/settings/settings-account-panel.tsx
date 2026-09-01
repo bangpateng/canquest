@@ -53,7 +53,7 @@ function SettingsField({
         id={id}
         readOnly
         value={loading ? "" : value || ""}
-        placeholder={loading ? "Loading…" : placeholder}
+        placeholder={placeholder}
         className={`mt-1.5 w-full bg-transparent text-sm font-semibold text-[var(--foreground)] outline-none placeholder:font-normal placeholder:text-[var(--muted-foreground)] ${
           mono ? "font-mono text-xs" : ""
         } ${copyable && value ? "pr-9" : ""}`}
