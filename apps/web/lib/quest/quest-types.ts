@@ -943,6 +943,16 @@ export function isInviteRewardType(rewardType: RewardType | string): boolean {
 export const TASK_COUNTDOWN_SEC = 5;
 
 /** Countdown label shown while verifying social / link tasks. */
+/** Sisa waktu cooldown repeat 24h — "23:59:59" (jam:menit:detik, live tick). */
+export function formatRepeatCountdown(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
+}
+
 export function formatTaskCountdownSeconds(seconds: number): string {
   const n = Math.max(0, Math.floor(seconds));
   return n === 1 ? "1 second" : `${n} seconds`;

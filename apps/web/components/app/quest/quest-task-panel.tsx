@@ -12,6 +12,7 @@ import {
   TASK_ACTION_BUTTON_LABEL,
   TASK_COUNTDOWN_SEC,
   formatTaskCountdownSeconds,
+  formatRepeatCountdown,
   resolveQuestTaskDisplayTitle,
   formatQuestHubCooldown,
   getQuestHubRepeatCooldownMs,
@@ -791,7 +792,8 @@ function TaskRow({
 
   useEffect(() => {
     if (!onRepeatCooldown) return;
-    const t = setInterval(() => setCooldownNow(Date.now()), 60_000);
+    // Tick tiap detik supaya sisa waktu hitung mundur terasa live di UI.
+    const t = setInterval(() => setCooldownNow(Date.now()), 1_000);
     return () => clearInterval(t);
   }, [onRepeatCooldown, submission?.verifiedAt, submission?.submittedAt]);
 
@@ -1359,7 +1361,15 @@ function TaskRow({
                     <Lock className="h-3 w-3" aria-hidden />
                     Locked
                   </span>
-                ) : (isOneTimeComplete || onRepeatCooldown) && !canRepeatNow ? (
+                ) : onRepeatCooldown ? (
+                  <span
+                    className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold tabular-nums text-emerald-600"
+                    aria-live="polite"
+                    title="Next check-in available in"
+                  >
+                    {formatRepeatCountdown(repeatCooldownMs)}
+                  </span>
+                ) : isOneTimeComplete ? (
                   <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-600">
                     Verified
                   </span>
@@ -1378,17 +1388,24 @@ function TaskRow({
                   <button
                     type="button"
                     disabled={actionDisabled || quizExpired}
-                    onClick={startTask}
+                    onClick={() => {
+                      if (sequentiallyLocked) return;
+                      if (requireWallet()) return;
+                      if (requireTwitter()) return;
+                      if (isDailyCheckIn) {
+                        // Check-in: submit langsung — tanpa wallet/X, cukup akun.
+                        autoSubmitFired.current = true;
+                        void handleSubmit("checked_in");
+                        return;
+                      }
+                      startTask();
+                    }}
                     className={cn(
                       buttonVariants({ size: "sm" }),
                       "h-9 min-w-[5.5rem] px-4 font-bold",
                     )}
                   >
-                    {isDailyCheckIn
-                      ? canRepeatNow
-                        ? "Check in"
-                        : "Check in"
-                      : actionLabel}
+                    {isDailyCheckIn ? "Check in" : actionLabel}
                   </button>
                 )}
               </div>

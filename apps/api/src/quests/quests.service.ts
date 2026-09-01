@@ -2193,7 +2193,11 @@ export class QuestsService {
     questId: string;
     taskId: string;
     proof?: string;
-  }): Promise<{ status: SubmissionStatus; alreadyDone: boolean }> {
+  }): Promise<{
+    status: SubmissionStatus;
+    alreadyDone: boolean;
+    nextCheckInAt?: string;
+  }> {
     const { userId, userPartyId, questId, taskId } = params;
     let { proof } = params;
 
@@ -2421,7 +2425,15 @@ export class QuestsService {
           this.logger.log(
             `Task re-submitted (daily repeat): user=${userId.slice(0, 8)} task=${taskId}`,
           );
-          return { status: SubmissionStatus.VERIFIED, alreadyDone: false };
+          return {
+            status: SubmissionStatus.VERIFIED,
+            alreadyDone: false,
+            ...(repeatable24h && {
+              nextCheckInAt: new Date(
+                now.getTime() + 24 * 60 * 60 * 1000,
+              ).toISOString(),
+            }),
+          };
         }
         return { status: SubmissionStatus.VERIFIED, alreadyDone: true };
       }
@@ -2622,7 +2634,16 @@ export class QuestsService {
       `Task submitted: user=${userId.slice(0, 8)} quest=${questId} task=${taskId} auto=${String(autoVerify)}`,
     );
 
-    return { status: submission.status, alreadyDone: false };
+    return {
+      status: submission.status,
+      alreadyDone: false,
+      ...(repeatable24h &&
+        submission.status === SubmissionStatus.VERIFIED && {
+          nextCheckInAt: new Date(
+            Date.now() + 24 * 60 * 60 * 1000,
+          ).toISOString(),
+        }),
+    };
   }
 
   /* ─── Quest completion (after all tasks verified) ─── */

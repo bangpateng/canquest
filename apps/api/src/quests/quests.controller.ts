@@ -264,7 +264,7 @@ export class QuestsController {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
 
-    const { status, alreadyDone } = await this.quests.submitTask({
+    const { status, alreadyDone, nextCheckInAt } = await this.quests.submitTask({
       userId: user.id,
       userPartyId: user.cantonPartyId ?? '',
       questId,
@@ -299,6 +299,8 @@ export class QuestsController {
       message:
         status === 'VERIFIED' ? 'Task verified' : 'Task submitted for review',
       allTasksVerified,
+      // Repeatable 24h (daily check-in dll): kapan user bisa submit lagi.
+      ...(nextCheckInAt && { nextCheckInAt }),
     };
   }
 
