@@ -88,7 +88,7 @@ function PartnerLogo({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-gradient-brand font-[family-name:var(--font-space)] font-bold text-[var(--primary-foreground)]",
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card-solid)] text-base font-bold text-canton",
         className,
       )}
     >
@@ -249,11 +249,12 @@ export function EcosystemPage() {
             Ecosystem
           </p>
           <h1 className="mt-2 text-2xl font-bold leading-tight tracking-tight text-[var(--foreground)] sm:text-3xl">
-            Explore the CanQuest ecosystem
+            Exclusive Canton Ecosystem
           </h1>
           <p className="mt-2 max-w-md text-xs font-medium leading-relaxed text-[var(--muted-foreground)] sm:text-sm">
-            Merchants, brands, and communities already connected to CanQuest —
-            pay, collect points, and complete quests straight from one wallet.
+            Be the first to try new projects building on the Canton Network.
+            Complete partner quests, gain early access, and earn exclusive
+            rewards—all through one wallet.
           </p>
         </div>
       </Card>
@@ -389,7 +390,7 @@ export function EcosystemPage() {
               className="flex cursor-pointer flex-col gap-4 px-[22px] pb-5 pt-[22px]"
             >
               <div className="flex items-center gap-3.5">
-                <PartnerLogo partner={p} className="h-14 w-14 rounded-full text-[17px]" />
+                <PartnerLogo partner={p} className="h-11 w-11" />
                 <h3 className="min-w-0 truncate font-[family-name:var(--font-space)] text-[19px] font-bold tracking-[-0.01em]">
                   {p.name}
                 </h3>
@@ -474,7 +475,7 @@ export function EcosystemPage() {
             <div className="flex items-start gap-3.5 px-5 pt-5">
               <PartnerLogo
                 partner={selected}
-                className="h-[52px] w-[52px] rounded-[14px] text-base"
+                className="h-[52px] w-[52px]"
               />
               <div className="min-w-0 flex-1">
                 <h2 className="font-[family-name:var(--font-space)] text-xl font-bold tracking-[-0.02em]">
