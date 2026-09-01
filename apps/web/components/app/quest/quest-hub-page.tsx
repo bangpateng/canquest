@@ -102,18 +102,13 @@ export function QuestHubPage() {
             </div>
           ) : (
             <>
-              {/* Icon + eyebrow label */}
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10">
-                  <Sparkles className="h-4 w-4 text-canton" aria-hidden />
-                </span>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                  Quest Hub · Available Points
-                </p>
-              </div>
+              {/* Eyebrow label */}
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                Quest Hub · Available Points
+              </p>
 
               {/* Headline number */}
-              <p className="mt-5 text-4xl font-extrabold tabular-nums leading-none tracking-tight text-[var(--foreground)] glow-text sm:text-5xl md:text-6xl">
+              <p className="mt-4 text-4xl font-extrabold tabular-nums leading-none tracking-tight text-[var(--foreground)] glow-text sm:text-5xl md:text-6xl">
                 {pointsRemaining.toLocaleString()}
                 <span className="ml-2 text-base font-semibold text-canton sm:ml-2.5 sm:text-lg md:text-xl">
                   pts
