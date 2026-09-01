@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Loader2, Send } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { CheckCircle2, Send } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
@@ -346,7 +347,7 @@ export function ContactForm() {
         )}
       >
         {status === "submitting" ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          <LoadingSpinner size="md" />
         ) : (
           <Send className="h-4 w-4" aria-hidden />
         )}

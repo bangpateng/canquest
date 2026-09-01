@@ -64,7 +64,7 @@ export default function AdminEarnPage() {
             disabled={loading}
             className={cn(buttonVariants({ variant: "secondary" }), "gap-2")}
           >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            loading ? <LoadingSpinner size="md" /> : <RefreshCw className="h-4 w-4" />
             Refresh
           </button>
           <Link href="/admin/earn/new" className={cn(buttonVariants(), "gap-2")}>

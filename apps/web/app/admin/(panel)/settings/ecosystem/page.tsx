@@ -158,7 +158,13 @@ export default function AdminEcosystemSettingsPage() {
         </div>
 
         {categories === null ? (
-          <LoadingSpinner />
+          <div
+            className="flex min-h-[120px] items-center justify-center"
+            role="status"
+            aria-live="polite"
+          >
+            <LoadingSpinner size="2xl" />
+          </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
             <table className="w-full text-left text-sm">
@@ -308,7 +314,10 @@ export default function AdminEcosystemSettingsPage() {
                 onClick={() => void saveSocials()}
                 className={cn(buttonVariants({ size: "sm" }), "ml-auto")}
               >
-                {savingSocials ? "Saving…" : "Save social links"}
+                <span className="inline-flex items-center gap-2">
+                  {savingSocials && <LoadingSpinner size="sm" />}
+                  {savingSocials ? "Saving…" : "Save social links"}
+                </span>
               </button>
             )}
           </div>

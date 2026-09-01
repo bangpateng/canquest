@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/services/api/client";
-import { Loader2, ShieldAlert, Power, PowerOff } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { ShieldAlert, Power, PowerOff } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -87,7 +88,7 @@ export function AdminMaintenancePanel() {
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading maintenance status…
+        <LoadingSpinner size="md" /> Loading maintenance status…
       </div>
     );
   }
@@ -214,7 +215,7 @@ export function AdminMaintenancePanel() {
             )}
           >
             {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <LoadingSpinner size="md" />
             ) : enabled ? (
               <Power className="h-4 w-4" />
             ) : (

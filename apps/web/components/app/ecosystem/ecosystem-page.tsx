@@ -19,6 +19,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Card } from "@/components/ui/card";
 import {
   PARTNER_CATEGORIES,
@@ -359,13 +360,15 @@ export function EcosystemPage() {
 
       {/* ── List partner vertikal (mockup baru: kartu lebar, logo bulat, tag, like) ── */}
       {loading ? (
-        <div className="flex flex-col gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-[190px] animate-pulse rounded-[1.25rem] border border-[var(--border)] bg-[var(--card)]"
-            />
-          ))}
+        <div
+          className="flex min-h-[30vh] flex-col items-center justify-center gap-3"
+          role="status"
+          aria-live="polite"
+        >
+          <LoadingSpinner size="2xl" />
+          <p className="text-xs font-medium text-[var(--muted-foreground)]">
+            Loading partners…
+          </p>
         </div>
       ) : error ? (
         <p className="py-12 text-center text-sm text-[var(--muted-foreground)]">

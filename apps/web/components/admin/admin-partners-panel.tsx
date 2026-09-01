@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 type SocialLink = { platform: string; url: string };
 type TeamSocial = { platform: string; url: string };
@@ -852,7 +853,10 @@ export function AdminPartnersPanel({
             onClick={() => void save()}
             className={buttonVariants({ size: "sm" })}
           >
-            {saving ? "Saving…" : form.id ? "Save changes" : "Create partner"}
+            <span className="inline-flex items-center gap-2">
+              {saving && <LoadingSpinner size="sm" />}
+              {saving ? "Saving…" : form.id ? "Save changes" : "Create partner"}
+            </span>
           </button>
         </div>
       </div>

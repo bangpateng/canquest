@@ -4,13 +4,14 @@ import { CQ_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
 
 /** Routes that require session cookie (JWT verified in platform layout). */
 const PROTECTED_PATTERN =
-  /^\/(overview|quests|earn|wallet|leaderboard|settings)(\/|$)/;
+  /^\/(ecosystem|quests|earn|wallet|leaderboard|settings)(\/|$)/;
 
 const PUBLIC_EARN_DETAIL_PATTERN = /^\/earn\/[^/]+\/?$/;
 
 /** Legacy app paths → new platform paths */
 const LEGACY_REDIRECTS: Record<string, string> = {
   '/quest': '/quests',
+  '/overview': '/ecosystem',
 };
 
 // ── Maintenance mode (server-side rewrite to /maintenance) ───────────────────

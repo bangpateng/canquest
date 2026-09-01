@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 
 /**
@@ -64,7 +65,7 @@ export function CampaignEligibilityBadge({ questId }: { questId: string }) {
   if (loading) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--muted-foreground)]" aria-hidden />
+        <LoadingSpinner size="md" className="shrink-0" />
         <span className="text-xs font-medium text-[var(--muted-foreground)]">
           Checking eligibility…
         </span>
