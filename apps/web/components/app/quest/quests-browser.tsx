@@ -52,7 +52,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
 
   // "ALL" = gabungan semua status (opsi pertama dropdown).
   type StatusFilter = QuestStatus | "ALL";
-  const [status, setStatus] = useState<StatusFilter>("ACTIVE");
+  const [status, setStatus] = useState<StatusFilter>("ALL");
   const [query, setQuery] = useState("");
   const [ddOpen, setDdOpen] = useState(false);
   const ddRef = useRef<HTMLDivElement>(null);
@@ -108,14 +108,6 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
       .then(([quests, prog]) => {
         setAllQuests(quests);
         setProgress(prog);
-
-        if (quests.length > 0) {
-          const activeCount = quests.filter((q) => q.status === "ACTIVE").length;
-          if (activeCount === 0) {
-            const fallback = TABS.find((tab) => quests.some((q) => q.status === tab.id));
-            if (fallback) setStatus(fallback.id as StatusFilter);
-          }
-        }
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") {
@@ -178,77 +170,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
   const statusLabel = (id: StatusFilter) =>
     id === "ALL" ? "All statuses" : QUEST_STATUS_BADGE[id].label;
   const statusCount = (id: StatusFilter) =>
-    id === "ALL"
-      ? allQuests.length
-      : counts[id];
-
-  const tabRow = (
-    <div className="flex w-full items-center gap-2.5 sm:gap-3">
-      <div className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3.5 transition-colors focus-within:border-[rgb(111_230_0/0.45)] sm:h-11 sm:px-4">
-        <Search className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search campaigns…"
-          className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
-        />
-      </div>
-      <div ref={ddRef} className="relative shrink-0">
-        <button
-          type="button"
-          onClick={() => setDdOpen((v) => !v)}
-          className={cn(
-            "flex h-10 shrink-0 items-center justify-between gap-2 rounded-xl border bg-[var(--card)] px-3 text-[13px] font-semibold transition-colors sm:h-11 sm:gap-2.5 sm:px-3.5 sm:text-sm",
-            ddOpen
-              ? "border-[rgb(111_230_0/0.45)]"
-              : "border-[var(--border)] hover:border-[rgb(111_230_0/0.35)]",
-          )}
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[var(--primary)]" />
-            <span className="max-w-[110px] truncate sm:max-w-[150px]">
-              {statusLabel(status)}
-            </span>
-            <span className="hidden tabular-nums text-[var(--muted-foreground)] sm:inline">
-              ({statusCount(status)})
-            </span>
-          </span>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
-              ddOpen && "rotate-180",
-            )}
-          />
-        </button>
-        {ddOpen && (
-          <div className="absolute inset-x-0 top-[calc(100%-4px)] z-40 max-h-[280px] w-56 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)] sm:w-64">
-            {(["ALL", ...TABS.map((tab) => tab.id)] as StatusFilter[]).map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  setStatus(id);
-                  setDdOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors hover:bg-[rgb(111_230_0/0.10)]",
-                  status === id
-                    ? "font-semibold text-canton"
-                    : "font-medium text-[var(--foreground)]",
-                )}
-              >
-                {statusLabel(id)}
-                <span className="ml-auto text-[11px] tabular-nums text-[var(--muted-foreground)]">
-                  {statusCount(id)}
-                </span>
-                {status === id && <Check className="h-3.5 w-3.5 shrink-0" />}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    id === "ALL" ? allQuests.length : counts[id];
 
   return (
     <div className={cn("w-full max-w-full overflow-hidden", isEarn ? "space-y-4 sm:space-y-5 md:space-y-6" : "space-y-5 sm:space-y-6 md:space-y-8")}>
@@ -269,13 +191,76 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
             </div>
           </Card>
 
-          {/* ── Toolbar: tabs ──────────────────────────────────── */}
-          <section
-            aria-label={t("earnCampaigns.filterAria")}
-            className="w-full overflow-hidden"
-          >
-            <Card bare className="w-full overflow-hidden p-3 sm:p-4">
-              <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
+          {/* ── Toolbar: search + dropdown status (mirror Ecosystem) ── */}
+          <section aria-label={t("earnCampaigns.filterAria")} className="w-full">
+            <Card bare className="relative w-full p-3 sm:p-4" ref={ddRef}>
+              <div className="flex w-full items-center gap-2.5 sm:gap-3">
+                <div className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3.5 transition-colors focus-within:border-[rgb(111_230_0/0.45)] sm:h-11 sm:px-4">
+                  <Search className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search campaigns…"
+                    className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDdOpen((v) => !v)}
+                  className={cn(
+                    "flex h-10 shrink-0 items-center justify-between gap-2 rounded-xl border bg-[var(--card)] px-3 text-[13px] font-semibold transition-colors sm:h-11 sm:gap-2.5 sm:px-3.5 sm:text-sm",
+                    ddOpen
+                      ? "border-[rgb(111_230_0/0.45)]"
+                      : "border-[var(--border)] hover:border-[rgb(111_230_0/0.35)]",
+                  )}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[var(--primary)]" />
+                    <span className="max-w-[110px] truncate sm:max-w-[150px]">
+                      {statusLabel(status)}
+                    </span>
+                    <span className="hidden tabular-nums text-[var(--muted-foreground)] sm:inline">
+                      ({statusCount(status)})
+                    </span>
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
+                      ddOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+              </div>
+              {ddOpen && (
+                <div className="absolute inset-x-3 top-[calc(100%-4px)] z-40 max-h-[280px] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)] sm:inset-x-4">
+                  {(
+                    ["ALL", ...TABS.map((tab) => tab.id)] as StatusFilter[]
+                  ).map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setStatus(id);
+                        setDdOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors hover:bg-[rgb(111_230_0/0.10)]",
+                        status === id
+                          ? "font-semibold text-canton"
+                          : "font-medium text-[var(--foreground)]",
+                      )}
+                    >
+                      {statusLabel(id)}
+                      <span className="ml-auto text-[11px] tabular-nums text-[var(--muted-foreground)]">
+                        {statusCount(id)}
+                      </span>
+                      {status === id && (
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </Card>
           </section>
         </>
