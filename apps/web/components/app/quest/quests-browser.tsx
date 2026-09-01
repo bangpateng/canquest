@@ -4,14 +4,13 @@ import { EarnCampaignSkeleton } from "@/components/app/earn/earn-campaign-skelet
 import { EarnCampaignCard } from "@/components/app/earn/earn-campaign-card";
 import type { Quest, QuestStatus, UserProgress } from "@/lib/quest/quest-types";
 import { QUEST_STATUS_BADGE } from "@/lib/quest/quest-types";
-import { filterTabClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Search } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { resolveQuestMediaUrl } from "@/lib/quest/quest-media-url";
@@ -51,8 +50,12 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
   const isEarn = variant === "earn";
   const pageSize = EARN_PAGE_SIZE;
 
-  const [status, setStatus] = useState<QuestStatus>("ACTIVE");
-  const [query] = useState("");
+  // "ALL" = gabungan semua status (opsi pertama dropdown).
+  type StatusFilter = QuestStatus | "ALL";
+  const [status, setStatus] = useState<StatusFilter>("ACTIVE");
+  const [query, setQuery] = useState("");
+  const [ddOpen, setDdOpen] = useState(false);
+  const ddRef = useRef<HTMLDivElement>(null);
   const [allQuests, setAllQuests] = useState<Quest[]>([]);
   const [progress, setProgress] = useState<UserProgress | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,7 +113,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
           const activeCount = quests.filter((q) => q.status === "ACTIVE").length;
           if (activeCount === 0) {
             const fallback = TABS.find((tab) => quests.some((q) => q.status === tab.id));
-            if (fallback) setStatus(fallback.id);
+            if (fallback) setStatus(fallback.id as StatusFilter);
           }
         }
       })
@@ -146,7 +149,10 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
   }, [allQuests]);
 
   const filtered = useMemo(
-    () => allQuests.filter((q) => q.status === status && matchesSearch(q, query)),
+    () =>
+      allQuests.filter(
+        (q) => (status === "ALL" || q.status === status) && matchesSearch(q, query),
+      ),
     [allQuests, status, query],
   );
 
@@ -154,30 +160,93 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
     setPage(1);
   }, [status, query]);
 
+  // Tutup dropdown status saat klik luar (mirror toolbar Ecosystem).
+  useEffect(() => {
+    if (!ddOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ddRef.current && !ddRef.current.contains(e.target as Node)) {
+        setDdOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [ddOpen]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pagedQuests = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+  const statusLabel = (id: StatusFilter) =>
+    id === "ALL" ? "All statuses" : QUEST_STATUS_BADGE[id].label;
+  const statusCount = (id: StatusFilter) =>
+    id === "ALL"
+      ? allQuests.length
+      : counts[id];
+
   const tabRow = (
-    <div
-      className={cn(
-        "flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        isEarn ? "gap-2.5" : "gap-2 pb-1 sm:pb-0",
-      )}
-    >
-      {TABS.map((tab) => {
-        const selected = status === tab.id;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setStatus(tab.id)}
-            className={filterTabClass(selected)}
-          >
-            {QUEST_STATUS_BADGE[tab.id].label}{" "}
-            <span className="tabular-nums opacity-80">({counts[tab.id]})</span>
-          </button>
-        );
-      })}
+    <div className="flex w-full items-center gap-2.5 sm:gap-3">
+      <div className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3.5 transition-colors focus-within:border-[rgb(111_230_0/0.45)] sm:h-11 sm:px-4">
+        <Search className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search campaigns…"
+          className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
+        />
+      </div>
+      <div ref={ddRef} className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => setDdOpen((v) => !v)}
+          className={cn(
+            "flex h-10 shrink-0 items-center justify-between gap-2 rounded-xl border bg-[var(--card)] px-3 text-[13px] font-semibold transition-colors sm:h-11 sm:gap-2.5 sm:px-3.5 sm:text-sm",
+            ddOpen
+              ? "border-[rgb(111_230_0/0.45)]"
+              : "border-[var(--border)] hover:border-[rgb(111_230_0/0.35)]",
+          )}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[var(--primary)]" />
+            <span className="max-w-[110px] truncate sm:max-w-[150px]">
+              {statusLabel(status)}
+            </span>
+            <span className="hidden tabular-nums text-[var(--muted-foreground)] sm:inline">
+              ({statusCount(status)})
+            </span>
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
+              ddOpen && "rotate-180",
+            )}
+          />
+        </button>
+        {ddOpen && (
+          <div className="absolute inset-x-0 top-[calc(100%-4px)] z-40 max-h-[280px] w-56 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)] sm:w-64">
+            {(["ALL", ...TABS.map((tab) => tab.id)] as StatusFilter[]).map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setStatus(id);
+                  setDdOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors hover:bg-[rgb(111_230_0/0.10)]",
+                  status === id
+                    ? "font-semibold text-canton"
+                    : "font-medium text-[var(--foreground)]",
+                )}
+              >
+                {statusLabel(id)}
+                <span className="ml-auto text-[11px] tabular-nums text-[var(--muted-foreground)]">
+                  {statusCount(id)}
+                </span>
+                {status === id && <Check className="h-3.5 w-3.5 shrink-0" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 
