@@ -396,11 +396,11 @@ export function EcosystemPage() {
             >
               <div className="flex items-center gap-3.5">
                 <PartnerLogo partner={p} className="h-11 w-11" />
-                <h3 className="min-w-0 truncate font-[family-name:var(--font-space)] text-[19px] font-bold tracking-[-0.01em]">
+                <h3 className="min-w-0 flex-1 truncate font-[family-name:var(--font-space)] text-[19px] font-bold tracking-[-0.01em]">
                   {p.name}
                 </h3>
                 {p.featuredApp && (
-                  <span className="inline-flex shrink-0 items-center rounded-full bg-blue-600 px-3 py-1 text-[10.5px] font-bold text-white">
+                  <span className="inline-flex shrink-0 items-center self-start rounded-full bg-blue-600 px-3 py-1 text-[10.5px] font-bold text-white">
                     Featured App
                   </span>
                 )}
