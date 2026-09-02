@@ -137,6 +137,15 @@ export class AdminPartnerDto {
   @MaxLength(60)
   category!: string;
 
+  /** Multi-kategori (tags) — EcosystemCategory.value; category = yang pertama. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(60, { each: true })
+  categories?: string[];
+
   @IsOptional()
   @IsString()
   @MaxLength(2000)

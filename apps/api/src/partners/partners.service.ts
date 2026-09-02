@@ -12,6 +12,7 @@ export interface PartnerDto {
   initials: string;
   logoUrl: string | null;
   category: string;
+  categories: string[];
   about: string;
   website: string | null;
   socialLinks: Array<{ platform: string; url: string }>;
@@ -59,6 +60,7 @@ export class PartnersService {
       initials: string;
       logoUrl: string | null;
       category: string;
+      categories?: string[];
       about: string;
       website: string | null;
       socialLinks: string;
@@ -79,6 +81,12 @@ export class PartnersService {
       initials: p.initials,
       logoUrl: p.logoUrl,
       category: p.category,
+      categories:
+        p.categories && p.categories.length > 0
+          ? p.categories
+          : p.category
+            ? [p.category]
+            : [],
       about: p.about,
       website: p.website,
       socialLinks: parseJsonArray(p.socialLinks),
@@ -107,7 +115,8 @@ export class PartnersService {
   ): Promise<PartnerDto[]> {
     const where: Record<string, unknown> = { published: true };
     if (category && category.trim()) {
-      where.category = category.trim();
+      const cat = category.trim();
+      where.OR = [{ categories: { has: cat } }, { category: cat }];
     }
     if (q && q.trim()) {
       where.OR = [

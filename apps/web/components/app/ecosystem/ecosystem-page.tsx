@@ -391,14 +391,22 @@ export function EcosystemPage() {
                 </h3>
               </div>
               <div className="flex flex-wrap gap-2">
-                <span
-                  className={cn(
-                    "rounded-full border border-[rgb(111_230_0/0.28)] px-3 py-[5px] text-[11.5px] font-semibold",
-                    categoryFamily(p.category).chip,
-                  )}
-                >
-                  {partnerCategoryLabel(p.category, categories)}
-                </span>
+                {(p.categories ?? [p.category]).slice(0, 3).map((cat) => (
+                  <span
+                    key={cat}
+                    className={cn(
+                      "rounded-full border border-[rgb(111_230_0/0.28)] px-3 py-[5px] text-[11.5px] font-semibold",
+                      categoryFamily(cat).chip,
+                    )}
+                  >
+                    {partnerCategoryLabel(cat, categories)}
+                  </span>
+                ))}
+                {(p.categories ?? []).length > 3 && (
+                  <span className="rounded-full border border-[var(--border)] px-3 py-[5px] text-[11.5px] font-semibold text-[var(--muted-foreground)]">
+                    +{p.categories.length - 3}
+                  </span>
+                )}
                 <span className="rounded-full border border-[var(--border)] px-3 py-[5px] text-[11.5px] font-medium text-[var(--foreground)]">
                   {p.activeQuestCount != null && p.activeQuestCount > 0
                     ? `${p.activeQuestCount} active ${
@@ -476,9 +484,13 @@ export function EcosystemPage() {
                 <h2 className="font-[family-name:var(--font-space)] text-xl font-bold tracking-[-0.02em]">
                   {selected.name}
                 </h2>
-                <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                  {partnerCategoryLabel(selected.category, categories)}
-                  {selected.website ? ` · ${selected.website}` : ""}
+                <p className="mt-0.5 flex flex-wrap gap-1.5 text-xs text-[var(--muted-foreground)]">
+                  {(selected.categories ?? [selected.category]).map((cat) => (
+                    <span key={cat} className="text-canton">
+                      {partnerCategoryLabel(cat, categories)}
+                    </span>
+                  ))}
+                  {selected.website ? <span>· {selected.website}</span> : null}
                 </p>
                 {(selected.socialLinks.length > 0
                   ? selected.socialLinks

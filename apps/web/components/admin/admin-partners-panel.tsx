@@ -30,6 +30,7 @@ type AdminPartnerRow = {
   initials: string;
   logoUrl: string | null;
   category: string;
+  categories?: string[];
   about: string;
   website: string | null;
   socialLinks: string;
@@ -49,6 +50,7 @@ type PartnerFormState = {
   initials: string;
   logoUrl: string;
   category: string;
+  categories: string[];
   about: string;
   website: string;
   published: boolean;
@@ -64,6 +66,7 @@ const EMPTY_FORM: PartnerFormState = {
   initials: "",
   logoUrl: "",
   category: "",
+  categories: [],
   about: "",
   website: "",
   published: true,
@@ -173,6 +176,8 @@ export function AdminPartnersPanel({
   const [form, setForm] = useState<PartnerFormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [newCat, setNewCat] = useState("");
+  const [catBusy, setCatBusy] = useState(false);
   const [categories, setCategories] = useState<
     Array<{ id: string; value: string; label: string }>
   >([]);
@@ -194,6 +199,7 @@ export function AdminPartnersPanel({
     setForm({
       ...EMPTY_FORM,
       category: categories[0]?.value ?? "",
+      categories: categories[0]?.value ? [categories[0].value] : [],
     });
     setFormError(null);
   };
@@ -207,12 +213,18 @@ export function AdminPartnersPanel({
       photoUrl: t.photoUrl ?? "",
       socials: t.socials ?? [],
     }));
+    const rowCats = (r.categories ?? []).length
+      ? (r.categories as string[])
+      : r.category
+        ? [r.category]
+        : [];
     setForm({
       id: r.id,
       name: r.name,
       initials: r.initials,
       logoUrl: r.logoUrl ?? "",
-      category: r.category,
+      category: rowCats[0] ?? "",
+      categories: rowCats,
       about: r.about,
       website: r.website ?? "",
       published: r.published,
@@ -248,7 +260,8 @@ export function AdminPartnersPanel({
       name: form.name.trim(),
       initials: form.initials.trim().toUpperCase(),
       logoUrl: form.logoUrl.trim() || undefined,
-      category: form.category,
+      category: form.categories[0] ?? form.category,
+      categories: form.categories,
       about: form.about,
       website: form.website.trim() || undefined,
       published: form.published,
@@ -454,24 +467,80 @@ export function AdminPartnersPanel({
                 placeholder="KO"
               />
             </label>
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">Category *</span>
-              <select
-                className={inputClass}
-                value={form.category}
-                onChange={(e) => upd("category", e.target.value)}
-              >
-                <option value="">— pilih kategori —</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-2 sm:col-span-2">
+              <span className="text-sm font-medium">Categories * (pilih satu atau lebih)</span>
+              <div className="flex flex-wrap gap-1.5">
+                {categories.map((c) => {
+                  const active = form.categories.includes(c.value);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        const next = active
+                          ? form.categories.filter((v) => v !== c.value)
+                          : [...form.categories, c.value];
+                        upd("categories", next);
+                        upd("category", next[0] ?? "");
+                      }}
+                      className={cn(
+                        "rounded-full border px-3 py-[5px] text-[11.5px] font-semibold transition-colors",
+                        active
+                          ? "border-[rgb(111_230_0/0.40)] bg-[rgb(111_230_0/0.12)] text-canton"
+                          : "border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:border-[rgb(111_230_0/0.35)]",
+                      )}
+                    >
+                      {active ? "✓ " : ""}
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  className={cn(inputClass, "max-w-56")}
+                  value={newCat}
+                  placeholder="Kategori baru (mis. Infrastructure)"
+                  onChange={(e) => setNewCat(e.target.value)}
+                />
+                <button
+                  type="button"
+                  disabled={catBusy || !newCat.trim()}
+                  onClick={async () => {
+                    setCatBusy(true);
+                    const res = await fetch("/api/admin/ecosystem/categories", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        value: newCat.trim(),
+                        label: newCat.trim(),
+                      }),
+                    });
+                    setCatBusy(false);
+                    if (res.ok) {
+                      const created = (await res.json()) as {
+                        value: string;
+                      };
+                      const list = await fetch("/api/admin/ecosystem/categories", {
+                        cache: "no-store",
+                      }).then((r) => r.json());
+                      setCategories(list);
+                      upd("categories", [...form.categories, created.value]);
+                      setNewCat("");
+                    } else {
+                      setFormError("Gagal menambah kategori (mungkin sudah ada).");
+                    }
+                  }}
+                  className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "shrink-0 gap-1.5")}
+                >
+                  {catBusy ? <LoadingSpinner size="sm" /> : null}
+                  + Tambah
+                </button>
+              </div>
               <p className="text-[11px] text-[var(--muted-foreground)]">
-                Kelola daftar kategori di menu Ecosystem settings.
+                Kategori baru langsung tersedia di dropdown menu Ecosystem.
               </p>
-            </label>
+            </div>
             <div className="min-w-0">
               <EcoImageField
                 label="Logo (upload / URL)"
@@ -851,7 +920,7 @@ export function AdminPartnersPanel({
               saving ||
               !form.name.trim() ||
               !form.initials.trim() ||
-              !form.category
+              form.categories.length === 0
             }
             onClick={() => void save()}
             className={buttonVariants({ size: "sm" })}

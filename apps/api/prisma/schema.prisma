@@ -535,6 +535,8 @@ model Partner {
   logoUrl      String?
   /// Category value — references EcosystemCategory.value (managed in admin panel).
   category     String
+  /// Multi-kategori (tags) — kumpulan EcosystemCategory.value; `category` = yang pertama (primary).
+  categories   String[]      @default([])
   /// Free-text description shown on the About tab of partner detail.
   about        String        @default("")
   website      String?

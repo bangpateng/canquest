@@ -23,6 +23,7 @@ export type Partner = {
   initials: string;
   logoUrl: string | null;
   category: string;
+  categories: string[];
   about: string;
   website: string | null;
   socialLinks: PartnerSocialLink[];

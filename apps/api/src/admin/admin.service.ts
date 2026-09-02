@@ -2656,6 +2656,7 @@ export class AdminService {
     initials: string;
     logoUrl?: string;
     category: string;
+    categories?: string[];
     about?: string;
     website?: string;
     socialLinks?: Array<{ platform: string; url: string }>;
@@ -2677,12 +2678,18 @@ export class AdminService {
     }>;
     published?: boolean;
   }) {
+    // Multi-kategori: kategori pertama = primary (`category` legacy single).
+    const categories =
+      data.categories && data.categories.length > 0
+        ? [...new Set([data.category, ...data.categories])].filter(Boolean)
+        : [data.category];
     const partner = await this.prisma.partner.create({
       data: {
         name: data.name,
         initials: data.initials.toUpperCase(),
         logoUrl: data.logoUrl ?? null,
-        category: data.category,
+        category: categories[0],
+        categories,
         about: data.about ?? '',
         website: data.website ?? null,
         socialLinks: JSON.stringify(data.socialLinks ?? []),
@@ -2704,6 +2711,7 @@ export class AdminService {
       initials: string;
       logoUrl: string | null;
       category: string;
+      categories?: string[];
       about: string;
       website: string | null;
       socialLinks: Array<{ platform: string; url: string }>;
@@ -2743,6 +2751,19 @@ export class AdminService {
         }),
         ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
         ...(data.category !== undefined && { category: data.category }),
+        ...(data.categories !== undefined && {
+          categories:
+            data.categories.length > 0
+              ? [...new Set(data.categories)]
+              : data.category
+                ? [data.category]
+                : [],
+        }),
+        // Sinkron primary bila categories diganti dan category tidak ikut dikirim.
+        ...(data.categories !== undefined &&
+          data.categories.length > 0 && {
+            category: data.category ?? data.categories[0],
+          }),
         ...(data.about !== undefined && { about: data.about }),
         ...(data.website !== undefined && { website: data.website }),
         ...(data.socialLinks !== undefined && {
