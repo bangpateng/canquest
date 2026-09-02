@@ -183,7 +183,17 @@ export function EcosystemPage() {
 
   const q = query.trim().toLowerCase();
   const visible = partners.filter((p) => {
-    if (category !== "all" && p.category !== category) return false;
+    // Multi-kategori: partner muncul di SETIAP kategori/tag yang dia pakai
+    // (bukan cuma primary). Case-insensitive utk data lama pra-kanonikalisasi.
+    if (category !== "all") {
+      const tags = (p.categories ?? (p.category ? [p.category] : [])).filter(
+        Boolean,
+      );
+      const hit = tags.some(
+        (t) => t.toLowerCase() === category.toLowerCase(),
+      );
+      if (!hit) return false;
+    }
     if (
       q &&
       !`${p.name} ${partnerCategoryLabel(p.category, categories)} ${p.about}`
