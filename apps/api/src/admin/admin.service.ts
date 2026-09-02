@@ -2651,6 +2651,17 @@ export class AdminService {
     });
   }
 
+
+  /** Normalkan nilai kategori partner ke kanonik tabel EcosystemCategory (case-insensitive). */
+  private async canonicalizeCategories(values: string[]): Promise<string[]> {
+    if (values.length === 0) return [];
+    const rows = await this.prisma.ecosystemCategory.findMany({
+      select: { value: true },
+    });
+    const byLower = new Map(rows.map((r) => [r.value.toLowerCase(), r.value]));
+    return [...new Set(values.map((v) => byLower.get(v.toLowerCase()) ?? v))];
+  }
+
   async createPartner(data: {
     name: string;
     initials: string;
@@ -2680,7 +2691,7 @@ export class AdminService {
     published?: boolean;
   }) {
     // Multi-kategori: kategori pertama = primary (`category` legacy single). Boleh kosong.
-    const categories: string[] =
+    const rawCategories: string[] =
       data.categories && data.categories.length > 0
         ? [...new Set([data.category, ...data.categories])].filter(
             (v): v is string => typeof v === 'string' && v.length > 0,
@@ -2688,6 +2699,9 @@ export class AdminService {
         : data.category
           ? [data.category]
           : [];
+    // Samakan case dengan nilai kanonik tabel kategori (filter array-has
+    // case-sensitive) supaya dropdown selalu cocok.
+    const categories = await this.canonicalizeCategories(rawCategories);
     const partner = await this.prisma.partner.create({
       data: {
         name: data.name,
@@ -2758,13 +2772,9 @@ export class AdminService {
         ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
         ...(data.category !== undefined && { category: data.category }),
         ...(data.categories !== undefined && {
-          categories:
-            data.categories.length > 0
-              ? [...new Set(data.categories)]
-              : data.category
-                ? [data.category]
-                : [],
-          // Primary mengikuti kategori pertama; kosong bila semua dilepas.
+          // Samakan case dengan nilai kanonik tabel kategori (filter array-has
+          // case-sensitive) — primary mengikuti kategori pertama, kosong bila dilepas.
+          categories: await this.canonicalizeCategories(data.categories),
           category: data.categories[0] ?? data.category ?? '',
         }),
         ...(data.about !== undefined && { about: data.about }),
