@@ -157,3 +157,29 @@ MASTER_PLAN.md
 HANDOFF_7TRUST_DEPLOY.md
 apps/api/prisma/seed-dapp-demo.cjs
 apps/api/prisma/seed-earn-demo.cjs
+
+# ─── File kerja & dokumentasi lokal (JANGAN PERNAH di-push) ──────────────────
+# Semua MD dokumentasi di root & docs/ — local only (repo public).
+/*.md
+!README.md
+docs/**/*.md
+# Panduan/runbook apa pun yang berakhiran PANDUAN/GUIDE/RUNBOOK di mana pun
+**/*PANDUAN*.md
+**/*GUIDE*.md
+**/*RUNBOOK*.md
+# Referensi DAML & dump riset ledger (root only)
+/*.daml
+/*.json
+/*.rst
+# Pitch deck & preview build (root only)
+/*.pptx
+/*.cjs
+/*.py
+/canquest-pitch/
+/pitch-preview/
+# Mockup HTML desain
+mockup-*.html
+# Referensi desain & screenshot
+/design-refs/
+/screenshots-earn/
+/.reskin-shots/
