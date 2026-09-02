@@ -461,9 +461,7 @@ export function EcosystemPage() {
       {!loading && !error && partners.length > 0 && (
         <div className="flex justify-center">
           <a
-            href="https://www.canton.network/ecosystem"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="https://www.canquest.cc/ecosystem"
             className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-[22px] py-3 text-[13.5px] font-semibold shadow-[var(--shadow-card)] transition-all hover:-translate-y-px hover:border-[rgb(111_230_0/0.35)] hover:bg-[rgb(111_230_0/0.10)]"
           >
             View all partners
