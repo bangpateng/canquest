@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import sharp from 'sharp';
 import {
   BadRequestException,
   Injectable,
@@ -471,6 +472,54 @@ export class R2StorageService implements OnModuleInit {
   }
 
   /** Upload banner or logo; returns public HTTPS URL stored on Quest. */
+
+  /**
+   * Optimasi otomatis saat upload: resize (tanpa upscale) + konversi WebP q82.
+   * GIF animasi dibiarkan apa adanya; bila hasil WebP lebih besar dari asli,
+   * file asli yang dipakai. Menjamin gambar tajam tapi ringan di semua UI.
+   */
+  private async optimizeForUpload(
+    buffer: Buffer,
+    mimeType: string,
+    opts: { maxW: number; maxH: number },
+  ): Promise<{ buffer: Buffer; mimeType: string; ext: string }> {
+    if (mimeType === 'image/gif') {
+      const ext = 'gif';
+      return { buffer, mimeType, ext };
+    }
+    try {
+      let pipeline = sharp(buffer, { failOn: 'none' }).rotate();
+      const meta = await pipeline.metadata();
+      const needsResize =
+        (meta.width ?? 0) > opts.maxW || (meta.height ?? 0) > opts.maxH;
+      if (needsResize) {
+        pipeline = pipeline.resize({
+          width: opts.maxW,
+          height: opts.maxH,
+          fit: 'inside',
+          withoutEnlargement: true,
+        });
+      }
+      const out = await pipeline.webp({ quality: 82 }).toBuffer();
+      if (out.length >= buffer.length) {
+        // WebP tidak memberi untung — pakai asli dengan ekstensi aslinya.
+        const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1];
+        return { buffer, mimeType, ext };
+      }
+      this.logger.log(
+        `Image optimized: ${buffer.length} → ${out.length} bytes (webp, max ${opts.maxW}x${opts.maxH})`,
+      );
+      return { buffer: out, mimeType: 'image/webp', ext: 'webp' };
+    } catch (err) {
+      // Optimasi gagal (format aneh dsb.) — fallback ke file asli.
+      this.logger.warn(
+        `Image optimize skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1];
+      return { buffer, mimeType, ext };
+    }
+  }
+
   async uploadQuestAsset(input: QuestImageUpload): Promise<string> {
     const maxBytes = Number(
       this.config.get<string>('QUEST_MEDIA_MAX_BYTES') ?? '5242880',
@@ -489,11 +538,14 @@ export class R2StorageService implements OnModuleInit {
     // menentukan ekstensi & Content-Type penyimpanan.
     const mimeType = detectedMime;
 
-    const ext = this.assertAllowedImage(
-      mimeType,
-      input.buffer.length,
-      maxBytes,
-    );
+    this.assertAllowedImage(mimeType, input.buffer.length, maxBytes);
+    // Banner/cover campaign — tampil max ~1600px lebar; auto WebP q82.
+    const optimized = await this.optimizeForUpload(input.buffer, mimeType, {
+      maxW: 1600,
+      maxH: 1600,
+    });
+    const ext = optimized.ext;
+
     const key = `quests/${randomUUID()}.${ext}`;
 
     if (this.isR2Enabled()) {
@@ -534,7 +586,7 @@ export class R2StorageService implements OnModuleInit {
     await mkdir(this.localDir, { recursive: true });
     const filename = `${randomUUID()}.${ext}`;
     const diskPath = path.join(this.localDir, filename);
-    await writeFile(diskPath, input.buffer);
+    await writeFile(diskPath, optimized.buffer);
 
     const apiPublic =
       this.config.get<string>('API_PUBLIC_BASE_URL')?.replace(/\/$/, '') ||
@@ -653,7 +705,13 @@ export class R2StorageService implements OnModuleInit {
       );
     }
     const mimeType = detectedMime;
-    const ext = this.assertAllowedImage(mimeType, input.buffer.length, maxBytes);
+    this.assertAllowedImage(mimeType, input.buffer.length, maxBytes);
+    // Logo partner / foto team — tampil max 52px; 256px cukup untuk retina.
+    const optimized = await this.optimizeForUpload(input.buffer, mimeType, {
+      maxW: 256,
+      maxH: 256,
+    });
+    const ext = optimized.ext;
     const key = `ecosystem/${randomUUID()}.${ext}`;
 
     if (!this.isR2Enabled()) {
@@ -674,8 +732,8 @@ export class R2StorageService implements OnModuleInit {
         new PutObjectCommand({
           Bucket: this.bucket!,
           Key: key,
-          Body: input.buffer,
-          ContentType: mimeType,
+          Body: optimized.buffer,
+          ContentType: optimized.mimeType,
           CacheControl: 'public, max-age=31536000, immutable',
         }),
       );
