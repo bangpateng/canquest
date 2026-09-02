@@ -626,4 +626,120 @@ export class R2StorageService implements OnModuleInit {
       return false;
     }
   }
+
+  /* ── Ecosystem media (folder R2 `ecosystem/`) ─────────────────────────── */
+
+  buildEcosystemServeUrl(key: string): string {
+    const filename = key.startsWith('ecosystem/')
+      ? key.slice('ecosystem/'.length)
+      : key;
+    return `${this.getApiPublicBase()}/api/ecosystem/${filename}`;
+  }
+
+  /** Nama file ecosystem yang valid (uuid.ext, pola sama dengan quest asset). */
+  private isValidEcosystemFilename(filename: string): boolean {
+    return /^[0-9a-f-]{36}\.(jpe?g|png|webp|gif)$/i.test(filename);
+  }
+
+  /** Upload gambar ecosystem (logo partner / foto team) ke R2 `ecosystem/`. */
+  async uploadEcosystemAsset(input: QuestImageUpload): Promise<string> {
+    const maxBytes = Number(
+      this.config.get<string>('QUEST_MEDIA_MAX_BYTES') ?? '5242880',
+    );
+    const detectedMime = this.detectImageMime(input.buffer);
+    if (!detectedMime) {
+      throw new BadRequestException(
+        'File content does not match a valid JPEG, PNG, WebP, or GIF image',
+      );
+    }
+    const mimeType = detectedMime;
+    const ext = this.assertAllowedImage(mimeType, input.buffer.length, maxBytes);
+    const key = `ecosystem/${randomUUID()}.${ext}`;
+
+    if (!this.isR2Enabled()) {
+      throw new BadRequestException(
+        'Ecosystem media requires R2 storage (R2 env vars) to be configured',
+      );
+    }
+    if (!this.bucketVerified) {
+      try {
+        await this.verifyBucket();
+        this.bucketVerified = true;
+      } catch (err) {
+        this.mapUploadError(err);
+      }
+    }
+    try {
+      await this.client!.send(
+        new PutObjectCommand({
+          Bucket: this.bucket!,
+          Key: key,
+          Body: input.buffer,
+          ContentType: mimeType,
+          CacheControl: 'public, max-age=31536000, immutable',
+        }),
+      );
+    } catch (err) {
+      this.mapUploadError(err);
+    }
+    return this.buildEcosystemServeUrl(key);
+  }
+
+  /** Stream gambar ecosystem by filename (publik, dipakai /api/ecosystem/:filename). */
+  async getEcosystemAssetStream(
+    filename: string,
+  ): Promise<{ stream: Readable; contentType: string } | null> {
+    if (!this.isValidEcosystemFilename(filename)) return null;
+    return this.getQuestAssetStream(`ecosystem/${filename}`);
+  }
+
+  /** Daftar isi folder ecosystem (gallery picker di panel admin). */
+  async listEcosystemAssets(): Promise<
+    Array<{ filename: string; url: string; size: number; lastModified: string }>
+  > {
+    if (!this.isR2Enabled()) return [];
+    const out = await this.client!.send(
+      new ListObjectsV2Command({
+        Bucket: this.bucket!,
+        Prefix: 'ecosystem/',
+        MaxKeys: 500,
+      }),
+    );
+    return (out.Contents ?? [])
+      .filter((o) => o.Key && o.Key !== 'ecosystem/')
+      .map((o) => ({
+        filename: o.Key!.slice('ecosystem/'.length),
+        url: this.buildEcosystemServeUrl(o.Key!),
+        size: o.Size ?? 0,
+        lastModified: (o.LastModified ?? new Date()).toISOString(),
+      }))
+      .sort((a, b) => b.lastModified.localeCompare(a.lastModified));
+  }
+
+  /** Hapus gambar ecosystem (terima URL serve atau nama file langsung). */
+  async deleteEcosystemAsset(ref: string): Promise<boolean> {
+    const trimmed = ref?.trim() ?? '';
+    if (!trimmed) return false;
+    let filename = trimmed;
+    const match = trimmed.match(/\/ecosystem\/([^/?#]+)/);
+    if (match) filename = decodeURIComponent(match[1]);
+    if (!this.isValidEcosystemFilename(filename)) return false;
+    if (!this.isR2Enabled()) return false;
+    try {
+      await this.client!.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket!,
+          Key: `ecosystem/${filename}`,
+        }),
+      );
+      this.logger.log(`Deleted R2 ecosystem asset: ecosystem/${filename}`);
+      return true;
+    } catch (err) {
+      const detail = this.formatS3Error(err);
+      this.logger.warn(
+        `R2 delete failed for ecosystem/${filename}: ${detail}`,
+      );
+      return false;
+    }
+  }
 }

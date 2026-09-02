@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Post,
   UploadedFile,
   UseGuards,
@@ -76,6 +77,61 @@ export class AdminUploadsController {
       );
     }
     const deleted = await this.storage.deleteQuestAssetByUrl(url);
+    return { deleted };
+  }
+
+  /* ── Ecosystem media (folder R2 `ecosystem/` — logo partner & foto team) ── */
+
+  /** Upload gambar ecosystem; mengembalikan URL serve /api/ecosystem/<file>. */
+  @Post('ecosystem')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_BYTES },
+      fileFilter: (_req, file, cb) => {
+        if (!UPLOAD_MIME_ALLOWLIST.has(file.mimetype)) {
+          return cb(
+            new BadRequestException('Only JPEG, PNG, WebP, or GIF allowed'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadEcosystemAsset(
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<{ url: string }> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Missing file field');
+    }
+    const url = await this.storage.uploadEcosystemAsset({
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+      originalName: file.originalname,
+    });
+    return { url };
+  }
+
+  /** Daftar isi folder ecosystem (gallery picker di panel admin). */
+  @Get('ecosystem')
+  listEcosystemAssets() {
+    return this.storage.listEcosystemAssets();
+  }
+
+  /** Hapus gambar ecosystem — body { url } atau { filename }. */
+  @Delete('ecosystem')
+  async deleteEcosystemAsset(
+    @Body() body: { url?: string; filename?: string },
+  ): Promise<{ deleted: boolean }> {
+    const ref = body?.url?.trim() || body?.filename?.trim();
+    if (!ref) throw new BadRequestException('Missing url or filename');
+    const deleted = await this.storage.deleteEcosystemAsset(ref);
+    if (!deleted) {
+      throw new BadRequestException(
+        'Not a valid ecosystem image (expected /api/ecosystem/<uuid>.<ext>)',
+      );
+    }
     return { deleted };
   }
 }

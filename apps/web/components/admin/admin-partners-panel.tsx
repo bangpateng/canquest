@@ -5,6 +5,7 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { EcoImageField } from "@/components/admin/eco-image-field";
 
 type SocialLink = { platform: string; url: string };
 type TeamSocial = { platform: string; url: string };
@@ -471,15 +472,14 @@ export function AdminPartnersPanel({
                 Kelola daftar kategori di menu Ecosystem settings.
               </p>
             </label>
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">Logo URL (tautan gambar/API)</span>
-              <input
-                className={inputClass}
+            <div className="min-w-0">
+              <EcoImageField
+                label="Logo (upload / URL)"
                 value={form.logoUrl}
-                onChange={(e) => upd("logoUrl", e.target.value)}
-                placeholder="https://cdn.…/logo.png"
+                onChange={(v) => upd("logoUrl", v)}
+                placeholder="https://… atau klik Upload"
               />
-            </label>
+            </div>
             <label className="space-y-1 text-sm sm:col-span-2">
               <span className="font-medium">Website</span>
               <input
@@ -698,19 +698,22 @@ export function AdminPartnersPanel({
                     )
                   }
                 />
-                <input
-                  className={inputClass}
-                  value={t.photoUrl}
-                  placeholder="Foto profil URL (https://…)"
-                  onChange={(e) =>
-                    upd(
-                      "team",
-                      form.team.map((x, j) =>
-                        j === i ? { ...x, photoUrl: e.target.value } : x,
-                      ),
-                    )
-                  }
-                />
+                <div className="min-w-0">
+                  <EcoImageField
+                    label="Foto"
+                    value={t.photoUrl}
+                    onChange={(v) =>
+                      upd(
+                        "team",
+                        form.team.map((x, j) =>
+                          j === i ? { ...x, photoUrl: v } : x,
+                        ),
+                      )
+                    }
+                    placeholder="URL atau Upload"
+                    compact
+                  />
+                </div>
                 <div className="space-y-2 sm:col-span-2">
                   <p className="text-[11px] font-semibold text-[var(--muted-foreground)]">
                     Social media anggota:
