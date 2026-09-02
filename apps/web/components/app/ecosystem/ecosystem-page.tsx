@@ -390,7 +390,7 @@ export function EcosystemPage() {
                   {p.name}
                 </h3>
                 {p.featuredApp && (
-                  <span className="inline-flex shrink-0 items-center rounded-full bg-blue-600 px-3 py-1 text-[10.5px] font-bold text-white shadow-[0_2px_8px_-2px_rgb(37_99_235/0.6)]">
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-blue-600 px-3 py-1 text-[10.5px] font-bold text-white">
                     Featured App
                   </span>
                 )}
@@ -400,7 +400,7 @@ export function EcosystemPage() {
                   <span
                     key={cat}
                     className={cn(
-                      "rounded-full border border-[rgb(111_230_0/0.28)] px-3 py-[5px] text-[11.5px] font-semibold",
+                      "rounded-full px-3 py-[5px] text-[11.5px] font-semibold",
                       categoryFamily(cat).chip,
                     )}
                   >
