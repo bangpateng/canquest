@@ -389,6 +389,11 @@ export function EcosystemPage() {
                 <h3 className="min-w-0 truncate font-[family-name:var(--font-space)] text-[19px] font-bold tracking-[-0.01em]">
                   {p.name}
                 </h3>
+                {p.featuredApp && (
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-blue-600 px-3 py-1 text-[10.5px] font-bold text-white shadow-[0_2px_8px_-2px_rgb(37_99_235/0.6)]">
+                    Featured App
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 {(p.categories ?? [p.category]).slice(0, 3).map((cat) => (
@@ -407,13 +412,12 @@ export function EcosystemPage() {
                     +{p.categories.length - 3}
                   </span>
                 )}
-                <span className="rounded-full border border-[var(--border)] px-3 py-[5px] text-[11.5px] font-medium text-[var(--foreground)]">
-                  {p.activeQuestCount != null && p.activeQuestCount > 0
-                    ? `${p.activeQuestCount} active ${
-                        p.activeQuestCount === 1 ? "campaign" : "campaigns"
-                      }`
-                    : "Ecosystem partner"}
-                </span>
+                {p.activeQuestCount != null && p.activeQuestCount > 0 && (
+                  <span className="rounded-full border border-[var(--border)] px-3 py-[5px] text-[11.5px] font-medium text-[var(--foreground)]">
+                    {p.activeQuestCount} active{" "}
+                    {p.activeQuestCount === 1 ? "campaign" : "campaigns"}
+                  </span>
+                )}
               </div>
               <p className="line-clamp-2 text-sm leading-[1.55] text-[var(--muted-foreground)]">
                 {cardSummary(p)}

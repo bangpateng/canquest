@@ -194,4 +194,9 @@ export class AdminPartnerDto {
   @IsOptional()
   @IsBoolean()
   published?: boolean;
+
+  /** Featured App badge (tombol biru setelah nama partner di /ecosystem). */
+  @IsOptional()
+  @IsBoolean()
+  featuredApp?: boolean;
 }

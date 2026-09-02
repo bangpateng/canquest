@@ -552,6 +552,8 @@ model Partner {
   validators   String        @default("[]")
   /// When false, hidden from /ecosystem (admin draft toggle).
   published    Boolean       @default(true)
+  /// Featured App badge — tombol biru "Featured App" setelah nama partner (admin toggle).
+  featuredApp  Boolean       @default(false)
   /// Denormalized like counter (toggled via PartnerLike rows, one per user).
   likes        Int           @default(0)
   createdAt    DateTime      @default(now())

@@ -39,6 +39,7 @@ type AdminPartnerRow = {
   features: string;
   validators: string;
   published: boolean;
+  featuredApp?: boolean;
   likes?: number;
   createdAt: string;
   _count?: { quests?: number };
@@ -54,6 +55,7 @@ type PartnerFormState = {
   about: string;
   website: string;
   published: boolean;
+  featuredApp: boolean;
   socialLinks: SocialLink[];
   featuresJson: string;
   appsFeaturedJson: string;
@@ -70,6 +72,7 @@ const EMPTY_FORM: PartnerFormState = {
   about: "",
   website: "",
   published: true,
+  featuredApp: false,
   socialLinks: [],
   featuresJson: "[]",
   appsFeaturedJson: "[]",
@@ -228,6 +231,7 @@ export function AdminPartnersPanel({
       about: r.about,
       website: r.website ?? "",
       published: r.published,
+      featuredApp: r.featuredApp ?? false,
       socialLinks: parseJsonArray<SocialLink>(r.socialLinks),
       featuresJson: JSON.stringify(parseJsonArray(r.features)),
       appsFeaturedJson: JSON.stringify(parseJsonArray(r.appsFeatured)),
@@ -265,6 +269,7 @@ export function AdminPartnersPanel({
       about: form.about,
       website: form.website.trim() || undefined,
       published: form.published,
+      featuredApp: form.featuredApp,
       socialLinks: form.socialLinks.filter((s) => s.platform && s.url),
       features: jsonOr(form.featuresJson),
       appsFeatured: jsonOr(form.appsFeaturedJson),
@@ -577,6 +582,35 @@ export function AdminPartnersPanel({
                 Published (tampil di /ecosystem)
               </span>
             </label>
+
+            <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
+              <span className="text-sm font-medium">Featured App:</span>
+              <div className="inline-flex overflow-hidden rounded-full border border-[var(--border)]">
+                {[
+                  { val: true, label: "Yes" },
+                  { val: false, label: "No" },
+                ].map((opt) => (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => upd("featuredApp", opt.val)}
+                    className={cn(
+                      "px-4 py-1.5 text-xs font-bold transition-colors",
+                      form.featuredApp === opt.val
+                        ? opt.val
+                          ? "bg-blue-600 text-white"
+                          : "bg-[var(--foreground)] text-[var(--background)]"
+                        : "bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[11px] text-[var(--muted-foreground)]">
+                Yes = tombol biru "Featured App" muncul setelah nama partner.
+              </span>
+            </div>
           </div>
 
           {/* Social links (Add More) */}

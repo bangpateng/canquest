@@ -2669,6 +2669,7 @@ export class AdminService {
     }>;
     appsFeatured?: Array<{ name: string; description?: string; url?: string }>;
     features?: Array<{ title: string; description?: string }>;
+    featuredApp?: boolean;
     validators?: Array<{
       label: string;
       partyId: string;
@@ -2728,6 +2729,7 @@ export class AdminService {
         url?: string;
       }>;
       features: Array<{ title: string; description?: string }>;
+      featuredApp?: boolean;
       validators: Array<{
         label: string;
         partyId: string;
@@ -2780,6 +2782,7 @@ export class AdminService {
           validators: JSON.stringify(data.validators),
         }),
         ...(data.published !== undefined && { published: data.published }),
+        ...(data.featuredApp !== undefined && { featuredApp: data.featuredApp }),
       },
     });
     this.logger.log(`Partner updated: ${partner.name} (${partner.id})`);

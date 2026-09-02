@@ -35,6 +35,7 @@ export type Partner = {
   activeQuestCount?: number;
   likes: number;
   liked: boolean;
+  featuredApp: boolean;
 };
 
 export type PartnerFeature = { title: string; description?: string };

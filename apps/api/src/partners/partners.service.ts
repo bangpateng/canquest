@@ -36,6 +36,7 @@ export interface PartnerDto {
   activeQuestCount?: number;
   likes: number;
   liked: boolean;
+  featuredApp: boolean;
 }
 
 /** Parse kolom JSON string aman — default [] saat kosong/corrupt. */
@@ -70,6 +71,7 @@ export class PartnersService {
       validators: string;
       createdAt: Date;
       likes: number;
+      featuredApp: boolean;
       likesBy?: Array<{ userId: string }>;
       quests?: Array<{ status: string; questKind: string }>;
     },
@@ -96,6 +98,7 @@ export class PartnersService {
       validators: parseJsonArray(p.validators),
       createdAt: p.createdAt,
       likes: p.likes ?? 0,
+      featuredApp: p.featuredApp ?? false,
       liked: (p.likesBy ?? []).length > 0,
     };
     if (withQuestCount) {
