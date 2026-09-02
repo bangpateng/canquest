@@ -264,7 +264,7 @@ export function AdminPartnersPanel({
       name: form.name.trim(),
       initials: form.initials.trim().toUpperCase(),
       logoUrl: form.logoUrl.trim() || undefined,
-      category: form.categories[0] ?? form.category,
+      category: form.categories[0] ?? "",
       categories: form.categories,
       about: form.about,
       website: form.website.trim() || undefined,
@@ -473,7 +473,7 @@ export function AdminPartnersPanel({
               />
             </label>
             <div className="space-y-2 sm:col-span-2">
-              <span className="text-sm font-medium">Categories * (pilih satu atau lebih)</span>
+              <span className="text-sm font-medium">Categories (pilih satu atau lebih, boleh kosong)</span>
               <div className="flex flex-wrap gap-1.5">
                 {categories.map((c) => {
                   const active = form.categories.includes(c.value);
@@ -482,11 +482,12 @@ export function AdminPartnersPanel({
                       key={c.id}
                       type="button"
                       onClick={() => {
+                        // Satu setForm (bukan dua upd berurutan — yang kedua
+                        // menimpa balik state pertama dgn snapshot lama).
                         const next = active
                           ? form.categories.filter((v) => v !== c.value)
                           : [...form.categories, c.value];
-                        upd("categories", next);
-                        upd("category", next[0] ?? "");
+                        setForm({ ...form, categories: next, category: next[0] ?? "" });
                       }}
                       className={cn(
                         "rounded-full border px-3 py-[5px] text-[11.5px] font-semibold transition-colors",
@@ -950,12 +951,7 @@ export function AdminPartnersPanel({
           </button>
           <button
             type="button"
-            disabled={
-              saving ||
-              !form.name.trim() ||
-              !form.initials.trim() ||
-              form.categories.length === 0
-            }
+            disabled={saving || !form.name.trim() || !form.initials.trim()}
             onClick={() => void save()}
             className={buttonVariants({ size: "sm" })}
           >

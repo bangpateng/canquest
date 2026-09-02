@@ -131,11 +131,11 @@ export class AdminPartnerDto {
   @MaxLength(500)
   logoUrl?: string;
 
-  /** Category value — harus cocok dengan EcosystemCategory.value (dikelola admin). */
+  /** Category primary — boleh kosong (multi-kategori opsional). */
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(60)
-  category!: string;
+  category?: string;
 
   /** Multi-kategori (tags) — EcosystemCategory.value; category = yang pertama. */
   @IsOptional()

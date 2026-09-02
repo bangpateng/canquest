@@ -396,7 +396,10 @@ export function EcosystemPage() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                {(p.categories ?? [p.category]).slice(0, 3).map((cat) => (
+                {(p.categories ?? (p.category ? [p.category] : []))
+                  .filter(Boolean)
+                  .slice(0, 3)
+                  .map((cat) => (
                   <span
                     key={cat}
                     className={cn(
@@ -489,7 +492,9 @@ export function EcosystemPage() {
                   {selected.name}
                 </h2>
                 <p className="mt-0.5 flex flex-wrap gap-1.5 text-xs text-[var(--muted-foreground)]">
-                  {(selected.categories ?? [selected.category]).map((cat) => (
+                  {(selected.categories ?? (selected.category ? [selected.category] : []))
+                    .filter(Boolean)
+                    .map((cat) => (
                     <span key={cat} className="text-canton">
                       {partnerCategoryLabel(cat, categories)}
                     </span>

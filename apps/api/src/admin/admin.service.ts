@@ -2655,7 +2655,7 @@ export class AdminService {
     name: string;
     initials: string;
     logoUrl?: string;
-    category: string;
+    category?: string;
     categories?: string[];
     about?: string;
     website?: string;
@@ -2679,17 +2679,21 @@ export class AdminService {
     }>;
     published?: boolean;
   }) {
-    // Multi-kategori: kategori pertama = primary (`category` legacy single).
-    const categories =
+    // Multi-kategori: kategori pertama = primary (`category` legacy single). Boleh kosong.
+    const categories: string[] =
       data.categories && data.categories.length > 0
-        ? [...new Set([data.category, ...data.categories])].filter(Boolean)
-        : [data.category];
+        ? [...new Set([data.category, ...data.categories])].filter(
+            (v): v is string => typeof v === 'string' && v.length > 0,
+          )
+        : data.category
+          ? [data.category]
+          : [];
     const partner = await this.prisma.partner.create({
       data: {
         name: data.name,
         initials: data.initials.toUpperCase(),
         logoUrl: data.logoUrl ?? null,
-        category: categories[0],
+        category: categories[0] ?? '',
         categories,
         about: data.about ?? '',
         website: data.website ?? null,
@@ -2760,12 +2764,9 @@ export class AdminService {
               : data.category
                 ? [data.category]
                 : [],
+          // Primary mengikuti kategori pertama; kosong bila semua dilepas.
+          category: data.categories[0] ?? data.category ?? '',
         }),
-        // Sinkron primary bila categories diganti dan category tidak ikut dikirim.
-        ...(data.categories !== undefined &&
-          data.categories.length > 0 && {
-            category: data.category ?? data.categories[0],
-          }),
         ...(data.about !== undefined && { about: data.about }),
         ...(data.website !== undefined && { website: data.website }),
         ...(data.socialLinks !== undefined && {
