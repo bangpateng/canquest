@@ -3002,9 +3002,17 @@ export class QuestsService {
     const completion = await this.prisma.questCompletion.findUnique({
       where: { userId_questId: { userId, questId } },
     });
-    const draw = await this.prisma.winnerDraw.findUnique({
+    const drawRow = await this.prisma.winnerDraw.findUnique({
       where: { questId_userId: { questId, userId } },
     });
+    // v30 ANTI-LEAK: kode plaintext di WinnerDraw hanya untuk hash offer +
+    // RevealCode pasca-klaim. Sebelum claimStatus 'Revealed', kode TIDAK
+    // boleh keluar dari API apa pun (user bisa pakai kode tanpa bayar fee).
+    // Mask di SATU titik ini — seluruh cabang di bawah otomatis aman.
+    const draw =
+      drawRow && isV30Quest(quest) && drawRow.claimStatus !== 'Revealed'
+        ? { ...drawRow, inviteCode: null }
+        : drawRow;
 
     if (!completion) {
       return {
