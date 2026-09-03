@@ -110,9 +110,9 @@ export function v30Account(partyId: string): { owner: string; provider: null; id
   return { owner: partyId, provider: null, id: '' };
 }
 
-/** RewardKind variant JSON (single-field → {tag, value}; multi-field → record di value). */
+/** RewardKind variant JSON (variant ber-field berlabel → value = objek record). */
 export type V30RewardKindJson =
-  | { tag: 'CodeOnly'; value: string }
+  | { tag: 'CodeOnly'; value: { codeHash: string } }
   | {
       tag: 'TokenOnly';
       value: { tokenAmount: string; tokenInstrument: { admin: string; id: string } };
@@ -151,7 +151,11 @@ export function v30RewardKindFor(params: {
   if (isCodeType && codeHash) {
     return {
       label: 'CODE_ONLY',
-      json: { tag: 'CodeOnly', value: codeHash },
+      // Variant ber-FIELD BERLABEL → value WAJIB objek {codeHash} (bukan string
+      // polos). Bukti MainNet 2026-09-03: string polos ditolak participant
+      // "Expected ujson.Obj"; TokenOnly (value objek) diterima. String polos
+      // hanya untuk NEWTYPE seperti InputAmulet.
+      json: { tag: 'CodeOnly', value: { codeHash } },
       hasToken: false,
       hasCode: true,
     };

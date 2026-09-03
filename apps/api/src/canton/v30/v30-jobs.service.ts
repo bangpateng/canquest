@@ -308,6 +308,9 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
           v30RegistrationClosedAt: null,
           startsAt: { not: null },
           endsAt: { not: null },
+          // T1 HANYA untuk Raffle (klarifikasi owner 2026-09-03): FCFS ditutup
+          // oleh kuota penuh / tanggal berakhir — tanpa T1.
+          rewardType: { in: ['INVITE_CODE_RANDOM', 'INVITE_CODE', 'CC_MANUAL', 'CC_AND_INVITE', 'CC_AND_CODE_RAFFLE'] },
         },
         select: { id: true, startsAt: true, endsAt: true },
         take: 100,
@@ -335,41 +338,41 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
   // ── 5. T2 — pembuatan offer utk pemenang event berakhir ───────────────────
 
   /**
-   * §4 spesifikasi owner: "Untuk setiap pemenang, backend membuat satu
-   * ClaimOffer" saat event berakhir. Raffle biasanya dapat offer dari hook
-   * drawWinners; sweep ini menutup celah: FCFS (winner sejak submit, tanpa
-   * draw) dan raffle yang hook-nya gagal. validUntil = 7 hari sekarang.
+   * §4 spesifikasi owner + klarifikasi FCFS-instan: sweep jaring pengaman —
+   * buat ClaimOffer utk winner mana pun yang belum punya offer (FCFS yang
+   * instant-offer-nya gagal; raffle yang hook draw-nya gagal). Raffle pra-draw
+   * tidak punya WinnerDraw → otomatis no-op; eligibility tetap dicek per
+   * winner di createOfferForWinner.
    */
   async offerCreationTick(): Promise<{ quests: number; offers: number }> {
     let offers = 0;
     let quests = 0;
     try {
-      const ended = await this.prisma.quest.findMany({
+      const pending = await this.prisma.winnerDraw.findMany({
         where: {
-          ledgerPackage: 'canquest-v30',
-          OR: [{ status: 'ENDED' }, { endsAt: { lte: new Date() } }],
+          offerContractId: null,
+          claimStatus: null,
+          quest: { is: { ledgerPackage: 'canquest-v30' } },
         },
-        select: { id: true },
-        take: 50,
+        select: { questId: true, userId: true },
+        distinct: ['questId', 'userId'],
+        take: 100,
       });
-      for (const q of ended) {
-        const pending = await this.prisma.winnerDraw.findMany({
-          where: { questId: q.id, offerContractId: null, claimStatus: null },
-          select: { userId: true },
-          take: 100,
-        });
-        if (pending.length === 0) continue;
-        quests++;
-        for (const w of pending) {
-          const made = await this.claims.createOfferForWinner(q.id, w.userId);
-          if (made.ok) offers++;
-          else {
-            this.logger.warn(
-              `T2 offer quest=${q.id.slice(0, 8)}… user=${w.userId.slice(0, 8)}… GAGAL: ${made.error}`,
-            );
-          }
+      const seen = new Set<string>();
+      for (const w of pending) {
+        const key = `${w.questId}|${w.userId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (seen.size === 1) quests = 1;
+        const made = await this.claims.createOfferForWinner(w.questId, w.userId);
+        if (made.ok) offers++;
+        else if (made.skipped !== 'exists') {
+          this.logger.warn(
+            `T2 offer quest=${w.questId.slice(0, 8)}… user=${w.userId.slice(0, 8)}… GAGAL: ${made.error}`,
+          );
         }
       }
+      quests = new Set(pending.map((p) => p.questId)).size;
     } catch (err) {
       this.logger.error(`offerCreationTick error: ${String(err).slice(0, 160)}`);
     }

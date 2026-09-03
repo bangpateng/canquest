@@ -519,7 +519,9 @@ function ActiveLockRow({
           <p className="truncate text-sm font-semibold text-[var(--foreground)]">
             {lock.amountCc} CC ·{" "}
             {isCampaignLock ? (
-              <span className="text-canton">Campaign lock</span>
+              <span className="text-canton">
+                Campaign lock{lock.campaignTitle ? ` · ${lock.campaignTitle}` : ""}
+              </span>
             ) : (
               termLabel(lock.termKey)
             )}

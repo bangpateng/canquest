@@ -9,6 +9,7 @@ import { cantonPartyIdsEqual } from '../../common/canton-party-id';
 import {
   V30_PROPOSAL_WINDOW_MS,
   isV30Quest,
+  v30ClaimModel,
   v30Dec,
   v30Enabled,
   v30LockTemplateId,
@@ -82,18 +83,21 @@ export class LockProposalService {
       return { ok: false, error: 'Campaign terlalu dekat dengan berakhir (T2) untuk lock baru' };
     }
 
-    // T1 = 70% durasi — pendaftaran TERTUTUP setelah ini (spesifikasi owner).
-    // Guard ganda: flag v30RegistrationClosedAt (di-set scheduler T1) ATAU
-    // hitungan waktu langsung (kalau scheduler belum sempat jalan).
-    const t1 = v30T1At(quest.startsAt, quest.endsAt);
-    const registrationClosed =
-      quest.v30RegistrationClosedAt != null ||
-      (t1 != null && Date.now() >= t1.getTime());
-    if (registrationClosed) {
-      return {
-        ok: false,
-        error: 'Pendaftaran campaign sudah ditutup (T1) — lock baru tidak diterima.',
-      };
+    // T1 = 70% durasi — pendaftaran TERTUTUP setelah ini. HANYA untuk Raffle
+    // (klarifikasi owner: FCFS ditutup kuota/waktu saja). Guard ganda: flag
+    // v30RegistrationClosedAt (di-set scheduler T1) ATAU hitungan waktu.
+    const model = v30ClaimModel(quest);
+    if (model.selection === 'RAFFLE') {
+      const t1 = v30T1At(quest.startsAt, quest.endsAt);
+      const registrationClosed =
+        quest.v30RegistrationClosedAt != null ||
+        (t1 != null && Date.now() >= t1.getTime());
+      if (registrationClosed) {
+        return {
+          ok: false,
+          error: 'Pendaftaran campaign sudah ditutup (T1) — lock baru tidak diterima.',
+        };
+      }
     }
 
     const existing = await this.prisma.lockProposalRecord.findUnique({
@@ -369,7 +373,7 @@ export class LockProposalService {
         ownerParty: user.cantonPartyId,
         userId: record.userId,
         amountCc: match.amount,
-        termKey: `v30-${record.questId.slice(0, 8)}`,
+        termKey: `v30-${record.questId}`,
         lockSeconds: Math.max(
           1,
           Math.round((record.expiresAt.getTime() - Date.now()) / 1000),

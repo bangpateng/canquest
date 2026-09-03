@@ -117,9 +117,6 @@ export class ClaimOfferService {
       // WAITLIST_EMAIL dsb. — bukan error, memang tanpa klaim on-chain.
       return { ok: false, skipped: `offchain:${model.selection}`, error: `RewardType ${quest.rewardType} tidak punya klaim on-chain v30` };
     }
-    if (model.selection !== 'RAFFLE') {
-      return { ok: false, error: `RewardType ${quest.rewardType} bukan jalur RAFFLE — offer raffle ditolak` };
-    }
 
     // Gate lock CC → eligibility WAJIB (jangan percaya bahwa peserta pernah lock;
     // cek status ELIGIBLE hasil verifikasi ledger).
@@ -272,19 +269,11 @@ export class ClaimOfferService {
       const full = quest.maxWinners != null && drawn >= quest.maxWinners;
       return {
         ok: false,
-        reason: full ? 'SLOTS_FULL' : 'SLOTS_FULL',
+        reason: 'SLOTS_FULL',
         error: full
           ? 'Kuota pemenang FCFS sudah penuh.'
           : 'Slot FCFS belum diamankan — selesaikan tugas campaign dulu.',
       };
-    }
-
-    // Offer hanya setelah event berakhir (T2).
-    const ended =
-      quest.status === 'ENDED' ||
-      (quest.endsAt != null && quest.endsAt.getTime() <= Date.now());
-    if (!ended) {
-      return { ok: false, reason: 'NOT_ENDED', error: 'Event belum berakhir — klaim terbuka setelah event berakhir.' };
     }
 
     // Gate lock CC → eligibility WAJIB.

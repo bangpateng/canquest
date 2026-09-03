@@ -31,6 +31,7 @@ import {
   type QuestLedgerSubmitResult,
 } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
+import { ClaimOfferService } from '../canton/v30/claim-offer.service';
 import { SigningRelayService } from '../canton/signing-relay.service';
 import { isV30Quest, v30ClaimModel } from '../canton/v30/v30.constants';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
@@ -122,6 +123,7 @@ export class QuestsService {
     private readonly lockEligibility: LockEligibilityService,
     private readonly tokenInstrument: TokenInstrumentHelper,
     private readonly signRelay: SigningRelayService,
+    private readonly claimOffers: ClaimOfferService,
   ) {}
 
   /** Default biaya poin ikut Earn (jalur method='points'). Bisa di-override via AppSetting/env. */
@@ -599,8 +601,16 @@ export class QuestsService {
     tx: PrismaTx | PrismaService = this.prisma,
   ): Promise<void> {
     const cutoff = new Date(Date.now() - this.fcfsReservationTtlMs());
+    // v30: slot FCFS PERMANEN sampai offer/diklaim (bukan reservasi 5 menit) —
+    // tanpa pengecualian ini, sweeper menghapus slot v30 yang sah (bug
+    // terbukti gladi 2026-09-03: slot hilang sebelum T2).
     const result = await tx.winnerDraw.deleteMany({
-      where: { questId, distributed: false, drawnAt: { lt: cutoff } },
+      where: {
+        questId,
+        distributed: false,
+        drawnAt: { lt: cutoff },
+        quest: { is: { ledgerPackage: { not: 'canquest-v30' } } },
+      },
     });
     if (result.count > 0) {
       this.logger.log(
@@ -1883,11 +1893,13 @@ export class QuestsService {
   ): Promise<void> {
     if (questIds.length === 0) return;
     const cutoff = new Date(Date.now() - this.fcfsReservationTtlMs());
+    // v30: slot FCFS permanen — jangan dianggap reservasi basi (lihat atas).
     const result = await tx.winnerDraw.deleteMany({
       where: {
         questId: { in: questIds },
         distributed: false,
         drawnAt: { lt: cutoff },
+        quest: { is: { ledgerPackage: { not: 'canquest-v30' } } },
       },
     });
     if (result.count > 0) {
@@ -2875,6 +2887,7 @@ export class QuestsService {
     }
 
     // Slot — race antar dua submit paralel diselesaikan unique constraint.
+    let slotCreated = true;
     try {
       await this.prisma.winnerDraw.create({
         data: {
@@ -2889,22 +2902,61 @@ export class QuestsService {
     } catch (err) {
       if ((err as { code?: string })?.code === 'P2002') {
         // Submit ganda dari user yang sama — slot sudah aman, lanjut.
+        slotCreated = false;
       } else {
         throw err;
       }
     }
 
-    await this.prisma.questCompletion.create({
-      data: {
+    // Completion idempoten (re-submit tidak boleh 500 oleh unique constraint).
+    await this.prisma.questCompletion.upsert({
+      where: { userId_questId: { userId, questId: quest.id } },
+      create: {
         userId,
         questId: quest.id,
         rewardMicroCc: BigInt(Math.round((quest.rewardCc || 0) * 1_000_000)),
       },
+      update: {},
     });
+
+    // ── Spesifikasi owner (klarifikasi 2026-09-03): FCFS = siapa cepat dapat,
+    // TANPA menunggu event berakhir ── slot aman → ClaimOffer LANGSUNG dibuat
+    // → tombol claim muncul detik itu juga. Kegagalan buat offer tidak gagalkan
+    // slot (sweep T2/backoff mencoba ulang); user tetap bisa muat ulang.
+    let offerError: string | null = null;
+    try {
+      const made = await this.claimOffers.createOfferForWinner(quest.id, userId);
+      if (!made.ok && made.skipped !== 'exists') {
+        offerError = made.error ?? 'offer pending';
+        this.logger.warn(
+          `v30 FCFS instant offer GAGAL quest=${quest.id.slice(0, 8)}… user=${userId.slice(0, 8)}… — ${offerError} (slot tetap aman; sweep akan retry)`,
+        );
+      }
+    } catch (err) {
+      offerError = String(err).slice(0, 120);
+      this.logger.warn(`v30 FCFS instant offer ERROR: ${offerError}`);
+    }
+
+    // Kuota penuh → EVENT SELESAI (spesifikasi owner: "kalau FCFS habis maka
+    // event selesai"). Status ENDED; unlock peserta tetap di T2 (expiresAt
+    // tertanam on-chain — panduan: buat FCFS berdurasi 1–2 hari).
+    if (slotCreated && quest.maxWinners != null) {
+      const taken = await this.prisma.winnerDraw.count({ where: { questId: quest.id } });
+      if (taken >= quest.maxWinners) {
+        await this.prisma.quest
+          .update({ where: { id: quest.id }, data: { status: 'ENDED' } })
+          .catch(() => undefined);
+        this.logger.log(
+          `v30 FCFS quest=${quest.id.slice(0, 8)}… kuota penuh (${taken}/${quest.maxWinners}) → ENDED`,
+        );
+      }
+    }
 
     return {
       ok: true,
-      message: 'FCFS slot secured — claim opens when the event ends.',
+      message: offerError
+        ? 'FCFS slot secured — claim is being prepared, refresh in a moment.'
+        : 'FCFS slot secured — you can claim your reward now!',
       rewardCc: quest.rewardCc || 0,
       inviteCode: null,
       rewardStatus: await this.getQuestRewardStatus(userId, quest.id),

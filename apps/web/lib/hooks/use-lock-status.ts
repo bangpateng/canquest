@@ -11,6 +11,8 @@ export interface ActiveLock {
   id: string;
   amountCc: number;
   termKey: string;
+  /** v30: judul campaign utk lock campaign (null utk lock tabungan). */
+  campaignTitle?: string | null;
   lockSeconds: number;
   expiresAt: string;
   lockedAmuletCid: string | null;
@@ -65,7 +67,10 @@ export function useLockStatus(options: UseLockStatusOptions = {}) {
       lockedCc: data.lockedCc ?? 0,
       availableCc: data.availableCc ?? null,
       tier: data.tier ?? "NONE",
-      activeLocks: data.activeLocks ?? [],
+      activeLocks: (data.activeLocks ?? []).map((l) => ({
+        ...l,
+        campaignTitle: l.campaignTitle ?? null,
+      })),
       hasWallet: data.hasWallet ?? false,
     };
   }, []);

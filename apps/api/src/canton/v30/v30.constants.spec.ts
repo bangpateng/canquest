@@ -72,7 +72,8 @@ describe('v30RewardKindFor — mapping RewardType dapp → RewardKind kontrak', 
     expect(k?.label).toBe('CODE_ONLY');
     expect(k?.json).toEqual({
       tag: 'CodeOnly',
-      value: v30CodeHash('INVITE-XYZ'),
+      // value = OBJEK ber-label (bukti MainNet: string polos ditolak participant).
+      value: { codeHash: v30CodeHash('INVITE-XYZ') },
     });
     expect(k?.hasToken).toBe(false);
   });

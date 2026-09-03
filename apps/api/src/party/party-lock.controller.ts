@@ -310,6 +310,25 @@ export class PartyLockController {
       ? Number(balanceRow.balanceMicroCc) / 1_000_000
       : null;
 
+    // v30: judul campaign utk lock campaign (termKey "v30-<questId>" penuh) —
+    // UI menampilkan satu baris per campaign + judulnya (spesifikasi owner
+    // §My Locks), bukan cuma label umum.
+    const v30QuestIds = [
+      ...new Set(
+        activeLocks
+          .filter((l) => l.termKey.startsWith('v30-'))
+          .map((l) => l.termKey.slice(4)),
+      ),
+    ];
+    const questTitles = new Map<string, string>();
+    if (v30QuestIds.length > 0) {
+      const quests = await this.prisma.quest.findMany({
+        where: { id: { in: v30QuestIds } },
+        select: { id: true, title: true },
+      });
+      for (const q of quests) questTitles.set(q.id, q.title);
+    }
+
     return {
       lockedCc,
       availableCc,
@@ -318,6 +337,9 @@ export class PartyLockController {
         id: l.id,
         amountCc: Number(l.amountCc),
         termKey: l.termKey,
+        campaignTitle: l.termKey.startsWith('v30-')
+          ? questTitles.get(l.termKey.slice(4)) ?? null
+          : null,
         lockSeconds: l.lockSeconds,
         expiresAt: l.expiresAt.toISOString(),
         lockedAmuletCid: l.lockedAmuletCid,
