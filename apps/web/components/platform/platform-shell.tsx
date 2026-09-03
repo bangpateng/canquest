@@ -22,7 +22,6 @@ import { ROUTES } from "@/lib/routing/app-routes";
 import { useWalletAccess } from "@/lib/hooks/use-wallet-access";
 import { hrefRequiresWallet } from "@/lib/auth/wallet-access";
 import { useRealtime } from "@/lib/realtime/use-realtime";
-import { useAutoAccept } from "@/lib/wallet/auto-accept";
 import { tryDeviceAutoUnlock } from "@/lib/wallet/key-manager";
 import { cn } from "@/lib/utils/utils";
 
@@ -132,8 +131,6 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
   // Realtime SSE push — push transaksi/balance baru dari server → invalidate
   // cache react-query → update UI instan. No-op bila belum login (BFF 401).
   useRealtime();
-  // M5: auto-accept incoming transfers while wallet unlocked (UX like custodial)
-  useAutoAccept();
   // Passwordless sign: buka dompet diam-diam dari device blob saat app load,
   // supaya alur sign (send/swap/lock/offer/claim) tidak pernah minta passphrase.
   // Passphrase tetap dipakai hanya di Settings → Wallet Keys (backup/restore).
