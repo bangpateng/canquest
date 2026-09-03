@@ -32,6 +32,7 @@ import {
 } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { SigningRelayService } from '../canton/signing-relay.service';
+import { isV30Quest, v30ClaimModel } from '../canton/v30/v30.constants';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { LockEligibilityService } from '../canton/lock-eligibility.service';
@@ -2711,6 +2712,17 @@ export class QuestsService {
     });
     if (!quest) throw new NotFoundException('Quest not found');
 
+    // ── v30 FCFS (spesifikasi owner 2026-09-03): slot diamankan SAAT SUBMIT ──
+    // Pemenang ditentukan di sini (peminang pertama sampai maxWinners);
+    // pengejar berikutnya langsung tahu kuota habis. Offer on-chain dibuat
+    // saat event berakhir oleh sweep job — bukan di sini.
+    if (isV30Quest(quest)) {
+      const model = v30ClaimModel(quest);
+      if (model.selection === 'FCFS') {
+        return this.submitV30Fcfs(userId, quest);
+      }
+    }
+
     if (this.requiresFcfsCcClaim(quest)) {
       const allDone = await this.areAllTasksVerified(userId, questId);
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
@@ -2817,6 +2829,86 @@ export class QuestsService {
       inviteCode,
       rewardStatus,
       ledger: ledgerResult,
+    };
+  }
+
+  /**
+   * v30 FCFS submit (spesifikasi owner): slot diamankan saat submit.
+   * Urutan: guard waktu → eligibility (lock CC bila gate) → kuota →
+   * WinnerDraw (race-safe via unique constraint) → QuestCompletion.
+   * Tidak ada offer on-chain di sini — dibuat sweep job saat event berakhir.
+   */
+  private async submitV30Fcfs(
+    userId: string,
+    quest: { id: string; rewardCc: number; rewardToken: string; rewardType: string; maxWinners: number | null; startsAt: Date | null; endsAt: Date | null; entryGateMode: string | null },
+  ) {
+    const fail = async (message: string) => ({
+      ok: false,
+      message,
+      rewardCc: 0,
+      inviteCode: null as string | null,
+      rewardStatus: await this.getQuestRewardStatus(userId, quest.id),
+      ledger: this.emptyLedgerResult(),
+    });
+
+    const now = new Date();
+    if (quest.startsAt && quest.startsAt > now) return await fail('Quest has not started yet');
+    if (quest.endsAt && quest.endsAt < now) return await fail('Quest has ended');
+
+    const model = v30ClaimModel(quest);
+
+    // Gate lock CC → harus eligible SEBELUM slot diamankan.
+    if (model.requiresLock) {
+      const eligible = await this.prisma.campaignEligibilityLedger.findFirst({
+        where: { questId: quest.id, userId, status: 'ELIGIBLE' },
+        select: { id: true },
+      });
+      if (!eligible) {
+        return await fail('Lock CC first to join this campaign (not eligible yet).');
+      }
+    }
+
+    // Kuota FCFS.
+    const drawn = await this.prisma.winnerDraw.count({ where: { questId: quest.id } });
+    if (quest.maxWinners != null && drawn >= quest.maxWinners) {
+      return await fail('FCFS slots are full — all winners already secured.');
+    }
+
+    // Slot — race antar dua submit paralel diselesaikan unique constraint.
+    try {
+      await this.prisma.winnerDraw.create({
+        data: {
+          questId: quest.id,
+          userId,
+          ccAmount: model.reward === 'CODE' ? 0 : quest.rewardCc || 0,
+          rewardToken: quest.rewardToken,
+          rewardVariant: model.reward === 'CODE' ? 'CODE' : 'CC',
+          fcfsClaimLockedAt: now,
+        },
+      });
+    } catch (err) {
+      if ((err as { code?: string })?.code === 'P2002') {
+        // Submit ganda dari user yang sama — slot sudah aman, lanjut.
+      } else {
+        throw err;
+      }
+    }
+
+    await this.prisma.questCompletion.create({
+      data: {
+        userId,
+        questId: quest.id,
+        rewardMicroCc: BigInt(Math.round((quest.rewardCc || 0) * 1_000_000)),
+      },
+    });
+
+    return {
+      ok: true,
+      message: 'FCFS slot secured — claim opens when the event ends.',
+      rewardCc: quest.rewardCc || 0,
+      inviteCode: null,
+      rewardStatus: await this.getQuestRewardStatus(userId, quest.id),
+      ledger: this.emptyLedgerResult(),
     };
   }
 

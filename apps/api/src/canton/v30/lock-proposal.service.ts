@@ -12,6 +12,7 @@ import {
   v30Dec,
   v30Enabled,
   v30LockTemplateId,
+  v30T1At,
 } from './v30.constants';
 import type { V30BuiltFlow } from './claim-offer.service';
 
@@ -79,6 +80,20 @@ export class LockProposalService {
     const proposalExpiresAt = new Date(Date.now() + V30_PROPOSAL_WINDOW_MS);
     if (endsAt.getTime() <= proposalExpiresAt.getTime() + EXPIRY_TOLERANCE_SECONDS * 1000) {
       return { ok: false, error: 'Campaign terlalu dekat dengan berakhir (T2) untuk lock baru' };
+    }
+
+    // T1 = 70% durasi — pendaftaran TERTUTUP setelah ini (spesifikasi owner).
+    // Guard ganda: flag v30RegistrationClosedAt (di-set scheduler T1) ATAU
+    // hitungan waktu langsung (kalau scheduler belum sempat jalan).
+    const t1 = v30T1At(quest.startsAt, quest.endsAt);
+    const registrationClosed =
+      quest.v30RegistrationClosedAt != null ||
+      (t1 != null && Date.now() >= t1.getTime());
+    if (registrationClosed) {
+      return {
+        ok: false,
+        error: 'Pendaftaran campaign sudah ditutup (T1) — lock baru tidak diterima.',
+      };
     }
 
     const existing = await this.prisma.lockProposalRecord.findUnique({

@@ -35,7 +35,7 @@ import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { ClaimOfferService } from '../canton/v30/claim-offer.service';
 import { LockProposalService } from '../canton/v30/lock-proposal.service';
-import { V30_LEDGER_PACKAGE, isV30Quest } from '../canton/v30/v30.constants';
+import { V30_LEDGER_PACKAGE, isV30Quest, v30ClaimModel } from '../canton/v30/v30.constants';
 import {} from '../common/wallet-policy';
 import { PointsService } from '../users/points.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -551,6 +551,11 @@ export class AdminService {
      * dibuat tanpa field ini (jalur lama).
      */
     ledgerPackage?: string | null;
+    /**
+     * Reward codes langsung dari form pembuatan (satu per baris) — dibuatkan
+     * baris InviteCodePool. Hanya relevan utk reward ber-code.
+     */
+    inviteCodes?: string[];
     tasks?: Array<{
       type: string;
       title: string;
@@ -667,6 +672,38 @@ export class AdminService {
       include: { tasks: true },
     });
     this.logger.log(`Quest created: ${quest.title} (${quest.id})`);
+
+    // Kode reward dari form pembuatan (satu per baris) → InviteCodePool.
+    // Aturan spesifikasi owner §1: reward Code → jumlah pemenang = jumlah kode.
+    const validCodes = (data.inviteCodes ?? []).map((c) => c.trim()).filter(Boolean);
+    if (validCodes.length > 0) {
+      const model = v30ClaimModel({
+        rewardType: (data.rewardType ?? RewardType.CC_ONLY) as string,
+        rewardToken: data.rewardToken,
+        entryGateMode: data.entryGateMode as string | null,
+      });
+      if (model.reward === 'CODE' && data.maxWinners != null && validCodes.length !== data.maxWinners) {
+        throw new BadRequestException(
+          `Reward Code: jumlah pemenang (${data.maxWinners}) harus SAMA dengan jumlah kode (${validCodes.length}).`,
+        );
+      }
+    }
+    if (validCodes.length > 0) {
+      let added = 0;
+      for (const code of validCodes) {
+        try {
+          await this.prisma.inviteCodePool.create({
+            data: { questId: quest.id, code },
+          });
+          added++;
+        } catch {
+          // duplikat kode (unique) — skip, dilaporkan di bawah
+        }
+      }
+      this.logger.log(
+        `Quest created: invite codes ${added}/${validCodes.length} tersimpan`,
+      );
+    }
 
     // Email blast "New campaign" ke semua user ber-wallet (outbox + Bull queue).
     // Fire-and-forget best-effort — kegagalan email tidak menggagalkan create.
@@ -831,6 +868,29 @@ export class AdminService {
       where: { id: questId },
     });
     if (!existing) throw new NotFoundException('Quest not found');
+
+    // v30 guard: tanggal campaign TERKUNCI setelah lock peserta pertama —
+    // expiresAt LockedAmulet peserta tertanam on-chain dan tidak ada choice
+    // untuk mengubahnya; ubah tanggal di sini = mismatch T2 (spesifikasi
+    // owner §"Yang mudah salah").
+    if (isV30Quest(existing) && (data.startsAt !== undefined || data.endsAt !== undefined)) {
+      const dateChanged =
+        (data.startsAt !== undefined &&
+          (data.startsAt ?? null) !== (existing.startsAt?.toISOString() ?? null)) ||
+        (data.endsAt !== undefined &&
+          (data.endsAt ?? null) !== (existing.endsAt?.toISOString() ?? null));
+      if (dateChanged) {
+        const locks = await this.prisma.lockProposalRecord.count({
+          where: { questId },
+        });
+        if (locks > 0) {
+          throw new BadRequestException(
+            `Campaign dates are locked: ${locks} participant lock(s) already embed this campaign's end time on-chain. ` +
+              'Finish this campaign and create a new one instead.',
+          );
+        }
+      }
+    }
 
     // Optional ecosystem partner — resolve & denormalize org/logo/socials.
     let partner: { id: string; name: string; logoUrl: string | null; socialLinks: string } | null = null;
@@ -1588,6 +1648,19 @@ export class AdminService {
     // di-assign & hash-nya dikomit sekarang (anti swap pasca-undian).
     const v30Offers: Array<{ userId: string; ok: boolean; error?: string }> = [];
     if (isV30Quest(quest) && results.length > 0) {
+      // Fase 4/5 spesifikasi: re-verifikasi SEMUA lock tepat sebelum undian —
+      // UnlockV2 (early unlock) tidak punya cek waktu; pemenang yang lock-nya
+      // sudah hilang dicabut eligibility-nya dan offer-nya ditolak.
+      try {
+        const rv = await this.lockProposals.reVerifyQuestLocks(questId);
+        this.logger.log(
+          `drawWinners v30 pre-draw re-verify: checked=${rv.checked} revoked=${rv.revoked}`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `drawWinners v30 re-verify gagal (lanjut draw — per-winner eligibility tetap dicek): ${String(err).slice(0, 120)}`,
+        );
+      }
       for (const r of results) {
         const made = await this.claimOffers.createOfferForWinner(questId, r.userId);
         v30Offers.push({ userId: r.userId, ok: made.ok, error: made.error });

@@ -11,6 +11,7 @@ import {
   V30RewardKindLabel,
   isV30Quest,
   v30Account,
+  v30ClaimModel,
   v30ClaimTemplateId,
   v30Dec,
   v30Enabled,
@@ -108,6 +109,28 @@ export class ClaimOfferService {
     if (draw.distributed && draw.claimStatus !== 'RewardPending' && draw.claimStatus !== 'RewardExpired') {
       // v29 path already distributed this draw — jangan dobel.
       return { ok: false, skipped: 'already-distributed-v29', error: 'Draw sudah didistribusi via jalur lama' };
+    }
+
+    // Matriks klaim — SATU sumber kebenaran FCFS/Raffle × CC/USDCx/Code.
+    const model = v30ClaimModel(quest);
+    if (!model.allowed) {
+      // WAITLIST_EMAIL dsb. — bukan error, memang tanpa klaim on-chain.
+      return { ok: false, skipped: `offchain:${model.selection}`, error: `RewardType ${quest.rewardType} tidak punya klaim on-chain v30` };
+    }
+    if (model.selection !== 'RAFFLE') {
+      return { ok: false, error: `RewardType ${quest.rewardType} bukan jalur RAFFLE — offer raffle ditolak` };
+    }
+
+    // Gate lock CC → eligibility WAJIB (jangan percaya bahwa peserta pernah lock;
+    // cek status ELIGIBLE hasil verifikasi ledger).
+    if (model.requiresLock) {
+      const eligible = await this.prisma.campaignEligibilityLedger.findFirst({
+        where: { questId, userId, status: 'ELIGIBLE' },
+        select: { id: true },
+      });
+      if (!eligible) {
+        return { ok: false, error: 'Peserta tidak eligible (lock CC tidak aktif / sudah dicabut)' };
+      }
     }
 
     const user = await this.users.findById(userId);
@@ -216,63 +239,65 @@ export class ClaimOfferService {
   }
 
   /**
-   * FCFS v30: peminang PERTAMA menang. WinnerDraw dibuat saat prepare-claim —
-   * race antar request dua peminang diselesaikan constraint
-   * @@unique([questId, userId]) / claimId unique (yang kalah dapat error jelas).
-   * Kuota dijaga hitungan WinnerDraw vs quest.maxWinners.
+   * FCFS v30 (spesifikasi owner 2026-09-03): slot diamankan SAAT SUBMIT
+   * (WinnerDraw dibuat hook submitQuest — peminang pertama sampai maxWinners).
+   * Method ini TIDAK lagi membuat WinnerDraw; ia hanya membuat offer untuk
+   * slot yang sudah ada, dan hanya setelah event berakhir (T2). Sweep job
+   * `offerCreationTick` biasanya sudah lebih dulu membuat offer-nya.
    */
   async createOfferForFcfs(questId: string, userId: string): Promise<{
     ok: boolean;
     offerContractId?: string;
     error?: string;
-    reason?: 'SLOTS_FULL' | 'ALREADY_CLAIMED';
+    reason?: 'SLOTS_FULL' | 'NOT_ELIGIBLE' | 'NOT_ENDED';
   }> {
     if (!v30Enabled(this.config)) return { ok: false, error: 'CLAIM_V30_ENABLED=false' };
     this.assertConfigured();
 
     const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
     if (!quest || !isV30Quest(quest)) return { ok: false, error: 'Quest bukan jalur v30' };
-    if (quest.status !== 'ACTIVE') return { ok: false, error: 'Campaign tidak aktif' };
-    if (quest.rewardType !== RewardType.INVITE_CODE_FCFS && quest.rewardType !== RewardType.CC_ONLY) {
+
+    // Matriks klaim — FCFS sah utk Code-FCFS & Token-FCFS (CC/USDCx).
+    const model = v30ClaimModel(quest);
+    if (!model.allowed || model.selection !== 'FCFS') {
       return { ok: false, error: `RewardType ${quest.rewardType} bukan jalur FCFS` };
     }
 
-    const existing = await this.prisma.winnerDraw.findUnique({
+    // Slot harus sudah diamankan saat submit — bukan di sini.
+    const draw = await this.prisma.winnerDraw.findUnique({
       where: { questId_userId: { questId, userId } },
     });
-    if (existing) {
-      if (existing.offerContractId) return { ok: true, offerContractId: existing.offerContractId };
-      return this.createOfferForWinner(questId, userId);
-    }
-
-    // Kuota: jumlah pemenang tercatat vs maxWinners (null = unlimited).
-    if (quest.maxWinners != null) {
+    if (!draw) {
       const drawn = await this.prisma.winnerDraw.count({ where: { questId } });
-      if (drawn >= quest.maxWinners) {
-        return { ok: false, error: 'Kuota pemenang FCFS sudah penuh', reason: 'SLOTS_FULL' };
+      const full = quest.maxWinners != null && drawn >= quest.maxWinners;
+      return {
+        ok: false,
+        reason: full ? 'SLOTS_FULL' : 'SLOTS_FULL',
+        error: full
+          ? 'Kuota pemenang FCFS sudah penuh.'
+          : 'Slot FCFS belum diamankan — selesaikan tugas campaign dulu.',
+      };
+    }
+
+    // Offer hanya setelah event berakhir (T2).
+    const ended =
+      quest.status === 'ENDED' ||
+      (quest.endsAt != null && quest.endsAt.getTime() <= Date.now());
+    if (!ended) {
+      return { ok: false, reason: 'NOT_ENDED', error: 'Event belum berakhir — klaim terbuka setelah event berakhir.' };
+    }
+
+    // Gate lock CC → eligibility WAJIB.
+    if (model.requiresLock) {
+      const eligible = await this.prisma.campaignEligibilityLedger.findFirst({
+        where: { questId, userId, status: 'ELIGIBLE' },
+        select: { id: true },
+      });
+      if (!eligible) {
+        return { ok: false, reason: 'NOT_ELIGIBLE', error: 'Kamu belum eligible — lock CC dulu untuk ikut campaign ini.' };
       }
     }
 
-    try {
-      await this.prisma.winnerDraw.create({
-        data: {
-          questId,
-          userId,
-          ccAmount: quest.rewardCc || 0,
-          rewardToken: quest.rewardToken,
-          rewardVariant: quest.rewardType === RewardType.CC_ONLY ? 'CC' : 'CODE',
-          fcfsClaimLockedAt: new Date(),
-        },
-      });
-    } catch (err) {
-      // P2002 = peminang lain memenangkan race utk slot ini (user sama beda
-      // request, atau kuota habis secara bersamaan) — tolak jelas.
-      const code = (err as { code?: string })?.code;
-      if (code === 'P2002') {
-        return { ok: false, error: 'Kuota pemenang FCFS sudah penuh', reason: 'SLOTS_FULL' };
-      }
-      throw err;
-    }
     return this.createOfferForWinner(questId, userId);
   }
 
@@ -573,14 +598,27 @@ export class ClaimOfferService {
     );
     for (const c of contracts) {
       if (c.payload?.claimId === claimId) {
+        // Encoding on-chain (TERBUKTI dari receipt live MainNet 2026-09-03):
+        // variant NULLARY (ClaimStatus) = STRING polos ("Settled");
+        // variant ber-field (RewardKind) = {"tag":"TokenOnly",...}.
+        const rawStatus = parseClaimStatus(c.payload?.status);
+        const rewardTokenSent = c.payload?.rewardTokenSent === true;
+        const revealedCode =
+          typeof c.payload?.revealedCode === 'string' && c.payload.revealedCode
+            ? c.payload.revealedCode
+            : null;
+        // Derivasi otoritatif kalau encoding status berubah di masa depan:
+        // revealedCode > rewardTokenSent adalah fakta Boolean yang stabil.
+        const derived = revealedCode
+          ? 'Revealed'
+          : rewardTokenSent
+            ? 'Settled'
+            : null;
         return {
           contractId: c.contractId,
-          status: parseVariantTag(c.payload?.status) ?? 'PreSettle',
-          rewardTokenSent: c.payload?.rewardTokenSent === true,
-          revealedCode:
-            typeof c.payload?.revealedCode === 'string' && c.payload.revealedCode
-              ? c.payload.revealedCode
-              : null,
+          status: rawStatus ?? derived ?? 'Unknown',
+          rewardTokenSent,
+          revealedCode,
         };
       }
     }
@@ -689,13 +727,15 @@ export class ClaimOfferService {
    */
   async claimStatus(questId: string, userId: string): Promise<{
     v30: true;
-    offer: {
-      exists: boolean;
-      claimStatus: string | null;
-      rewardKind: string | null;
-      validUntil: string | null;
-      expired: boolean;
-    };
+  offer: {
+    exists: boolean;
+    claimStatus: string | null;
+    rewardKind: string | null;
+    validUntil: string | null;
+    expired: boolean;
+  };
+  /** FCFS: slot sudah diamankan saat submit, menunggu event berakhir. */
+  hasSlot: boolean;
     revealedCode: string | null;
     prechecks: {
       freeBalanceCc: number;
@@ -764,6 +804,7 @@ export class ClaimOfferService {
         validUntil: validUntil ? new Date(validUntil).toISOString() : null,
         expired,
       },
+      hasSlot: !!fresh && !fresh.offerContractId && !fresh.receiptContractId,
       revealedCode: fresh?.revealedCode ?? null,
       prechecks: {
         freeBalanceCc: Math.floor(freeBalanceCc * 10_000) / 10_000,
@@ -843,11 +884,17 @@ function createHashShort(seed: string): string {
   return createHash('sha256').update(seed).digest('hex').slice(0, 24);
 }
 
-/** DAML-LF JSON variant → nama tag ({"tag":"Settled"} | {"tag":"X","value":…}). */
-function parseVariantTag(v: unknown): string | null {
+/**
+ * Parse ClaimStatus dari payload receipt. Encoding (bukti live MainNet):
+ *   nullary variant  → string polos, mis. "Settled"
+ *   (ber-field var.) → {"tag":"X","value":…}
+ * Return null bila bentuk tak dikenali — caller pakai derivasi Boolean.
+ */
+function parseClaimStatus(v: unknown): string | null {
+  if (typeof v === 'string' && v) return v;
   if (v && typeof v === 'object' && 'tag' in v) {
     const tag = (v as { tag?: unknown }).tag;
-    if (typeof tag === 'string') return tag;
+    if (typeof tag === 'string' && tag) return tag;
   }
   return null;
 }

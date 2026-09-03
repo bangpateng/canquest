@@ -32,6 +32,8 @@ type V30ClaimStatusResp = {
     validUntil: string | null;
     expired: boolean;
   };
+  /** FCFS: slot diamankan saat submit, menunggu event berakhir. */
+  hasSlot: boolean;
   revealedCode: string | null;
   prechecks: {
     freeBalanceCc: number;
@@ -48,6 +50,23 @@ type V30ClaimStatusResp = {
     | "NOT_DRAWN"
     | "DONE";
 };
+
+/**
+ * Hitung mundur sisa waktu offer (spesifikasi owner: tampilkan SISA HARI,
+ * bukan tanggal). "6 days left" / "9 hours left" / "<1 hour left".
+ */
+function countdownLeft(validUntil: string | null): string | null {
+  if (!validUntil) return null;
+  const ms = new Date(validUntil).getTime() - Date.now();
+  if (ms <= 0) return "expired";
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    return `${days} day${days > 1 ? "s" : ""} left`;
+  }
+  if (hours >= 1) return `${hours} hour${hours > 1 ? "s" : ""} left`;
+  return "less than an hour left";
+}
 
 export function isV30Quest(quest: { ledgerPackage?: string | null }): boolean {
   return (quest.ledgerPackage ?? "").trim() === "canquest-v30";
@@ -107,12 +126,7 @@ export function CampaignClaimV30Section({
   const feeLabel = fee > 0 ? `${fee} CC` : "Free";
   const hasCode =
     offer.rewardKind === "CODE_ONLY" || offer.rewardKind === "TOKEN_AND_CODE";
-  const deadlineLabel = offer.validUntil
-    ? new Date(offer.validUntil).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      })
-    : null;
+  const countdown = countdownLeft(offer.validUntil);
 
   async function handleClaim() {
     if (isSubmitting) return;
@@ -195,7 +209,7 @@ export function CampaignClaimV30Section({
         <StateCard tone="amber" icon={Clock} title="Check your offers">
           <p>
             Your reward is waiting in your wallet&apos;s offer menu.
-            {deadlineLabel ? ` Claim it before ${deadlineLabel}.` : ""}
+            {countdown ? ` You have ${countdown}.` : ""}
           </p>
           <Link
             href="/wallet"
@@ -226,13 +240,26 @@ export function CampaignClaimV30Section({
     }
   }
 
-  if (uiHint === "NOT_DRAWN" || !offer.exists) return null;
+  if (uiHint === "NOT_DRAWN" || !offer.exists) {
+    // FCFS: slot sudah diamankan saat submit — infokan, jangan diam saja.
+    if (status.hasSlot) {
+      return (
+        <StateCard tone="sky" icon={Clock} title="FCFS slot secured">
+          <p>
+            Your slot is locked in. The claim button appears here once the event
+            ends.
+          </p>
+        </StateCard>
+      );
+    }
+    return null;
+  }
 
   if (uiHint === "OFFER_EXPIRED") {
     return (
       <StateCard tone="rose" icon={Clock} title="Claim window closed">
         <p>
-          Your claim offer expired{deadlineLabel ? ` on ${deadlineLabel}` : ""}.
+          Your claim offer expired.
           Contact the campaign operator.
         </p>
       </StateCard>
@@ -300,8 +327,8 @@ export function CampaignClaimV30Section({
                 value: `${prechecks.freeBalanceCc} CC`,
                 accent: prechecks.balanceOk,
               },
-              ...(deadlineLabel
-                ? [{ label: "Claim before", value: deadlineLabel }]
+              ...(countdown
+                ? [{ label: "Time left", value: countdown }]
                 : []),
               { label: "Network", value: "Canton" },
             ]}

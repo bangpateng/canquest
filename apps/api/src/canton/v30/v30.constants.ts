@@ -87,11 +87,12 @@ export function v30CodeHash(plaintext: string): string {
   return createHash('sha256').update(plaintext, 'utf8').digest('hex');
 }
 
-// ── validUntil — waktu UNDIAN + 48 jam, BUKAN waktu campaign ────────────────
-//
-// AGENT.md: "Kalau undian mundur tiga hari, offer lahir sudah kedaluwarsa
-// dan pemenang tidak bisa klaim." FCFS = waktu slot di-reserve.
-export const V30_OFFER_VALIDITY_MS = 48 * 60 * 60 * 1000;
+// ── validUntil — berlaku 7 HARI sejak offer DIBUAT (spesifikasi owner
+// 2026-09-03, menggantikan konvensi docs 48 jam; kontrak tidak membatasi —
+// yang penting ANCHOR-nya momen pembuatan offer, bukan tanggal campaign,
+// supaya undian/draw yang mundur tidak melahirkan offer kedaluwarsa).
+// Offer kedaluwarsa diarsipkan job + kode kembali ke pool (§7 spesifikasi).
+export const V30_OFFER_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function v30ValidUntil(drawnAt: Date): Date {
   return new Date(drawnAt.getTime() + V30_OFFER_VALIDITY_MS);
@@ -178,3 +179,97 @@ export const V30_PROPOSAL_WINDOW_MS = 10 * 60 * 1000;
 /** Margin perpanjangan preapproval: renew saat sisa < 15 dari 90 hari. */
 export const V30_PREAPPROVAL_RENEWAL_MARGIN_DAYS = 15;
 export const V30_PREAPPROVAL_LIFETIME_DAYS = 90;
+
+// ── T1 — penutupan pendaftaran (70% durasi campaign, spesifikasi owner) ────
+//
+// T1 = startsAt + 70% × (endsAt − startsAt). Setelah T1: tidak ada lock baru
+// (pendaftaran ditutup) DAN seluruh lock diverifikasi ulang (coret early-unlock).
+// Fallback kalau startsAt kosong: T1 = endsAt (tanpa penutupan dini).
+export function v30T1At(
+  startsAt: Date | null | undefined,
+  endsAt: Date | null | undefined,
+): Date | null {
+  if (!endsAt) return null;
+  if (!startsAt) return endsAt;
+  const t1 = new Date(startsAt.getTime() + 0.7 * (endsAt.getTime() - startsAt.getTime()));
+  // Jangan melewati T2.
+  return t1.getTime() >= endsAt.getTime() ? endsAt : t1;
+}
+
+// ── Matriks klaim v30 — SATU sumber kebenaran utk sumbu pemenang × reward ──
+//
+// Sumbu 1 (cara pilih pemenang — TIDAK ada di kontrak, murni backend):
+//   FCFS  = peminang pertama (offer dibuat saat prepare-claim)
+//   RAFFLE= admin draw (offer dibuat saat draw-winners)
+//   OFFCHAIN = tanpa klaim on-chain (waitlist email)
+// Sumbu 2 (jenis reward → RewardKind kontrak):
+//   TOKEN_CC / TOKEN_USDCX → TokenOnly
+//   CODE                   → CodeOnly
+//   TOKEN_AND_CODE         → TokenAndCode
+export type V30Selection = 'FCFS' | 'RAFFLE' | 'OFFCHAIN';
+export type V30RewardKindSpec =
+  | 'TOKEN_CC'
+  | 'TOKEN_USDCX'
+  | 'CODE'
+  | 'TOKEN_AND_CODE';
+
+export interface V30ClaimModel {
+  selection: V30Selection;
+  reward: V30RewardKindSpec | null;
+  /** true = jenis ini punya jalur klaim on-chain v30. */
+  allowed: boolean;
+  /** Gate campaign meminta lock CC utk ikut (eligibility LOCK_CC). */
+  requiresLock: boolean;
+}
+
+export function v30ClaimModel(quest: {
+  rewardType: string;
+  rewardToken?: string | null;
+  entryGateMode?: string | null;
+}): V30ClaimModel {
+  const rt = String(quest.rewardType);
+  const token = String(quest.rewardToken ?? 'CC').toUpperCase() === 'USDCX' ? 'USDCx' : 'CC';
+  const requiresLock =
+    quest.entryGateMode === 'CC_ONLY' ||
+    (quest.entryGateMode !== 'NONE' && quest.entryGateMode !== 'POINTS_ONLY' && quest.entryGateMode !== undefined);
+
+  const base = (selection: V30Selection): V30ClaimModel => ({
+    selection,
+    reward: null,
+    allowed: false,
+    requiresLock,
+  });
+
+  // ── FCFS: peminang pertama ──
+  if (rt === 'INVITE_CODE_FCFS') {
+    return { selection: 'FCFS', reward: 'CODE', allowed: true, requiresLock };
+  }
+  if (rt === 'CC_ONLY') {
+    return {
+      selection: 'FCFS',
+      reward: token === 'USDCx' ? 'TOKEN_USDCX' : 'TOKEN_CC',
+      allowed: true,
+      requiresLock,
+    };
+  }
+  // ── Raffle: admin draw ──
+  if (rt === 'INVITE_CODE_RANDOM' || rt === 'INVITE_CODE') {
+    return { selection: 'RAFFLE', reward: 'CODE', allowed: true, requiresLock };
+  }
+  if (rt === 'CC_MANUAL') {
+    return {
+      selection: 'RAFFLE',
+      reward: token === 'USDCx' ? 'TOKEN_USDCX' : 'TOKEN_CC',
+      allowed: true,
+      requiresLock,
+    };
+  }
+  if (rt === 'CC_AND_INVITE' || rt === 'CC_AND_CODE_RAFFLE') {
+    return { selection: 'RAFFLE', reward: 'TOKEN_AND_CODE', allowed: true, requiresLock };
+  }
+  // ── Offchain ──
+  if (rt === 'WAITLIST_EMAIL') {
+    return { ...base('OFFCHAIN'), reward: null, allowed: false, requiresLock };
+  }
+  return { ...base('OFFCHAIN'), reward: null, allowed: false, requiresLock };
+}

@@ -506,6 +506,9 @@ model Quest {
   /// (mis. 'canquest-v29'). Null + ledgerCampaignId terisi = dibuat backend
   /// lama = 'canquest-v28' — claim path memilih template/payload per versi.
   ledgerPackage      String?
+  /// v30: T1 (70% durasi) tercapai — pendaftaran ditutup otomatis oleh job;
+  /// lock baru ditolak & lock peserta sudah diverifikasi ulang saat timestamp ini.
+  v30RegistrationClosedAt DateTime?
   /// Mode gate akses Earn per-campaign (configurable dari dashboard admin).
   /// CC_OR_POINTS (default) = lock CC atau spend points (perilaku lama).
   /// CC_ONLY / POINTS_ONLY / NONE = admin pilih per-event.

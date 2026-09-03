@@ -275,6 +275,13 @@ export class CreateQuestDto extends QuestMoneyFields {
   @IsIn(['canquest-v30'])
   ledgerPackage?: string;
 
+  /** Reward codes saat pembuatan (satu per baris) → InviteCodePool. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(2000)
+  @IsString({ each: true })
+  inviteCodes?: string[];
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(200)

@@ -7,7 +7,9 @@ import { LockProposalService } from './lock-proposal.service';
 import {
   V30_PREAPPROVAL_LIFETIME_DAYS,
   V30_PREAPPROVAL_RENEWAL_MARGIN_DAYS,
+  isV30Quest,
   v30Enabled,
+  v30T1At,
 } from './v30.constants';
 
 /**
@@ -64,7 +66,27 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
     const monitor = setInterval(() => void this.rewardPendingTick(), 5 * 60_000);
     monitor.unref?.();
     this.timers.push(monitor);
-    this.logger.log('Job v30 aktif: preapproval-renewal(harian) + lock-expiry(harian) + reward-pending(5m)');
+
+    // T1 (70% durasi) — tiap 10 menit: tutup pendaftaran + re-verifikasi lock.
+    const t1 = setInterval(() => void this.t1Tick(), 10 * 60_000);
+    t1.unref?.();
+    this.timers.push(t1);
+
+    // T2 sweep — tiap 10 menit: buat ClaimOffer utk pemenang event yang sudah
+    // berakhir (FCFS winners + raffle yang kelewatan hook draw).
+    const t2 = setInterval(() => void this.offerCreationTick(), 10 * 60_000);
+    t2.unref?.();
+    this.timers.push(t2);
+
+    // Offer hangus (§7 spesifikasi) — tiap 30 menit: lewat 7 hari → arsip
+    // (WithdrawOffer) + kode kembali ke pool.
+    const exp = setInterval(() => void this.expiredOfferTick(), 30 * 60_000);
+    exp.unref?.();
+    this.timers.push(exp);
+
+    this.logger.log(
+      'Job v30 aktif: preapproval-renewal(harian) + lock-expiry(harian) + reward-pending(5m) + T1-close(10m) + T2-offer(10m) + offer-expiry(30m)',
+    );
   }
 
   onModuleDestroy(): void {
@@ -264,6 +286,170 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
       );
     }
     return { checked: records.length, backfilled, cleaned };
+  }
+
+  // ── 4. T1 — penutupan pendaftaran otomatis (70% durasi) ────────────────────
+
+  /**
+   * Fase 4 spesifikasi owner: pada T1 (70% durasi), pendaftaran ditutup dan
+   * SELURUH lock peserta diverifikasi ulang — peserta yang early-unlock
+   * (UnlockV2 tanpa cek waktu) dicabut eligibility-nya sebelum undian.
+   * setelah T1, LockProposalService.createProposal menolak lock baru
+   * (guard waktu + flag v30RegistrationClosedAt yang di-set di sini).
+   */
+  async t1Tick(): Promise<{ closed: number; revoked: number }> {
+    let closed = 0;
+    let revoked = 0;
+    try {
+      const quests = await this.prisma.quest.findMany({
+        where: {
+          ledgerPackage: 'canquest-v30',
+          status: 'ACTIVE',
+          v30RegistrationClosedAt: null,
+          startsAt: { not: null },
+          endsAt: { not: null },
+        },
+        select: { id: true, startsAt: true, endsAt: true },
+        take: 100,
+      });
+      for (const q of quests) {
+        const t1 = v30T1At(q.startsAt, q.endsAt);
+        if (!t1 || Date.now() < t1.getTime()) continue;
+        const res = await this.locks.reVerifyQuestLocks(q.id).catch(() => null);
+        if (res) revoked += res.revoked;
+        await this.prisma.quest.update({
+          where: { id: q.id },
+          data: { v30RegistrationClosedAt: new Date() },
+        });
+        closed++;
+        this.logger.log(
+          `T1 quest=${q.id.slice(0, 8)}…: pendaftaran DITUTUP — re-verify: checked=${res?.checked ?? '?'} revoked=${res?.revoked ?? '?'}`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(`t1Tick error: ${String(err).slice(0, 160)}`);
+    }
+    return { closed, revoked };
+  }
+
+  // ── 5. T2 — pembuatan offer utk pemenang event berakhir ───────────────────
+
+  /**
+   * §4 spesifikasi owner: "Untuk setiap pemenang, backend membuat satu
+   * ClaimOffer" saat event berakhir. Raffle biasanya dapat offer dari hook
+   * drawWinners; sweep ini menutup celah: FCFS (winner sejak submit, tanpa
+   * draw) dan raffle yang hook-nya gagal. validUntil = 7 hari sekarang.
+   */
+  async offerCreationTick(): Promise<{ quests: number; offers: number }> {
+    let offers = 0;
+    let quests = 0;
+    try {
+      const ended = await this.prisma.quest.findMany({
+        where: {
+          ledgerPackage: 'canquest-v30',
+          OR: [{ status: 'ENDED' }, { endsAt: { lte: new Date() } }],
+        },
+        select: { id: true },
+        take: 50,
+      });
+      for (const q of ended) {
+        const pending = await this.prisma.winnerDraw.findMany({
+          where: { questId: q.id, offerContractId: null, claimStatus: null },
+          select: { userId: true },
+          take: 100,
+        });
+        if (pending.length === 0) continue;
+        quests++;
+        for (const w of pending) {
+          const made = await this.claims.createOfferForWinner(q.id, w.userId);
+          if (made.ok) offers++;
+          else {
+            this.logger.warn(
+              `T2 offer quest=${q.id.slice(0, 8)}… user=${w.userId.slice(0, 8)}… GAGAL: ${made.error}`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.error(`offerCreationTick error: ${String(err).slice(0, 160)}`);
+    }
+    return { quests, offers };
+  }
+
+  // ── 6. Offer hangus — 7 hari, arsip + kode kembali ke pool (§7) ───────────
+
+  /**
+   * §7 spesifikasi owner: offer tak diklaim dalam 7 hari hangus — backend
+   * mengarsipkan (WithdrawOffer on-chain, kuota jangan menggantung) dan
+   * MENGEMBALIKAN KODE ke pool (unassign) supaya bisa dipakai campaign lain /
+   * draw ulang. Baris WinnerDraw ditandai Expired (kode dibersihkan).
+   */
+  async expiredOfferTick(): Promise<{ expired: number; codesReturned: number }> {
+    let expired = 0;
+    let codesReturned = 0;
+    try {
+      const stale = await this.prisma.winnerDraw.findMany({
+        where: {
+          offerContractId: { not: null },
+          claimStatus: null,
+          validUntil: { lt: new Date() },
+        },
+        select: {
+          id: true,
+          questId: true,
+          userId: true,
+          offerContractId: true,
+          rewardKind: true,
+          inviteCode: true,
+        },
+        take: 50,
+      });
+      for (const d of stale) {
+        const quest = await this.prisma.quest.findUnique({
+          where: { id: d.questId },
+          select: { ledgerPackage: true },
+        });
+        if (!quest || quest.ledgerPackage !== 'canquest-v30') continue;
+        const wd = await this.claims.withdrawOffer(
+          d.offerContractId!,
+          'Offer expired after 7 days (v30 sweep §7)',
+        );
+        if (!wd.ok) {
+          // Offer mungkin sudah dikonsumsi tapi receipt belum ter-sinkron —
+          // sinkronkan dulu, jangan tandai expired buta.
+          await this.claims.syncReceiptFromLedger(d.id).catch(() => undefined);
+          const fresh = await this.prisma.winnerDraw.findUnique({
+            where: { id: d.id },
+            select: { claimStatus: true },
+          });
+          if (!fresh?.claimStatus) {
+            this.logger.warn(
+              `offer-expiry: withdraw gagal draw=${d.id.slice(0, 8)}… — ${String(wd.error).slice(0, 100)}`,
+            );
+          }
+          continue;
+        }
+        // Kode kembali ke pool (reward ber-kode).
+        if (d.inviteCode) {
+          const rel = await this.prisma.inviteCodePool.updateMany({
+            where: { questId: d.questId, userId: d.userId, code: d.inviteCode },
+            data: { userId: null, assignedAt: null },
+          });
+          codesReturned += rel.count;
+        }
+        await this.prisma.winnerDraw.update({
+          where: { id: d.id },
+          data: { claimStatus: 'Expired', inviteCode: null, rewardClosedAt: new Date() },
+        });
+        expired++;
+        this.logger.log(
+          `offer-expiry: draw=${d.id.slice(0, 8)}… hangus (7 hari) — offer di-withdraw${d.inviteCode ? ', kode kembali ke pool' : ''}`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(`expiredOfferTick error: ${String(err).slice(0, 160)}`);
+    }
+    return { expired, codesReturned };
   }
 
   // ── 3. RewardPending monitor ──────────────────────────────────────────────
