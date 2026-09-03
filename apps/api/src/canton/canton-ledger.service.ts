@@ -5907,6 +5907,72 @@ export class CantonLedgerService {
   }
 
   /**
+   * v30: ambil kontrak (dgn createdEventBlob) utk DISCLOSURE interactive
+   * submission oleh party external. Kontrak milik party LAIN (mis. amulet
+   * input reward wallet) tidak terlihat oleh submitter → wajib di-disclose
+   * (CIP-0056 explicit contract disclosure), else CONTRACT_NOT_FOUND saat
+   * prepare meski kontraknya aktif.
+   */
+  async fetchContractsForDisclosure(
+    partyId: string,
+    cids: string[],
+  ): Promise<Array<{ templateId: string; contractId: string; createdEventBlob: string }>> {
+    if (cids.length === 0) return [];
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch {
+      offset = 0;
+    }
+    if (!offset || offset === '0') return [];
+    const want = new Set(cids);
+    const body = {
+      activeAtOffset: offset,
+      eventFormat: {
+        filtersByParty: {
+          [partyId]: {
+            cumulative: [
+              {
+                identifierFilter: {
+                  WildcardFilter: { value: { includeCreatedEventBlob: true } },
+                },
+              },
+            ],
+          },
+        },
+        verbose: true,
+      },
+    };
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: await this.authHeaders(),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`fetchContractsForDisclosure ${res.status}`);
+        return [];
+      }
+      const arr = (await res.json()) as any[];
+      const out: Array<{ templateId: string; contractId: string; createdEventBlob: string }> = [];
+      for (const e of Array.isArray(arr) ? arr : []) {
+        const ce = e?.contractEntry?.JsActiveContract?.createdEvent;
+        if (!ce || !want.has(ce.contractId)) continue;
+        const blob = ce.createdEventBlob ?? ce.created_event_blob ?? ce.blob;
+        if (typeof ce.templateId === 'string' && typeof blob === 'string' && blob) {
+          out.push({ templateId: ce.templateId, contractId: ce.contractId, createdEventBlob: blob });
+        }
+      }
+      return out;
+    } catch (err) {
+      this.logger.warn(`fetchContractsForDisclosure error: ${String(err)}`);
+      return [];
+    }
+  }
+
+  /**
    * v30: kontrak AKTIF milik party berdasarkan templateId (client-side filter).
    * Pakai WildcardFilter + filter templateId.endsWith — TemplateFilter menolak
    * package-hash penuh di MainNet (temuan yang sama dgn findLockedAmulets).

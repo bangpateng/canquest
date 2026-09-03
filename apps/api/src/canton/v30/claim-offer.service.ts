@@ -395,6 +395,7 @@ export class ClaimOfferService {
     // ── REWARD leg (bila Token*): rewardSender → user ───────────────────────
     let rewardRegistry: { factoryId: string; choiceContextData: Record<string, unknown>; disclosedContracts: unknown[] } | null = null;
     let rewardTransfer: Record<string, unknown> | null = null;
+    let rewardInputsForDisclosure: string[] = [];
     if (hasToken) {
       const rewardSymbol = normalizeRewardToken(quest.rewardToken);
       const instrument = await this.instruments.resolveInstrument(rewardSymbol);
@@ -409,6 +410,7 @@ export class ClaimOfferService {
           `Reward wallet kekurangan ${instrument.instrumentId} — laporkan ke operator (GUIDE §monitoring saldo reward)`,
         );
       }
+      rewardInputsForDisclosure = rewardInputs;
       const rewardCommon = {
         amount: rewardAmount.toFixed(10),
         instrumentId: { admin: instrument.instrumentAdmin, id: instrument.instrumentId },
@@ -460,6 +462,21 @@ export class ClaimOfferService {
 
     const disclosed = [...feeRegistry.disclosedContracts];
     if (rewardRegistry) disclosed.push(...rewardRegistry.disclosedContracts);
+    // DISCLOSURE amulet input REWARD WALLET: submitter = user external —
+    // amulet milik rewardSender tidak ada di ACS user → tanpa disclosure,
+    // prepare gagal CONTRACT_NOT_FOUND (nested exercise reward leg di dalam
+    // Accept* memakan input tsb). Fee inputs = amulet user sendiri (submitter)
+    // → sudah terlihat, tidak perlu disclosure.
+    if (hasToken && rewardInputsForDisclosure.length > 0) {
+      const rewardOwner = this.rewardSenderParty;
+      const blobs = await this.ledger.fetchContractsForDisclosure(rewardOwner, rewardInputsForDisclosure);
+      if (blobs.length !== rewardInputsForDisclosure.length) {
+        throw new BadRequestException(
+          `Disclosure amulet reward gagal (${blobs.length}/${rewardInputsForDisclosure.length}) — coba lagi sebentar (ACS index).`,
+        );
+      }
+      disclosed.push(...blobs);
+    }
 
     return {
       commands: [
