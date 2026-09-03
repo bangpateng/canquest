@@ -2691,6 +2691,33 @@ export class QuestsService {
   }> {
     const { userId, questId } = params;
 
+    // ── v30 FCFS — HARUS di atas early-return "already submitted": ──────
+    // re-submit pengguna yang slot-nya sempat hilang (mis. disapu sweeper
+    // pra-fix) harus tetap diamankan ulang + offer dibuat ulang. submitV30Fcfs
+    // sendiri idempoten (upsert completion, P2002-tolerant).
+    {
+      const v30quest = await this.prisma.quest.findUnique({
+        where: { id: questId },
+        select: {
+          id: true,
+          rewardCc: true,
+          rewardToken: true,
+          rewardType: true,
+          maxWinners: true,
+          startsAt: true,
+          endsAt: true,
+          entryGateMode: true,
+          ledgerPackage: true,
+        },
+      });
+      if (v30quest && isV30Quest(v30quest)) {
+        const model = v30ClaimModel(v30quest);
+        if (model.selection === 'FCFS') {
+          return this.submitV30Fcfs(userId, v30quest);
+        }
+      }
+    }
+
     const existing = await this.prisma.questCompletion.findUnique({
       where: { userId_questId: { userId, questId } },
     });
@@ -2723,17 +2750,6 @@ export class QuestsService {
       include: { tasks: true },
     });
     if (!quest) throw new NotFoundException('Quest not found');
-
-    // ── v30 FCFS (spesifikasi owner 2026-09-03): slot diamankan SAAT SUBMIT ──
-    // Pemenang ditentukan di sini (peminang pertama sampai maxWinners);
-    // pengejar berikutnya langsung tahu kuota habis. Offer on-chain dibuat
-    // saat event berakhir oleh sweep job — bukan di sini.
-    if (isV30Quest(quest)) {
-      const model = v30ClaimModel(quest);
-      if (model.selection === 'FCFS') {
-        return this.submitV30Fcfs(userId, quest);
-      }
-    }
 
     if (this.requiresFcfsCcClaim(quest)) {
       const allDone = await this.areAllTasksVerified(userId, questId);
