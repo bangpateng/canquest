@@ -2883,6 +2883,11 @@ export class QuestsService {
     if (quest.startsAt && quest.startsAt > now) return await fail('Quest has not started yet');
     if (quest.endsAt && quest.endsAt < now) return await fail('Quest has ended');
 
+    // Celah bypass: cabang v30 di atas early-return melewati pemeriksaan
+    // tugas jalur umum — wajib cek di sini juga (tidak ada slot tanpa tugas).
+    const allDone = await this.areAllTasksVerified(userId, quest.id);
+    if (!allDone) return await fail('Complete all tasks before submitting');
+
     const model = v30ClaimModel(quest);
 
     // Gate lock CC → harus eligible SEBELUM slot diamankan.
