@@ -1,15 +1,34 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Reservation expires after 30 minutes if wallet creation does not finish. */
 const RESERVE_TTL_MS = 30 * 60 * 1000;
 
+/**
+ * sha256(plaintext) hex — SATU-SATUNYA kunci lookup & penyimpanan.
+ * Plaintext tampil sekali saat generate (pola API key), tidak pernah
+ * disimpan mentah (AGENT.md §invite code).
+ */
+export function hashCode(code: string): string {
+  return createHash('sha256').update(code, 'utf8').digest('hex');
+}
+
 @Injectable()
 export class WalletInviteCodeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   normalizeCode(raw: string): string {
     return raw.trim().replace(/\s+/g, '');
+  }
+
+  private get dailyLimit(): number {
+    const n = Number(this.config.get<string>('WALLET_DAILY_ALLOCATION_LIMIT') ?? '50');
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 50;
   }
 
   private reservationExpired(reservedAt: Date | null): boolean {
@@ -42,7 +61,7 @@ export class WalletInviteCodeService {
     }
 
     const row = await this.prisma.walletInviteCode.findUnique({
-      where: { code: normalized },
+      where: { codeHash: hashCode(normalized) },
     });
     if (!row) {
       throw new BadRequestException({
@@ -69,10 +88,22 @@ export class WalletInviteCodeService {
       });
     }
 
-    await this.prisma.walletInviteCode.update({
-      where: { id: row.id },
+    // UPDATE bersyarat — dua request paralel memperebutkan hold yang sama,
+    // satu menang di DB (AGENT.md: jangan cek-lalu-tulis).
+    const won = await this.prisma.walletInviteCode.updateMany({
+      where: {
+        codeHash: row.codeHash,
+        redeemedAt: null,
+        OR: [{ reservedById: null }, { reservedById: userId }],
+      },
       data: { reservedById: userId, reservedAt: new Date() },
     });
+    if (won.count === 0) {
+      throw new BadRequestException({
+        message: 'This wallet invite code is temporarily in use. Try again in a few minutes.',
+        code: 'WALLET_INVITE_RESERVED',
+      });
+    }
   }
 
   /** Release a temporary hold (failed or placeholder wallet — code stays available). */
@@ -84,7 +115,7 @@ export class WalletInviteCodeService {
     const normalized = this.normalizeCode(walletInviteCode);
     await this.prisma.walletInviteCode.updateMany({
       where: {
-        code: normalized,
+        codeHash: hashCode(normalized),
         redeemedAt: null,
         reservedById: userId,
       },
@@ -113,8 +144,29 @@ export class WalletInviteCodeService {
   }
 
   /**
+   * Batas alokasi harian (default 50) — dihitung per TANGGAL (UTC) dari
+   * WalletAllocationLog. Rate control, bukan security control
+   * (SECURITY.md §invite codes) — cek sebelum redeem sudah memadai.
+   */
+  async assertDailyCapAvailable(): Promise<void> {
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const used = await this.prisma.walletAllocationLog.count({
+      where: { createdAt: { gte: startOfDay } },
+    });
+    if (used >= this.dailyLimit) {
+      throw new BadRequestException({
+        message: `Daily wallet allocation limit reached (${this.dailyLimit}/day). Try again tomorrow.`,
+        code: 'WALLET_DAILY_CAP',
+      });
+    }
+  }
+
+  /**
    * Mark code as permanently used — only after a real (non-placeholder) wallet exists.
-   * 1 code → 1 user forever.
+   * 1 code → 1 user forever. UPDATE BERSYARAT (rowcount 0 = sudah dipakai →
+   * TOLAK) — race antar request kalah di database, bukan di kode aplikasi
+   * (AGENT.md §invite code).
    */
   async redeemAfterWalletCreated(
     userId: string,
@@ -123,10 +175,11 @@ export class WalletInviteCodeService {
     if (await this.userHasRedeemedInvite(userId)) {
       return;
     }
+    await this.assertDailyCapAvailable();
     const normalized = this.normalizeCode(walletInviteCode ?? '');
     const updated = await this.prisma.walletInviteCode.updateMany({
       where: {
-        code: normalized,
+        codeHash: hashCode(normalized),
         redeemedAt: null,
         OR: [{ reservedById: userId }, { reservedById: null }],
       },

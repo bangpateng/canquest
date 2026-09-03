@@ -36,6 +36,11 @@ interface Winner {
   ledgerTxId: string | null;
   drawnAt: string;
   distributedAt: string | null;
+  /** v30 mirror: ClaimOffer/ClaimReceipt state (null = quest v29 / belum offer). */
+  offerContractId?: string | null;
+  claimStatus?: string | null;
+  rewardKind?: string | null;
+  validUntil?: string | null;
 }
 
 interface InviteCode {
@@ -534,7 +539,35 @@ export function WinnersPanel({ questId }: { questId: string }) {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {w.distributed ? (
+                        {w.claimStatus ? (
+                          // v30: status mirror ClaimReceipt on-chain.
+                          <span className="text-xs font-semibold">
+                            {w.claimStatus === "Settled" || w.claimStatus === "Revealed" ? (
+                              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                {w.claimStatus}
+                              </span>
+                            ) : w.claimStatus === "RewardPending" ? (
+                              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                <Clock className="h-3.5 w-3.5" />
+                                RewardPending — check offers
+                              </span>
+                            ) : w.claimStatus === "RewardExpired" ? (
+                              <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400">
+                                <Clock className="h-3.5 w-3.5" />
+                                RewardExpired
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-[var(--muted-foreground)]">
+                                <Clock className="h-3.5 w-3.5" />
+                                {w.claimStatus}
+                                {w.validUntil
+                                  ? ` · until ${new Date(w.validUntil).toLocaleDateString()}`
+                                  : ""}
+                              </span>
+                            )}
+                          </span>
+                        ) : w.distributed ? (
                           <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             Sent

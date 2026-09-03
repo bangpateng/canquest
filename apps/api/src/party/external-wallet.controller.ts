@@ -31,6 +31,7 @@ import {
   ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ExternalWalletService } from '../canton/external-wallet.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
@@ -55,6 +56,7 @@ export class ExternalWalletController {
     private readonly featuredActivity: FeaturedAppActivityService,
     private readonly users: UsersService,
     private readonly walletInvites: WalletInviteCodeService,
+    private readonly config: ConfigService,
   ) {}
 
   private assertEnabled(): void {
@@ -185,6 +187,11 @@ export class ExternalWalletController {
         walletKind: 'external' as const,
         message:
           'Non-custodial wallet created — your key, your signature, your funds.',
+        // v30 (AGENT.md): preapproval WAJIB — tanpa itu reward masuk menu offer
+        // dan harus diterima manual. Frontend key-ceremony merantai langkah
+        // sign berikutnya lewat /party/sign/preapproval/prepare|execute yang ada.
+        preapprovalRequired:
+          this.config.get<string>('CLAIM_V30_ENABLED') === 'true',
       };
     } catch (err) {
       if (needsInviteFlow) {

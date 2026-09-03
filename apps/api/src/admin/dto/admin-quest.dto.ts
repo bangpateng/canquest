@@ -267,6 +267,14 @@ export class CreateQuestDto extends QuestMoneyFields {
   @Max(10000000)
   entryCostPoints?: number;
 
+  /**
+   * 'canquest-v30' = jalur DAML v30 (ClaimOffer + LockProposal, tanpa
+   * QuestCampaign on-chain). Selain itu/undefined = jalur v29 (default).
+   */
+  @IsOptional()
+  @IsIn(['canquest-v30'])
+  ledgerPackage?: string;
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(200)

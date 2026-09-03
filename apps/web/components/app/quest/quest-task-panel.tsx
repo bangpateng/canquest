@@ -32,6 +32,11 @@ import { CampaignDrawCcClaimSection } from "@/components/app/campaign/campaign-d
 import { CampaignCcAndCodeRaffleClaimSection } from "@/components/app/campaign/campaign-cc-and-code-raffle-claim";
 import { CampaignInviteClaimSection } from "@/components/app/campaign/campaign-invite-claim";
 import {
+  CampaignClaimV30Section,
+  isV30Quest,
+} from "@/components/app/campaign/campaign-claim-v30";
+import { CampaignLockV30Section } from "@/components/app/campaign/campaign-lock-v30";
+import {
   QuestSubmitSection,
   QuestSubmittedProof,
   type QuestLedgerProof,
@@ -391,29 +396,42 @@ export function QuestTaskPanel({
   const requiresDrawCcClaim = campaignMeta?.requiresDrawCcClaim ?? false;
   const requiresPaidInviteClaim =
     campaignMeta?.requiresPaidInviteClaim ?? false;
+  // v30 (canquest-claim + canquest-lock): klaim via ClaimOffer — komponen
+  // legacy di bawah TIDAK dipakai utk quest v30 (jalur lama utk quest v29).
+  const isV30 = isV30Quest(quest);
   const showFcfsClaim =
+    !isV30 &&
     requiresFcfsClaim &&
     allDone &&
     !questCompleted &&
     !campaignEnded &&
     (campaignMeta?.remainingSlots ?? 0) > 0;
   const showInviteClaim =
+    !isV30 &&
     requiresPaidInviteClaim &&
     questCompleted &&
     !isQuestHub &&
     rewardStatus?.state === "fcfs_claimable" &&
     (campaignMeta?.codesRemaining ?? 0) > 0;
   const showCcDrawClaim =
+    !isV30 &&
     requiresDrawCcClaim &&
     questCompleted &&
     !isQuestHub &&
     rewardStatus?.state === "fcfs_claimable";
   // CC + Code combined raffle: winner selected by admin, pays claim fee to receive CC + code
   const showCcAndCodeRaffleClaim =
+    !isV30 &&
     quest.rewardType === "CC_AND_CODE_RAFFLE" &&
     questCompleted &&
     !isQuestHub &&
     rewardStatus?.state === "fcfs_claimable";
+  // v30: gate lock CC (entry) — tampil saat quest v30 meminta lock CC.
+  const showV30LockGate =
+    isV30 &&
+    !isQuestHub &&
+    !campaignEnded &&
+    (quest.entryGateMode === "CC_ONLY" || quest.entryGateMode === "CC_OR_POINTS");
   const showClassicSubmit =
     allDone &&
     !questCompleted &&
@@ -616,6 +634,33 @@ export function QuestTaskPanel({
           rewardVariant={rewardStatus?.rewardVariant ?? null}
           rewardToken={quest.rewardToken}
           campaignMeta={campaignMeta}
+          questOrg={quest.org}
+          questTitle={quest.title}
+          onClaimed={() => loadProgress()}
+        />
+      ) : null}
+
+      {/* v30: gate lock CC (eligibility) + claim via ClaimOffer. */}
+      {showV30LockGate ? (
+        <CampaignLockV30Section
+          questId={quest.id}
+          partyId={partyId}
+          entryCcLock={quest.entryCcLock}
+          onLocked={() => loadProgress()}
+        />
+      ) : null}
+
+      {isV30 && !isQuestHub ? (
+        <CampaignClaimV30Section
+          questId={quest.id}
+          partyId={partyId}
+          fcfs={
+            quest.rewardType === "INVITE_CODE_FCFS" ||
+            quest.rewardType === "CC_ONLY"
+          }
+          rewardType={quest.rewardType}
+          redeemUrl={quest.redeemUrl}
+          redeemInstructions={quest.redeemInstructions}
           questOrg={quest.org}
           questTitle={quest.title}
           onClaimed={() => loadProgress()}

@@ -3064,7 +3064,7 @@ export class CantonLedgerService {
    * returning camelCase { contractId, templateId, blob, round? } for disclosure.
    * Scan API uses snake_case (contract_id, template_id, created_event_blob).
    */
-  private async fetchScanProxyContract(
+  async fetchScanProxyContract(
     seg: 'amulet-rules' | 'open-and-issuing-mining-rounds',
   ): Promise<{
     contractId: string;
@@ -3896,7 +3896,7 @@ export class CantonLedgerService {
    * Query ACS Amulet holdings dengan data lengkap (initialAmount, createdAtRound, ratePerRound).
    * Hanya menyaring kontrak yang templateId-nya berakhiran :Splice.Amulet:Amulet milik party.
    */
-  private async queryAmuletHoldingsRaw(partyId: string): Promise<
+  async queryAmuletHoldingsRaw(partyId: string): Promise<
     Array<{
       contractId: string;
       initialAmount: string;
@@ -5906,6 +5906,75 @@ export class CantonLedgerService {
     }
   }
 
+  /**
+   * v30: kontrak AKTIF milik party berdasarkan templateId (client-side filter).
+   * Pakai WildcardFilter + filter templateId.endsWith — TemplateFilter menolak
+   * package-hash penuh di MainNet (temuan yang sama dgn findLockedAmulets).
+   * Return [{contractId, payload}] — payload = createArgument created event.
+   */
+  async queryContractsByTemplate(
+    partyId: string,
+    templateId: string,
+  ): Promise<Array<{ contractId: string; payload: Record<string, unknown> }>> {
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch {
+      offset = 0;
+    }
+    if (!offset || offset === '0') {
+      throw new Error(
+        'queryContractsByTemplate: ledger-end offset unavailable — refusing to query ACS at offset 0',
+      );
+    }
+    const body = {
+      activeAtOffset: offset,
+      eventFormat: {
+        filtersByParty: {
+          [partyId]: {
+            cumulative: [
+              {
+                identifierFilter: {
+                  WildcardFilter: { value: { includeCreatedEventBlob: false } },
+                },
+              },
+            ],
+          },
+        },
+        verbose: true,
+      },
+    };
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: await this.authHeaders(),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`queryContractsByTemplate ${res.status}`);
+        return [];
+      }
+      const arr = (await res.json()) as any[];
+      const out: Array<{ contractId: string; payload: Record<string, unknown> }> = [];
+      const suffix = `:${templateId.split(':').slice(-2).join(':')}`;
+      for (const e of Array.isArray(arr) ? arr : []) {
+        const ce = e?.contractEntry?.JsActiveContract?.createdEvent;
+        if (!ce || typeof ce.templateId !== 'string') continue;
+        if (ce.templateId !== templateId && !ce.templateId.endsWith(suffix)) continue;
+        out.push({
+          contractId: ce.contractId,
+          payload: (ce.createArgument ?? {}) as Record<string, unknown>,
+        });
+      }
+      return out;
+    } catch (err) {
+      this.logger.warn(`queryContractsByTemplate error: ${String(err)}`);
+      return [];
+    }
+  }
+
   /** Daftar LockedAmulet milik ownerParty (untuk eligibility & unlock). */
   async findLockedAmulets(ownerParty: string): Promise<
     Array<{
@@ -5914,6 +5983,8 @@ export class CantonLedgerService {
       amount: number;
       expiresAt: string;
       holders: string[];
+      /** v30: TimeLock.optContext (publik on-chain) — token opaque utk match LockProposalRecord.contextRef. */
+      optContext: string | null;
     }>
   > {
     let offset: number | string = 0;
@@ -5946,6 +6017,7 @@ export class CantonLedgerService {
       amount: number;
       expiresAt: string;
       holders: string[];
+      optContext: string | null;
     }> = [];
     try {
       const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
@@ -5971,6 +6043,10 @@ export class CantonLedgerService {
           amount: parseFloat(typeof amtRaw === 'string' ? amtRaw : '0') || 0,
           expiresAt: arg.lock?.expiresAt ?? '',
           holders: Array.isArray(arg.lock?.holders) ? arg.lock.holders : [],
+          optContext:
+            typeof arg.lock?.optContext === 'string' && arg.lock.optContext
+              ? arg.lock.optContext
+              : null,
         });
       }
     } catch (err) {

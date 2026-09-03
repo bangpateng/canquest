@@ -15,6 +15,7 @@ import {
   normalizeRewardType,
 } from '../common/prisma-types';
 import { randomInt, randomUUID } from 'crypto';
+import { hashCode } from '../party/wallet-invite-code.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   defaultClaimFeeCc,
@@ -32,6 +33,9 @@ import {
 } from '../quests/quest-social-links.util';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
+import { ClaimOfferService } from '../canton/v30/claim-offer.service';
+import { LockProposalService } from '../canton/v30/lock-proposal.service';
+import { V30_LEDGER_PACKAGE, isV30Quest } from '../canton/v30/v30.constants';
 import {} from '../common/wallet-policy';
 import { PointsService } from '../users/points.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -117,6 +121,8 @@ export class AdminService {
     private readonly ledger: CantonLedgerService,
     private readonly points: PointsService,
     private readonly notifications: NotificationsService,
+    private readonly claimOffers: ClaimOfferService,
+    private readonly lockProposals: LockProposalService,
   ) {}
 
   /**
@@ -539,6 +545,12 @@ export class AdminService {
     entryGateMode?: EntryGateMode;
     entryCcLock?: number | null;
     entryCostPoints?: number | null;
+    /**
+     * 'canquest-v30' = quest jalur DAML v30 (claim via ClaimOffer, eligibility
+     * via LockProposal — TANPA QuestCampaign on-chain). Campaign v29 tetap
+     * dibuat tanpa field ini (jalur lama).
+     */
+    ledgerPackage?: string | null;
     tasks?: Array<{
       type: string;
       title: string;
@@ -634,6 +646,10 @@ export class AdminService {
               normalizeQuestSocialLinksForSave(data.socialLinks ?? []),
             ),
         partnerId: partner?.id ?? null,
+        // v30: pin paket saat create — quest ini TIDAK membuat QuestCampaign
+        // on-chain (claim = ClaimOffer, eligibility = LockProposal).
+        ledgerPackage:
+          data.ledgerPackage === V30_LEDGER_PACKAGE ? V30_LEDGER_PACKAGE : undefined,
         tasks: data.tasks
           ? {
               create: data.tasks.map((t, i) => ({
@@ -669,7 +685,13 @@ export class AdminService {
     // canquest-v6: Buat QuestCampaign on-chain setelah quest dibuat di DB.
     // Best-effort — tidak memblokir jika ledger tidak tersedia.
     // ledgerCampaignId disimpan ke DB agar claimFcfsSlot() bisa referensi contract.
-    if (questKind === QuestKind.CAMPAIGN && this.questLedger.isConfigured()) {
+    // v30: quest jalur canquest-v30 TIDAK membuat QuestCampaign (tidak ada
+    // template campaign di paket v30 — raffle/FCFS murni backend, FLOW.md).
+    if (
+      questKind === QuestKind.CAMPAIGN &&
+      !isV30Quest(quest) &&
+      this.questLedger.isConfigured()
+    ) {
       void (async () => {
         try {
           const questKindDaml = QuestLedgerService.mapRewardTypeToQuestKind(
@@ -1561,7 +1583,27 @@ export class AdminService {
         );
     }
 
-    return { added: results.length, winners: results };
+    // ── v30 hook: quest jalur canquest-v30 → ClaimOffer on-chain per pemenang.
+    // validUntil = waktu UNDIAN ini + 48 jam (bukan waktu campaign). Kode reward
+    // di-assign & hash-nya dikomit sekarang (anti swap pasca-undian).
+    const v30Offers: Array<{ userId: string; ok: boolean; error?: string }> = [];
+    if (isV30Quest(quest) && results.length > 0) {
+      for (const r of results) {
+        const made = await this.claimOffers.createOfferForWinner(questId, r.userId);
+        v30Offers.push({ userId: r.userId, ok: made.ok, error: made.error });
+        if (!made.ok) {
+          this.logger.error(
+            `drawWinners v30: ClaimOffer GAGAL quest=${questId} user=${r.userId.slice(0, 8)}… — ${made.error}`,
+          );
+        }
+      }
+    }
+
+    return {
+      added: results.length,
+      winners: results,
+      ...(v30Offers.length > 0 ? { v30Offers } : {}),
+    };
   }
 
   async getWinners(questId: string) {
@@ -1594,7 +1636,48 @@ export class AdminService {
       ledgerTxId: d.ledgerTxId,
       drawnAt: d.drawnAt,
       distributedAt: d.distributedAt,
+      // v30 mirror
+      offerContractId: d.offerContractId,
+      claimStatus: d.claimStatus,
+      rewardKind: d.rewardKind,
+      validUntil: d.validUntil,
     }));
+  }
+
+  // ── v30 ops (canquest-claim + canquest-lock) ───────────────────────────────
+
+  /**
+   * T1 — tutup pendaftaran: RE-VERIFIKASI semua lock campaign dari ledger.
+   * Early-unlock (UnlockV2, tanpa cek waktu) → eligibility DICABUT.
+   * Jalankan SEBELAUM undian (FLOW.md §T1, SECURITY.md §3.2).
+   */
+  async v30CloseRegistration(questId: string) {
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) throw new NotFoundException('Quest not found');
+    if (!isV30Quest(quest)) {
+      throw new BadRequestException('Quest bukan jalur v30');
+    }
+    return this.lockProposals.reVerifyQuestLocks(questId);
+  }
+
+  /** Tarik semua ClaimOffer aktif quest ini (mis. undian ulang / kasus khusus). */
+  async v30WithdrawOffers(questId: string, reason: string) {
+    if (!reason?.trim()) throw new BadRequestException('reason wajib diisi');
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) throw new NotFoundException('Quest not found');
+    if (!isV30Quest(quest)) {
+      throw new BadRequestException('Quest bukan jalur v30');
+    }
+    const draws = await this.prisma.winnerDraw.findMany({
+      where: { questId, offerContractId: { not: null }, claimStatus: null },
+      select: { offerContractId: true, userId: true },
+    });
+    const out: Array<{ userId: string; ok: boolean; error?: string }> = [];
+    for (const d of draws) {
+      const res = await this.claimOffers.withdrawOffer(d.offerContractId!, reason);
+      out.push({ userId: d.userId, ...res });
+    }
+    return { withdrawn: out.filter((o) => o.ok).length, results: out };
   }
 
   /* ────────────────────────────────────────────────────────
@@ -2567,8 +2650,11 @@ export class AdminService {
     note?: string;
   }) {
     const note = params.note?.trim() || null;
+    // Kode custom admin di-hash saat insert; kode acak = CSPRNG 128-bit.
+    // Plaintext HANYA dikembalikan sekali di response ini (pola API key) —
+    // DB menyimpan codeHash, kolom code berisi masked value.
     const rawList =
-      params.codes?.map((c) => c.trim()).filter(Boolean) ?? // custom code: store as-is (case-sensitive)
+      params.codes?.map((c) => c.trim()).filter(Boolean) ??
       this.generateWalletCodes(Math.min(Math.max(params.count ?? 1, 1), 500));
 
     const created: string[] = [];
@@ -2577,7 +2663,11 @@ export class AdminService {
     for (const code of rawList) {
       try {
         await this.prisma.walletInviteCode.create({
-          data: { code, note },
+          data: {
+            code: `hashed-${hashCode(code).slice(0, 8)}`, // masked display only
+            codeHash: hashCode(code),
+            note,
+          },
         });
         created.push(code);
       } catch {
@@ -2625,12 +2715,19 @@ export class AdminService {
   private static readonly WALLET_CODE_ALPHABET =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
-  /** Wallet invite code: 8 random chars (digits + upper + lower), no prefix. */
+  /**
+   * Wallet invite code: CSPRNG 128-bit (AGENT.md — JANGAN Math.random /
+   * entropy pendek). 22 char base62 ≈ 131 bit — dicampur dari randomInt
+   * (crypto CSPRNG, unbiased). Plaintext hanya keluar sekali di response
+   * generate; DB menyimpan sha256-nya (codeHash).
+   */
   generateWalletCodes(count: number): string[] {
     const alphabet = AdminService.WALLET_CODE_ALPHABET;
+    const bitsPerChar = Math.log2(alphabet.length); // ~5.95
+    const chars = Math.ceil(128 / bitsPerChar); // 22 char ≥ 128 bit
     return Array.from({ length: count }, () => {
       let code = '';
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < chars; i++) {
         code += alphabet[randomInt(0, alphabet.length)]; // CSPRNG, unbiased
       }
       return code;

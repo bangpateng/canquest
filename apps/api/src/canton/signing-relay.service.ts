@@ -7,6 +7,8 @@ import { SpliceValidatorService } from './splice-validator.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { hasRealWallet } from '../common/wallet-policy';
+import { ClaimOfferService } from './v30/claim-offer.service';
+import { LockProposalService } from './v30/lock-proposal.service';
 import {
   cantonPartyIdsEqual,
   looksLikeCantonPartyId,
@@ -91,6 +93,8 @@ export class SigningRelayService {
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
     private readonly config: ConfigService,
+    private readonly claimOffers: ClaimOfferService,
+    private readonly lockProposals: LockProposalService,
   ) {
     // Opt-in re-probe multi-command (default skip — node Splice 0.6.12 menolak).
     if (this.config.get<string>('QUEST_TRY_MULTI_COMMAND') === 'true') {
@@ -167,6 +171,12 @@ export class SigningRelayService {
       // signatory = receiver → create/Archive cukup signature user.
       usdcx_preapproval_enable: (u) => this.buildRegistryPreapprovalEnable(u),
       usdcx_preapproval_disable: (u) => this.buildRegistryPreapprovalDisable(u),
+      // ── v30 (canquest-claim / canquest-lock) ──
+      // SATU ExerciseCommand per submission (batas external party — node
+      // produksi juga menolak multi-command). Otoritas rewardSender pada
+      // Accept* diwarisi dari signatory ClaimOffer, BUKAN actAs tambahan.
+      accept_claim_offer: (u, p) => this.claimOffers.buildAcceptClaimOffer(u.userId, p),
+      accept_lock_proposal: (u, p) => this.lockProposals.buildAcceptLockProposal(u.userId, p),
       // NOTE: preapproval_enable/disable TIDAK dibuat utk user external —
       // terbukti MainNet (spike-m3c): AmuletRules_CreateTransferPreapproval
       // mewajibkan co-authorizer provider; interactive submission hanya
@@ -440,10 +450,19 @@ export class SigningRelayService {
     if (entry.flow === 'unlock_cc') {
       const meta = entry.meta as { lockId: string; amountCc: number };
       try {
+        const lockRow = await this.prisma.ccLock.findUnique({
+          where: { id: meta.lockId },
+          select: { lockedAmuletCid: true },
+        });
         await this.prisma.ccLock.update({
           where: { id: meta.lockId },
           data: { status: 'UNLOCKED' },
         });
+        // v30: lock campaign (holders=[validator]) ter-unlock → catat di
+        // LockProposalRecord supaya eligibility/job tidak stale.
+        if (lockRow?.lockedAmuletCid) {
+          await this.lockProposals.onLockedAmuletUnlocked(lockRow.lockedAmuletCid);
+        }
         await this.users.recordTransaction({
           userId: entry.userId,
           amountCc: meta.amountCc,
@@ -458,6 +477,18 @@ export class SigningRelayService {
           `unlock_cc bookkeeping gagal (lockId=${meta.lockId}): ${String(err).slice(0, 160)}`,
         );
       }
+      return;
+    }
+
+    // ── v30: Accept ClaimOffer — sinkron receipt + auto-RevealCode ─────────
+    if (entry.flow === 'accept_claim_offer') {
+      await this.claimOffers.onAcceptExecuted(entry.userId, entry.meta, result);
+      return;
+    }
+
+    // ── v30: AcceptLock — verifikasi holders=[validator] dari ledger ───────
+    if (entry.flow === 'accept_lock_proposal') {
+      await this.lockProposals.onAcceptExecuted(entry.userId, entry.meta, result);
       return;
     }
 

@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useMe } from "@/lib/hooks/use-me";
 import { KeyCeremony } from "@/components/app/wallet/key-ceremony";
-import { signPreparedHash, type WalletKeyMeta } from "@/lib/wallet/key-manager";
+import { signBytesHex, signPreparedHash, tryDeviceAutoUnlock, type WalletKeyMeta } from "@/lib/wallet/key-manager";
 import { signRelayTransaction } from "@/lib/wallet/sign-relay";
 
 type Step = "form" | "otp" | "ceremony" | "registering" | "success";
@@ -225,6 +225,15 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
       await signRelayTransaction("wallet_registration_accept").catch(() => {
         /* non-critical */
       });
+
+      // v30 (AGENT.md): preapproval WAJIB — tanpa itu reward masuk menu offer
+      // dan harus diterima manual. Chain langkah sign SEKARANG (dompet masih
+      // unlocked). Best-effort: bisa diaktifkan kapan saja di Settings.
+      if (compRaw?.preapprovalRequired === true) {
+        await enablePreapprovalBestEffort(meta).catch(() => {
+          /* non-critical — Settings → Instant receive */
+        });
+      }
 
       setStep("success");
       setTimeout(() => onCreated(), 1500);
@@ -573,4 +582,41 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
       </Card>
     </div>
   );
+}
+
+/**
+ * v30: aktifkan CC preapproval (instant receive) segera setelah wallet aktif —
+ * AGENT.md: tanpa preapproval, reward masuk menu offer dan harus diterima
+ * manual. Jalur validator API dgn hash RAW 32 bytes (TANPA 1220 prefix) —
+ * BERBEDA dari relay biasa (mirror settings-preapproval-panel). Best-effort:
+ * dompet masih unlocked dari ceremony; kegagalan tidak memblokir wallet.
+ */
+async function enablePreapprovalBestEffort(meta: WalletKeyMeta): Promise<void> {
+  const prepRes = await fetch("/api/party/sign/preapproval/prepare", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ publicKeyHex: meta.publicKeyHex }),
+  });
+  const prep = (await prepRes.json().catch(() => null)) as {
+    hash?: string | null;
+    alreadyEnabled?: boolean;
+  } | null;
+  if (!prepRes.ok || !prep?.hash || prep.alreadyEnabled) return;
+
+  if (!(await tryDeviceAutoUnlock().catch(() => false))) {
+    // Ceremony barusan unlock — kalau sudah terkunci lagi, biarkan Settings.
+    return;
+  }
+  const hashBytes = new Uint8Array(
+    (String(prep.hash).match(/.{2}/g) ?? []).map((b) => parseInt(b, 16)),
+  );
+  const sigHex = await signBytesHex(hashBytes);
+
+  await fetch("/api/party/sign/preapproval/execute", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ signature: sigHex }),
+  });
 }

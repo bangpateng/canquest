@@ -21,6 +21,9 @@ import { ProxyCacheService } from './proxy-cache.service';
 import { CantonWalletSdkService } from './wallet-sdk.service';
 import { ExternalWalletService } from './external-wallet.service';
 import { SigningRelayService } from './signing-relay.service';
+import { ClaimOfferService } from './v30/claim-offer.service';
+import { LockProposalService } from './v30/lock-proposal.service';
+import { V30JobsService } from './v30/v30-jobs.service';
 
 /**
  * CantonModule wires together:
@@ -54,6 +57,10 @@ import { SigningRelayService } from './signing-relay.service';
     CantonWalletSdkService,
     ExternalWalletService,
     SigningRelayService,
+    // ── v30 (canquest-claim + canquest-lock) ──
+    ClaimOfferService,
+    LockProposalService,
+    V30JobsService,
   ],
   exports: [
     CantonLedgerService,
@@ -71,6 +78,8 @@ import { SigningRelayService } from './signing-relay.service';
     ProxyCacheService,
     ExternalWalletService,
     SigningRelayService,
+    ClaimOfferService,
+    LockProposalService,
   ],
 })
 export class CantonModule {}

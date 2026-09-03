@@ -136,6 +136,8 @@ interface QuestFormProps {
     endsAt?: string | null;
     /** Per-event Earn access gate (CAMPAIGN only). */
     entryGateMode?: string | null;
+    /** v30 pinning — "canquest-v30" = claim via ClaimOffer. */
+    ledgerPackage?: string | null;
     entryCcLock?: number | null;
     entryCostPoints?: number | null;
     /** Set when the quest has an on-chain QuestCampaign — reward/fee/quota/gate
@@ -200,6 +202,11 @@ export function QuestForm({
         ? String(initialData.entryCostPoints)
         : "",
   });
+  // v30: claim via ClaimOffer (paket canquest-claim + canquest-lock). Create
+  // only — quest v29 lama tidak bisa dimigrasi (README v30: bukan upgrade).
+  const [useV30Claim, setUseV30Claim] = useState(
+    initialData?.ledgerPackage === "canquest-v30",
+  );
 
   const [socialLinks, setSocialLinks] = useState<QuestSocialLink[]>(
     initialData?.socialLinks ?? [],
@@ -496,6 +503,9 @@ export function QuestForm({
           entryCostPoints: form.entryCostPoints.trim()
             ? Number(form.entryCostPoints)
             : null,
+          // v30 hanya bisa dipilih saat CREATE (paket v29 lama tidak dimigrasi).
+          ...(!isEdit &&
+            useV30Claim && { ledgerPackage: "canquest-v30" }),
         }),
         ...(!isEdit && { questKind }),
         ...(tasks.length > 0 && {
@@ -1348,6 +1358,31 @@ export function QuestForm({
                   for free.
                 </p>
               )}
+
+              {/* v30: claim via ClaimOffer (canquest-claim + canquest-lock).
+                  Create only — paket v29 lama tidak bisa dimigrasi. */}
+              {!isEdit ? (
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 p-3">
+                  <input
+                    type="checkbox"
+                    checked={useV30Claim}
+                    onChange={(e) => setUseV30Claim(e.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span className="text-sm">
+                    <span className="font-medium">
+                      Claim via DAML v30 (ClaimOffer)
+                    </span>
+                    <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
+                      Winners claim through an on-chain ClaimOffer (fee + reward
+                      settle atomik, signed in-browser). CC-lock eligibility uses
+                      LockProposal (holders = validator). Requires
+                      CLAIM_V30_ENABLED + DAR v30 uploaded. Cannot be changed
+                      after creation.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
             </div>
           </div>
         </details>

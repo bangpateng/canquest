@@ -192,6 +192,23 @@ export class AdminController {
     return this.admin.getWinners(questId);
   }
 
+  /* ── v30 ops (canquest-claim + canquest-lock) ── */
+
+  /** T1 — tutup pendaftaran: re-verifikasi semua lock dari ledger sebelum undian. */
+  @Post('quests/:questId/v30/close-registration')
+  v30CloseRegistration(@Param('questId') questId: string) {
+    return this.admin.v30CloseRegistration(questId);
+  }
+
+  /** Tarik semua ClaimOffer aktif (undian ulang / kasus khusus). Body: { reason }. */
+  @Post('quests/:questId/v30/withdraw-offers')
+  v30WithdrawOffers(
+    @Param('questId') questId: string,
+    @Body() body: { reason: string },
+  ) {
+    return this.admin.v30WithdrawOffers(questId, body?.reason ?? '');
+  }
+
   /* ── Reward distribution ── */
 
   @Post('quests/:questId/distribute-rewards')

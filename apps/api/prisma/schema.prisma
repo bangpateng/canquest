@@ -96,6 +96,8 @@ model User {
   walletAllocations         WalletAllocationLog[]
   redeemedWalletInvites     WalletInviteCode[]     @relation("WalletInviteRedemptions")
   ccLocks                   CcLock[]
+  /// v30: lock CC per-campaign (LockProposal→AcceptLock→LockedAmulet holders=[validator]).
+  lockProposals             LockProposalRecord[]
   earnEntries               EarnEntry[]
   /// Off-chain custody: saldo token non-CC user di Cantex trading account shared.
   cantexTokenBalances       CantexTokenBalance[]
@@ -166,9 +168,18 @@ model WalletKeyBackup {
 
 /// One-time codes required to create a Canton wallet (admin-generated).
 /// Consumed only after a real wallet is created (redeemedAt set). Failed attempts release the reservation.
+///
+/// v30 hardening (AGENT.md): kode disimpan sebagai HASH sha256 (codeHash),
+/// plaintext hanya tampil SEKALI saat generate. Kolom `code` dipertahankan
+/// hanya sebagai masked display ('hashed-xxxxxxxx') — lookup/reserve/redeem
+/// selalu lewat codeHash. Redeem = UPDATE bersyarat (WHERE codeHash AND
+/// redeemedAt IS NULL) — race antar request kalah di DB, bukan di kode app.
 model WalletInviteCode {
   id           String    @id @default(cuid())
-  code         String    @unique
+  /// Masked display pasca-migrasi hash. Kode baru tidak pernah menyimpan plaintext di sini.
+  code         String
+  /// sha256(plaintext) hex — satu-satunya kunci lookup. Dibackfill dari `code`.
+  codeHash     String    @unique
   note         String?
   createdAt    DateTime  @default(now())
   redeemedAt   DateTime?
@@ -517,6 +528,8 @@ model Quest {
   submissions        QuestSubmission[]
   inviteCodes        InviteCodePool[]
   winnerDraws        WinnerDraw[]
+  /// v30: lock proposal per-campaign (jalur eligibility lock CC).
+  lockProposals      LockProposalRecord[]
   /// Optional ecosystem partner link — when set, org/logo/social are denormalized from Partner at admin save time.
   partnerId          String?
   partner            Partner?          @relation(fields: [partnerId], references: [id])
@@ -643,6 +656,29 @@ model WinnerDraw {
   /// via PK); jalur invite = "code-<drawId|questId:userId>" (deterministik,
   /// di-persist di sini agar retry ter-dedupe DB-level).
   claimId                String?   @unique
+
+  // ── v30 (canquest-claim): ClaimOffer / ClaimReceipt mirror ──────────────
+  /// ClaimOffer contract id (Main:ClaimOffer) — dibuat backend actAs
+  /// [validator, rewardSender] saat draw / FCFS claim. Unique = 1 offer
+  /// on-chain per winner (jaring anti double-offer; kontrak v30 tidak punya
+  /// contract key — DB satu-satunya jaring, SECURITY.md §3.1).
+  offerContractId        String?   @unique
+  /// ClaimReceipt contract id (Main:ClaimReceipt) — lahir saat user Accept*.
+  receiptContractId      String?
+  /// Mirror ClaimStatus on-chain: Settled | RewardPending | RewardExpired | Revealed.
+  /// Sinkron dari transaction tree saat accept + job monitor RewardPending.
+  claimStatus            String?
+  /// ClaimOffer.validUntil = waktu UNDIAN + 48 jam (BUKAN waktu campaign) —
+  /// AGENT.md: kalau undian mundur, offer lahir kedaluwarsa. UI "Claim before ...".
+  validUntil             DateTime?
+  /// RewardKind yang dikomit di offer: CODE_ONLY | TOKEN_ONLY | TOKEN_AND_CODE.
+  rewardKind             String?
+  /// Kode plaintext setelah RevealCode sukses (dipaparkan ke user di UI Revealed).
+  revealedCode           String?
+  /// Waktu status reward final (ConfirmRewardReceived / MarkRewardExpired) — audit.
+  rewardClosedAt         DateTime?
+  /// Reminder RewardPending terakhir terkirim (hari ke-3 / ke-8, UI-STATES.md).
+  rewardPendingNotifiedAt DateTime?
 
   @@unique([questId, userId])
 }
@@ -811,6 +847,59 @@ model CampaignEligibilityLedger {
   @@index([userId, status])
   @@index([questId, status])
   @@index([lockId])
+}
+
+/// v30 (canquest-lock): mirror LockProposal / LockReceipt on-chain — sumber
+/// eligibility campaign (jalur lock CC). SATU lock per (quest, user)
+/// (constraint) — pengganti v29 CampaignEligibilityLedger utk quest v30.
+///
+/// contextRef = token opaque CSPRNG yang jadi TimeLock.optContext. optContext
+/// PUBLIK di ledger — JANGAN pernah berbentuk "canquest:campaign-42"
+/// (LOCK-SPEC.md §245); mapping contextRef→campaign hanya hidup di tabel ini.
+///
+/// holders lock = [validator] (bukan user!) — LockedAmulet_UnlockV2 tanpa cek
+/// waktu akan runtuh gerbang eligibility bila holders diisi user. Verifikasi
+/// pasca-AcceptLock + re-verifikasi di T1 (registration close) — SECURITY.md §3.2.
+model LockProposalRecord {
+  id                  String    @id @default(cuid())
+  questId             String
+  quest               Quest     @relation(fields: [questId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Token opaque CSPRNG — TimeLock.optContext on-chain. @unique = 1 lock 1 token.
+  contextRef          String    @unique
+  /// LockProposal contract id (LockProposal:LockProposal) — dibuat backend actAs [validator].
+  proposalContractId  String    @unique
+  /// LockReceipt contract id — lahir saat user AcceptLock.
+  receiptContractId   String?
+  /// LockedAmulet contract id — dari hasil AcceptLock, diverifikasi via interface HoldingV2.
+  lockedAmuletCid     String?   @unique
+  /// Ambang campaign (mis. 30 CC) — harus == lock.amount on-chain saat verify.
+  amountCc            Decimal   @db.Decimal(20, 10)
+  /// T2 = campaign end. lock.holders=[validator] sampai lewat waktu ini;
+  /// user baru bisa OwnerExpireLockV2 SETELAHnya (assertDeadlineExceeded).
+  expiresAt           DateTime
+  /// Jendela pendek user harus tanda tangan AcceptLock (±10 menit —
+  /// jendela prepare→submit CC, LockProposal.daml proposalExpiresAt).
+  proposalExpiresAt   DateTime
+  /// PROPOSED | ACCEPTED | UNLOCKED | REVOKED
+  /// REVOKED = re-verifikasi T1 gagal (early-unlock via UnlockV2 disetujui /
+  /// holding tidak lagi aktif). LockReceipt sengaja BUKAN sumber eligibility.
+  status              String    @default("PROPOSED")
+  proposalWithdrawnAt DateTime?
+  acceptedAt          DateTime?
+  unlockedAt          DateTime?
+  revokedAt           DateTime?
+  revokedReason       String?
+  /// UpdateId transaksi AcceptLock — audit trail.
+  acceptUpdateId      String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([questId, userId])
+  @@index([userId, status])
+  @@index([questId, status])
+  @@index([expiresAt, status])
 }
 
 // ─── v25: DAML PlatformTransfer contract tracking ──────────────────────────

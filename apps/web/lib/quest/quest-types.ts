@@ -117,6 +117,12 @@ export interface Quest {
   tags: string[];
   socialLinks?: QuestSocialLink[];
   questKind?: "CAMPAIGN" | "EARN_HUB";
+  /**
+   * DAML package pinning (backend Quest.ledgerPackage). "canquest-v30" =
+   * claim via ClaimOffer + eligibility via LockProposal (jalur baru);
+   * undefined/"canquest-v29"/"canquest-v28" = jalur legacy.
+   */
+  ledgerPackage?: string | null;
   /** Per-event Earn access gate (CAMPAIGN only). Null/undefined = CC_OR_POINTS (default). */
   entryGateMode?: EntryGateMode | null;
   /** Override CC lock requirement (null = global default). */

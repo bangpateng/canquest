@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { QuestsController } from './quests.controller';
+import { ClaimsV30Controller } from './claims-v30.controller';
 import { QuestsService } from './quests.service';
 import { AuthModule } from '../auth/auth.module';
 import { UsersModule } from '../users/users.module';
@@ -17,7 +18,7 @@ import { TwitterModule } from '../twitter/twitter.module';
     QueueModule,
     TwitterModule,
   ],
-  controllers: [QuestsController],
+  controllers: [QuestsController, ClaimsV30Controller],
   providers: [QuestsService],
   exports: [QuestsService],
 })

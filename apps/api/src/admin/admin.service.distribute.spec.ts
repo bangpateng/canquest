@@ -10,6 +10,8 @@ import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { PointsService } from '../users/points.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ClaimOfferService } from '../canton/v30/claim-offer.service';
+import { LockProposalService } from '../canton/v30/lock-proposal.service';
 
 /**
  * Unit tests untuk anti-silent-failure fix di AdminService.distributeRewards.
@@ -139,6 +141,10 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
         // v32 menambah NotificationsService ke AdminService (email winner) —
         // distributeRewards tidak memakainya; mock kosong cukup.
         { provide: NotificationsService, useValue: {} },
+        // v30 menambah ClaimOfferService + LockProposalService (hook draw-winners
+        // & ops lock) — distributeRewards tidak memakainya; mock kosong cukup.
+        { provide: ClaimOfferService, useValue: {} },
+        { provide: LockProposalService, useValue: {} },
       ],
     }).compile();
 
