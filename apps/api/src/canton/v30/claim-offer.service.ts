@@ -283,6 +283,43 @@ export class ClaimOfferService {
     return quest.rewardType === RewardType.INVITE_CODE_FCFS ? 3 : 2;
   }
 
+  /**
+   * Registry v2 dengan fallback v1 — mirror quest-ledger registryWithFallback
+   * (terbukti MainNet): scan-proxy node ini tidak menyajikan endpoint v2
+   * (404), tapi factory contract-nya SAMA (implement interface v1+v2) dan
+   * choiceContextData hasil v1 dipakai apa adanya sebagai extraArgs.context.
+   * Payload v1: sender/receiver Party string + lock:null, TANPA actors.
+   */
+  private async registryFor(
+    v2Payload: Record<string, unknown>,
+    instrumentAdmin: string,
+  ): Promise<{
+    factoryId: string;
+    choiceContextData: Record<string, unknown>;
+    disclosedContracts: unknown[];
+    transferKind: string;
+  } | null> {
+    const v2 = await this.ledger.callTransferFactoryRegistry(v2Payload, instrumentAdmin, 'v2');
+    if (v2) return v2;
+    this.logger.warn(
+      'Registry v2 tidak tersedia (scan-proxy 404) — fallback ke registry v1 (pola v29 settleAtomic)',
+    );
+    // Turunkan payload ke shape V1 (transfer V2 Account → Party string).
+    const toV1 = (p: Record<string, unknown>): Record<string, unknown> => {
+      const out: Record<string, unknown> = { ...p };
+      delete out.actors;
+      const tr = p.transfer as Record<string, unknown> | undefined;
+      if (tr) {
+        const sender = typeof tr.sender === 'string' ? tr.sender : (tr.sender as { owner?: string })?.owner;
+        const receiver =
+          typeof tr.receiver === 'string' ? tr.receiver : (tr.receiver as { owner?: string })?.owner;
+        out.transfer = { ...tr, sender, receiver, lock: null };
+      }
+      return out;
+    };
+    return this.ledger.callTransferFactoryRegistry(toV1(v2Payload), instrumentAdmin, 'v1');
+  }
+
   // ── 2. Bangun Accept* utk user (dipanggil signing relay) ──────────────────
 
   /**
@@ -344,7 +381,7 @@ export class ClaimOfferService {
       receiver: v30Account(this.feeReceiverParty),
       ...feeCommon,
     };
-    const feeRegistry = await this.ledger.callTransferFactoryRegistry(
+    const feeRegistry = await this.registryFor(
       {
         expectedAdmin: this.dsoParty,
         actors: [userParty],
@@ -352,7 +389,6 @@ export class ClaimOfferService {
         extraArgs: { context: { values: {} }, meta: { values: {} } },
       },
       this.dsoParty,
-      'v2',
     );
     if (!feeRegistry) throw new BadRequestException('Registry fee (CC) tidak merespons');
 
@@ -386,7 +422,7 @@ export class ClaimOfferService {
         receiver: v30Account(userParty),
         ...rewardCommon,
       };
-      rewardRegistry = await this.ledger.callTransferFactoryRegistry(
+      rewardRegistry = await this.registryFor(
         {
           expectedAdmin: instrument.instrumentAdmin,
           actors: [this.rewardSenderParty],
@@ -394,7 +430,6 @@ export class ClaimOfferService {
           extraArgs: { context: { values: {} }, meta: { values: {} } },
         },
         instrument.instrumentAdmin,
-        'v2',
       );
       if (!rewardRegistry) throw new BadRequestException('Registry reward tidak merespons');
     }
