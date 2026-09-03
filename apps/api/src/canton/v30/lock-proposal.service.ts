@@ -127,7 +127,7 @@ export class LockProposalService {
       v30LockTemplateId(this.config, 'LockProposal'),
       payload,
       [this.validatorParty],
-      `v30-lock-${createHash(contextRef).digest('hex').slice(0, 24)}`,
+      `v30-lock-${createHash('sha256').update(contextRef).digest('hex').slice(0, 24)}`,
     );
     if (!res.ok || !res.contractId) {
       return { ok: false, error: `create LockProposal gagal: ${res.error ?? '?'}` };
