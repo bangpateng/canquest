@@ -2914,9 +2914,12 @@ export class QuestsService {
         data: {
           questId: quest.id,
           userId,
+          // 6 kombinasi: TOKEN_AND_CODE membawa ccAmount penuh + kode;
+          // CODE murni tanpa CC; TOKEN tanpa kode.
           ccAmount: model.reward === 'CODE' ? 0 : quest.rewardCc || 0,
           rewardToken: quest.rewardToken,
-          rewardVariant: model.reward === 'CODE' ? 'CODE' : 'CC',
+          rewardVariant:
+            model.reward === 'CODE' ? 'CODE' : model.reward === 'TOKEN_AND_CODE' ? null : 'CC',
           fcfsClaimLockedAt: now,
         },
       });

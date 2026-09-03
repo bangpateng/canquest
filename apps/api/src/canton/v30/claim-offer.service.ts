@@ -734,6 +734,10 @@ export class ClaimOfferService {
       preapprovalExpiresAt: string | null;
     };
     uiHint: 'CLAIM_READY' | 'NEED_UNLOCK_OR_TOPUP' | 'NO_PREAPPROVAL_WARN' | 'OFFER_EXPIRED' | 'NOT_DRAWN' | 'DONE';
+    /** Jenis pemenang — menentukan UX (FCFS: submit→claim instan; RAFFLE: draw dulu). */
+    selection: 'FCFS' | 'RAFFLE' | 'OFFCHAIN';
+    /** User sudah submit tugas campaign ini (completion ada). */
+    submitted: boolean;
   }> {
     const [quest, draw] = await Promise.all([
       this.prisma.quest.findUnique({ where: { id: questId } }),
@@ -786,6 +790,13 @@ export class ClaimOfferService {
 
     return {
       v30: true,
+      /** Jenis pemenang — menentukan UX (FCFS: submit→claim instan; RAFFLE: draw dulu). */
+      selection: v30ClaimModel(quest).selection,
+      /** User sudah submit tugas campaign ini (completion ada). */
+      submitted: !!(await this.prisma.questCompletion.findUnique({
+        where: { userId_questId: { userId, questId } },
+        select: { id: true },
+      })),
       offer: {
         exists: !!fresh?.offerContractId,
         claimStatus: status,

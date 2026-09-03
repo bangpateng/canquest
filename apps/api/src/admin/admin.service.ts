@@ -681,6 +681,7 @@ export class AdminService {
         rewardType: (data.rewardType ?? RewardType.CC_ONLY) as string,
         rewardToken: data.rewardToken,
         entryGateMode: data.entryGateMode as string | null,
+        rewardCc: data.rewardCc ?? 0,
       });
       if (model.reward === 'CODE' && data.maxWinners != null && validCodes.length !== data.maxWinners) {
         throw new BadRequestException(

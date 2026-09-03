@@ -145,6 +145,8 @@ export function CampaignLockV30Section({
         <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         Locked until the campaign ends{endsAtLabel ? ` (${endsAtLabel})` : ""}. Keep
         some CC free for claim fees — you&apos;ll need roughly 2× the fee after locking.
+        If the slots run out before you submit, your CC stays locked until the
+        campaign ends — it is not lost, only waiting.
       </p>
     </div>
   );

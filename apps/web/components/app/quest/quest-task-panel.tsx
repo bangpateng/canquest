@@ -654,6 +654,7 @@ export function QuestTaskPanel({
         <CampaignClaimV30Section
           questId={quest.id}
           partyId={partyId}
+          submitted={questCompleted}
           fcfs={
             quest.rewardType === "INVITE_CODE_FCFS" ||
             quest.rewardType === "CC_ONLY"

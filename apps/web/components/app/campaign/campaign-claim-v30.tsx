@@ -25,6 +25,10 @@ import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 
 type V30ClaimStatusResp = {
   v30: true;
+  /** Jenis pemenang — FCFS: claim instan pasca-submit; RAFFLE: menunggu draw. */
+  selection: 'FCFS' | 'RAFFLE' | 'OFFCHAIN';
+  /** User sudah submit tugas campaign ini. */
+  submitted: boolean;
   offer: {
     exists: boolean;
     claimStatus: string | null;
@@ -81,6 +85,7 @@ export function CampaignClaimV30Section({
   redeemInstructions,
   questOrg,
   questTitle,
+  submitted,
   onClaimed,
 }: {
   questId: string;
@@ -92,6 +97,9 @@ export function CampaignClaimV30Section({
   redeemInstructions?: string | null;
   questOrg?: string | null;
   questTitle?: string | null;
+  /** Mirror questCompleted dari panel — flip pasca-submit memicu refetch status
+   *  supaya tombol Claim FCFS muncul SEKETIKA tanpa refresh manual. */
+  submitted: boolean;
   onClaimed: () => void;
 }) {
   const tx = useTransactionStatus();
@@ -116,7 +124,7 @@ export function CampaignClaimV30Section({
 
   useEffect(() => {
     if (partyId) void loadStatus();
-  }, [partyId, loadStatus]);
+  }, [partyId, submitted, loadStatus]);
 
   if (!partyId || !status) return null;
 
@@ -241,6 +249,24 @@ export function CampaignClaimV30Section({
   }
 
   if (uiHint === "NOT_DRAWN" || !offer.exists) {
+    // Belum submit tugas → kartu penuntun langkah berikutnya (jangan diam).
+    if (!status.submitted && partyId) {
+      return status.selection === "FCFS" ? (
+        <StateCard tone="sky" icon={Clock} title="You&rsquo;re in — secure your slot">
+          <p>
+            Complete the task and press <strong>Submit</strong>. Your FCFS slot
+            and the Claim button appear the moment you submit.
+          </p>
+        </StateCard>
+      ) : (
+        <StateCard tone="sky" icon={Clock} title="You&rsquo;re in — join the draw">
+          <p>
+            Complete the task and press <strong>Submit</strong> to enter the
+            raffle. Winners can claim after the event ends.
+          </p>
+        </StateCard>
+      );
+    }
     // FCFS: slot sudah diamankan saat submit — infokan, jangan diam saja.
     if (status.hasSlot) {
       return (
