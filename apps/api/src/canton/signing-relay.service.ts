@@ -492,35 +492,40 @@ export class SigningRelayService {
       return;
     }
 
-    // ── v30: preapproval jalur proposal — provider ACCEPT sesaat setelah
-    // proposal buatan user masuk chain (bypass limit-200: tanpa ValidatorRight).
+    // ── v30: preapproval jalur proposal — provider ACCEPT di LATAR BELAKANG.
+    // Transaksi user (proposal) sudah on-chain saat response ini balik; accept
+    // adalah pekerjaan provider (2.5s tunggu index + query + submit ≈ 5-8s) dan
+    // TIDAK boleh memblokir response — kalau gagal, job harian me-retry
+    // (proposal idempoten). Tanpa ini toggle terasa ±10s (keluhan owner
+    // 2026-09-03); kini browser balik begitu proposal masuk chain.
     if (entry.flow === 'preapproval_create_proposal') {
       const provider =
         this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
-      // Kasih ACS index sebentar untuk melihat proposal (mirror index-lag guard).
-      await new Promise((r) => setTimeout(r, 2500));
-      const accept = await this.ledger
-        .acceptTransferPreapprovalProposal({
-          providerParty: provider,
-          receiverParty: entry.partyId,
-        })
-        .catch(
-          (err: unknown): { ok: false; error: string } => ({
-            ok: false,
-            error: String(err).slice(0, 160),
-          }),
-        );
-      if (accept.ok) {
-        this.logger.log(
-          `preapproval ENABLED (jalur proposal, tanpa ValidatorRight) user=${entry.userId.slice(0, 8)}… cid=${accept.transferPreapprovalCid?.slice(0, 14) ?? '?'}…`,
-        );
-      } else {
-        // Proposal tetap on-chain — job preapproval harian akan retry accept
-        // (proposal tidak hangus; idempoten per receiver).
-        this.logger.error(
-          `⚠️ preapproval accept GAGAL (proposal tetap hidup, job akan retry) user=${entry.userId.slice(0, 8)}… — ${accept.error}`,
-        );
-      }
+      const partyId = entry.partyId;
+      const userIdShort = entry.userId.slice(0, 8);
+      setTimeout(() => {
+        void this.ledger
+          .acceptTransferPreapprovalProposal({
+            providerParty: provider,
+            receiverParty: partyId,
+          })
+          .then((accept) => {
+            if (accept.ok) {
+              this.logger.log(
+                `preapproval ENABLED (jalur proposal, tanpa ValidatorRight) user=${userIdShort}… cid=${accept.transferPreapprovalCid?.slice(0, 14) ?? '?'}…`,
+              );
+            } else {
+              this.logger.error(
+                `⚠️ preapproval accept GAGAL (proposal tetap hidup, job harian retry) user=${userIdShort}… — ${accept.error}`,
+              );
+            }
+          })
+          .catch((err: unknown) => {
+            this.logger.error(
+              `⚠️ preapproval accept ERROR (job harian retry) user=${userIdShort}… — ${String(err).slice(0, 140)}`,
+            );
+          });
+      }, 2500).unref?.();
       return;
     }
 
