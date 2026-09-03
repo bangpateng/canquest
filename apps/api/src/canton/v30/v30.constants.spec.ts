@@ -181,6 +181,13 @@ describe('v30ClaimModel — matriks FCFS/Raffle × CC/USDCx/Code (spesifikasi ow
     expect(q(RewardType.CC_AND_INVITE).reward).toBe('TOKEN_AND_CODE');
     expect(q(RewardType.CC_AND_CODE_RAFFLE).selection).toBe('RAFFLE');
   });
+  it('5 kombinasi final (owner 2026-09-04): FCFS Token+Code DIHAPUS — tipe Code selalu CODE murni', () => {
+    expect(q(RewardType.INVITE_CODE_FCFS).reward).toBe('CODE');
+    expect(q(RewardType.INVITE_CODE_RANDOM).reward).toBe('CODE');
+    // Token+Code hanya via CC_AND_* (raffle)
+    expect(q(RewardType.CC_ONLY).reward).toBe('TOKEN_CC');
+    expect(q(RewardType.CC_MANUAL).reward).toBe('TOKEN_CC');
+  });
 
   // ── OFFCHAIN / tolak silang ──
   it('WAITLIST_EMAIL → offchain, tanpa klaim on-chain', () => {

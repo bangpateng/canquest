@@ -687,6 +687,7 @@ export function QuestTaskPanel({
 
       {questCompleted &&
         !isQuestHub &&
+        !isV30 &&
         !showCcDrawClaim &&
         !showInviteClaim &&
         !showCcAndCodeRaffleClaim && (

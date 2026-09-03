@@ -148,16 +148,6 @@ export function v30RewardKindFor(params: {
   const isCcOnly = rt === RewardType.CC_ONLY || rt === RewardType.CC_MANUAL;
   const isBoth = rt === RewardType.CC_AND_INVITE || rt === RewardType.CC_AND_CODE_RAFFLE;
 
-  if (isCodeType && codeHash && params.rewardAmountCc > 0) {
-    // Tipe Code + CC amount > 0 ⇒ kombinasi Token+Code (spesifikasi owner:
-    // FCFS/Raffle Token+Code adalah kombinasi sah — 6 tipe).
-    return {
-      label: 'TOKEN_AND_CODE',
-      json: { tag: 'TokenAndCode', value: { ...tokenLeg, codeHash } },
-      hasToken: true,
-      hasCode: true,
-    };
-  }
   if (isCodeType && codeHash) {
     return {
       label: 'CODE_ONLY',
@@ -245,8 +235,6 @@ export function v30ClaimModel(quest: {
 }): V30ClaimModel {
   const rt = String(quest.rewardType);
   const token = String(quest.rewardToken ?? 'CC').toUpperCase() === 'USDCX' ? 'USDCx' : 'CC';
-  const ccAmount = Number(quest.rewardCc ?? 0) || 0;
-  const hasTokenLeg = ccAmount > 0;
   const tokenKind = token === 'USDCx' ? 'TOKEN_USDCX' : 'TOKEN_CC';
   const requiresLock =
     quest.entryGateMode === 'CC_ONLY' ||
@@ -259,14 +247,13 @@ export function v30ClaimModel(quest: {
     requiresLock,
   });
 
+  // ── 5 KOMBINASI FINAL (keputusan owner 2026-09-04: FCFS Token+Code DIHAPUS) ──
+  // FCFS Token | FCFS Code | Raffle Token | Raffle Code | Raffle Token+Code.
+  // Tipe Code + rewardCc>0 DITOLAK di createQuest — bukan diam-diam dikonversi.
+
   // ── FCFS: peminang pertama ──
   if (rt === 'INVITE_CODE_FCFS') {
-    return {
-      selection: 'FCFS',
-      reward: hasTokenLeg ? 'TOKEN_AND_CODE' : 'CODE',
-      allowed: true,
-      requiresLock,
-    };
+    return { selection: 'FCFS', reward: 'CODE', allowed: true, requiresLock };
   }
   if (rt === 'CC_ONLY') {
     return {
@@ -278,12 +265,7 @@ export function v30ClaimModel(quest: {
   }
   // ── Raffle: admin draw ──
   if (rt === 'INVITE_CODE_RANDOM' || rt === 'INVITE_CODE') {
-    return {
-      selection: 'RAFFLE',
-      reward: hasTokenLeg ? 'TOKEN_AND_CODE' : 'CODE',
-      allowed: true,
-      requiresLock,
-    };
+    return { selection: 'RAFFLE', reward: 'CODE', allowed: true, requiresLock };
   }
   if (rt === 'CC_MANUAL') {
     return {

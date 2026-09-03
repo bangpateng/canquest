@@ -338,9 +338,36 @@ export class QuestsService {
         entryGateMode: true,
         entryCcLock: true,
         entryCostPoints: true,
+        ledgerPackage: true,
       },
     });
     if (!quest) throw new NotFoundException('Quest not found');
+
+    // ── v30: eligibility PER-EVENT ──────────────────────────────────────────
+    // Spesifikasi owner: 1 event = 1 lock. Lock campaign lain TIDAK membuat
+    // user eligible di sini — hanya lock yang diverifikasi utk QUEST INI
+    // (CampaignEligibilityLedger per quest, hasil verifikasi ledger holders=
+    // [validator]). Tanpa ini badge menampilkan tier global yang menyesatkan.
+    if (isV30Quest(quest)) {
+      const perEvent = await this.prisma.campaignEligibilityLedger.findFirst({
+        where: { questId, userId, status: 'ELIGIBLE' },
+        select: { amount: true },
+      });
+      const eligible = !!perEvent;
+      const amount = perEvent?.amount ?? 0;
+      return {
+        eligible,
+        mode: quest.entryGateMode as EntryGateMode,
+        ccLockAmount: quest.entryCcLock ?? 0,
+        entryCostPoints: quest.entryCostPoints ?? 0,
+        lockedCc: amount,
+        netPoints: 0,
+        hasEntry: false,
+        reason: eligible
+          ? `Lock verified for this event (${amount} CC).`
+          : `Lock ${(quest.entryCcLock ?? 0).toString()} CC for THIS event to join — locks from other events don't count.`,
+      };
+    }
 
     // Bukan CAMPAIGN (mis. EARN_HUB) → tidak ada gate, selalu eligible.
     if (quest.questKind !== QuestKind.CAMPAIGN) {
@@ -2714,6 +2741,24 @@ export class QuestsService {
         const model = v30ClaimModel(v30quest);
         if (model.selection === 'FCFS') {
           return this.submitV30Fcfs(userId, v30quest);
+        }
+        // RAFFLE: eligibility WAJIB per-event — lock campaign lain tidak berlaku
+        // (spesifikasi owner: 1 event 1 lock; CampaignEligibilityLedger per quest).
+        if (model.requiresLock) {
+          const eligible = await this.prisma.campaignEligibilityLedger.findFirst({
+            where: { questId, userId, status: 'ELIGIBLE' },
+            select: { id: true },
+          });
+          if (!eligible) {
+            return {
+              ok: false,
+              message: 'Lock CC for THIS event first — locks from other events don\'t count.',
+              rewardCc: 0,
+              inviteCode: null,
+              rewardStatus: await this.getQuestRewardStatus(userId, questId),
+              ledger: this.emptyLedgerResult(),
+            };
+          }
         }
       }
     }

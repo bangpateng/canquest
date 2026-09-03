@@ -566,6 +566,18 @@ export class AdminService {
       correctAnswer?: string;
     }>;
   }) {
+    // Kombinasi tak didukung (keputusan owner 2026-09-04): tipe Code murni
+    // (FCFS/Raffle) TIDAK boleh membawa reward token — Token+Code hanya via
+    // CC_AND_CODE_RAFFLE / CC_AND_INVITE (raffle). Tolak eksplisit.
+    const rt0 = (data.rewardType ?? RewardType.CC_ONLY) as string;
+    if (
+      (rt0 === 'INVITE_CODE_FCFS' || rt0 === 'INVITE_CODE_RANDOM' || rt0 === 'INVITE_CODE') &&
+      (data.rewardCc ?? 0) > 0
+    ) {
+      throw new BadRequestException(
+        'Unsupported combo: Code reward type cannot carry a token amount. Set CC amount to 0, or use Token + Code Raffle for combined rewards.',
+      );
+    }
     this.assertQuestSchedule(data.startsAt, data.endsAt);
     // Optional ecosystem partner link — denormalize org/logo/socials dari profil.
     const partner = data.partnerId
