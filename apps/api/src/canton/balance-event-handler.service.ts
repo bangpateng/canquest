@@ -310,12 +310,29 @@ export class BalanceEventHandlerService
     // STEP 3: Insert history row TRANSFER_IN (kalau controller belum catat).
     // Idempotent via @@unique([userId, ledgerTxId]).
     try {
+      // FIX (2026-09-03): cari PENGIRIM dari baris TRANSFER_OUT yang cocok
+      // (same cantonUpdateId, user berbeda) — BUKAN referenceId = diri sendiri.
+      // Salah isi = baris ter-filter isSelfReferenceWssRow → received tidak
+      // pernah tampil di Activity/badge (bug yang sama dengan recordReceiverAccept).
+      const senderRow = await this.prisma.ccTransaction.findFirst({
+        where: {
+          cantonUpdateId: updateId,
+          type: 'TRANSFER_OUT',
+          userId: { not: user.userId },
+        },
+        select: { userId: true },
+      });
+      const senderUser = senderRow
+        ? await this.users.findById(senderRow.userId)
+        : null;
+      const senderPartyId = senderUser?.cantonPartyId ?? null;
+
       await this.users.recordTransaction({
         userId: user.userId,
         amountCc: totalAmount,
         type: 'TRANSFER_IN',
         description: `Received ${totalAmount.toFixed(6)} CC (on-chain)`,
-        referenceId: ownerPartyId,
+        referenceId: senderPartyId ?? ownerPartyId, // ← pengirim; fallback diri jika eksternal
         ledgerTxId: `wss:${updateId}`,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
