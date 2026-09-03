@@ -507,12 +507,22 @@ function ActiveLockRow({
   // Format countdown dd/hh/mm/ss (frontend-only).
   const countdown = formatCountdown(remainingMs);
 
+  // v30 campaign lock (termKey "v30-…") vs savings lock — label pembeda
+  // supaya jelas mana lock campaign (terbuka saat campaign berakhir) dan
+  // mana tabungan pribadi berterm.
+  const isCampaignLock = lock.termKey.startsWith("v30-");
+
   return (
     <li className="rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[var(--foreground)]">
-            {lock.amountCc} CC · {termLabel(lock.termKey)}
+            {lock.amountCc} CC ·{" "}
+            {isCampaignLock ? (
+              <span className="text-canton">Campaign lock</span>
+            ) : (
+              termLabel(lock.termKey)
+            )}
           </p>
           <p className={cn("text-xs font-medium", ready ? "text-canton" : "text-[var(--muted-foreground)]")}>
             {ready ? "Unlocked" : `Unlock ${countdown}`}
