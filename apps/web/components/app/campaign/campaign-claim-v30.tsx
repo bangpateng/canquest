@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ArrowRight, Clock, Gift, Unlock } from "lucide-react";
+import { AlertTriangle, Clock, Gift, Trophy, Unlock } from "lucide-react";
 import Link from "next/link";
 import { CampaignClaimCta } from "@/components/app/campaign/campaign-claim-cta";
+import { CampaignStatusRow } from "@/components/app/campaign/campaign-status-row";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
@@ -202,6 +203,9 @@ export function CampaignClaimV30Section({
     if (st === "Revealed" && status.revealedCode) {
       return (
         <div className="space-y-3">
+          <CampaignStatusRow tone="emerald" icon={Trophy} strokeWidth={2.4} label="Reward Claimed">
+            You won · your code is open below
+          </CampaignStatusRow>
           <RewardReveal
             inviteCode={status.revealedCode}
             rewardType={rewardType}
@@ -214,68 +218,56 @@ export function CampaignClaimV30Section({
     if (st === "RewardPending") {
       // UI-STATES.md: JANGAN "Success". Arahkan ke menu offer + deadline.
       return (
-        <StateCard tone="amber" icon={Clock} title="Check your offers">
-          <p>
-            Your reward is waiting in your wallet&apos;s offer menu.
-            {countdown ? ` You have ${countdown}.` : ""}
-          </p>
+        <CampaignStatusRow tone="amber" icon={Clock} label="Check your offers">
+          Your reward is waiting in your wallet&rsquo;s offer menu
+          {countdown ? ` — you have ${countdown}.` : "."}{" "}
           <Link
             href="/wallet"
-            className="inline-flex items-center gap-1 text-sm font-medium text-amber-300 hover:text-amber-200"
+            className="font-semibold text-amber-600 underline underline-offset-2"
           >
-            Open wallet offers <ArrowRight className="h-3.5 w-3.5" />
+            Open wallet offers
           </Link>
-        </StateCard>
+        </CampaignStatusRow>
       );
     }
     if (st === "RewardExpired") {
       return (
-        <StateCard tone="rose" icon={AlertTriangle} title="Reward expired">
-          <p>
-            The reward offer expired before it was received. The claim fee is
-            not refunded by the contract — contact support if you believe this
-            is an error.
-          </p>
-        </StateCard>
+        <CampaignStatusRow tone="neutral" icon={AlertTriangle} label="Reward expired">
+          The offer expired before the reward was received — the claim fee is
+          not refunded. Contact support if you believe this is an error.
+        </CampaignStatusRow>
       );
     }
     if (st === "Settled" || st === "Withdrawn") {
       return (
-        <StateCard tone="emerald" icon={Gift} title="Reward sent to your wallet">
-          <p>Your reward was delivered directly to your wallet.</p>
-        </StateCard>
+        <CampaignStatusRow tone="emerald" icon={Gift} label="Reward sent">
+          Your reward was delivered directly to your wallet.
+        </CampaignStatusRow>
       );
     }
   }
 
   if (uiHint === "NOT_DRAWN" || !offer.exists) {
-    // Belum submit tugas → kartu penuntun langkah berikutnya (jangan diam).
+    // Belum submit tugas → baris penuntun langkah berikutnya (jangan diam).
     if (!status.submitted && partyId) {
       return status.selection === "FCFS" ? (
-        <StateCard tone="sky" icon={Clock} title="You&rsquo;re in — secure your slot">
-          <p>
-            Complete the task and press <strong>Submit</strong>. Your FCFS slot
-            and the Claim button appear the moment you submit.
-          </p>
-        </StateCard>
+        <CampaignStatusRow tone="sky" icon={Clock} label="You&rsquo;re in">
+          Complete the task and press Submit — your FCFS slot and the Claim
+          button appear the moment you submit.
+        </CampaignStatusRow>
       ) : (
-        <StateCard tone="sky" icon={Clock} title="You&rsquo;re in — join the draw">
-          <p>
-            Complete the task and press <strong>Submit</strong> to enter the
-            raffle. Winners can claim after the event ends.
-          </p>
-        </StateCard>
+        <CampaignStatusRow tone="sky" icon={Clock} label="You&rsquo;re in">
+          Complete the task and press Submit to enter the raffle — winners can
+          claim after the event ends.
+        </CampaignStatusRow>
       );
     }
     // FCFS: slot sudah diamankan saat submit — infokan, jangan diam saja.
     if (status.hasSlot) {
       return (
-        <StateCard tone="sky" icon={Clock} title="FCFS slot secured">
-          <p>
-            Your slot is locked in. The claim button appears here once the event
-            ends.
-          </p>
-        </StateCard>
+        <CampaignStatusRow tone="sky" icon={Clock} label="FCFS slot secured">
+          Your slot is locked in — the Claim button appears once the event ends.
+        </CampaignStatusRow>
       );
     }
     return null;
@@ -283,12 +275,9 @@ export function CampaignClaimV30Section({
 
   if (uiHint === "OFFER_EXPIRED") {
     return (
-      <StateCard tone="rose" icon={Clock} title="Claim window closed">
-        <p>
-          Your claim offer expired.
-          Contact the campaign operator.
-        </p>
-      </StateCard>
+      <CampaignStatusRow tone="neutral" icon={Clock} label="Claim window closed">
+        Your claim offer expired — contact the campaign operator.
+      </CampaignStatusRow>
     );
   }
 
@@ -301,36 +290,46 @@ export function CampaignClaimV30Section({
       {passphraseModal}
 
       {needsUnlock ? (
-        <StateCard tone="amber" icon={Unlock} title="Unlock CC to claim">
-          <p>
-            You need {fee} CC free balance to pay the claim fee. Your locked CC
-            unlocks automatically when the campaign ends — unlock it in your
-            wallet first, then come back.
-          </p>
+        <CampaignStatusRow tone="amber" icon={Unlock} label="Unlock CC to claim">
+          You need {fee} CC free balance for the fee —{" "}
           <Link
             href="/wallet"
-            className="inline-flex items-center gap-1 text-sm font-medium text-amber-300 hover:text-amber-200"
+            className="font-semibold text-amber-600 underline underline-offset-2"
           >
-            Go to wallet <ArrowRight className="h-3.5 w-3.5" />
+            unlock your CC in the wallet
           </Link>
-        </StateCard>
+          , then come back.
+        </CampaignStatusRow>
       ) : (
         <>
           {noPreapproval ? (
-            <StateCard tone="sky" icon={AlertTriangle} title="Enable instant receive">
-              <p>
-                Instant receive (preapproval) is off — your reward will sit in
-                the wallet offer menu and must be accepted manually. Enable it
-                in Settings for direct delivery.
-              </p>
+            <CampaignStatusRow tone="sky" icon={AlertTriangle} label="Instant receive is off">
+              Your reward will wait in the wallet offer menu and must be
+              accepted manually —{" "}
               <Link
                 href="/settings"
-                className="inline-flex items-center gap-1 text-sm font-medium text-sky-300 hover:text-sky-200"
+                className="font-semibold text-sky-600 underline underline-offset-2"
               >
-                Open settings <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </StateCard>
+                enable instant receive
+              </Link>{" "}
+              for direct delivery.
+            </CampaignStatusRow>
           ) : null}
+
+          <CampaignStatusRow
+            tone="emerald"
+            icon={Trophy}
+            strokeWidth={2.4}
+            label={status.selection === "FCFS" ? "FCFS Reward" : "Raffle Winner"}
+          >
+            You won · claim your{" "}
+            {hasCode
+              ? offer.rewardKind === "TOKEN_AND_CODE"
+                ? "token + code"
+                : "code"
+              : "reward"}{" "}
+            below
+          </CampaignStatusRow>
 
           <CampaignClaimCta
             label={`Claim${fee > 0 ? ` (fee ${fee} CC)` : ""}`}
@@ -367,35 +366,6 @@ export function CampaignClaimV30Section({
           />
         </>
       )}
-    </div>
-  );
-}
-
-/** Kartu status sederhana (mirror CampaignStatusRow tones). */
-function StateCard({
-  tone,
-  icon: Icon,
-  title,
-  children,
-}: {
-  tone: "emerald" | "amber" | "rose" | "sky";
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  children: React.ReactNode;
-}) {
-  const tones: Record<string, string> = {
-    emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
-    amber: "border-amber-500/30 bg-amber-500/10 text-amber-200",
-    rose: "border-rose-500/30 bg-rose-500/10 text-rose-200",
-    sky: "border-sky-500/30 bg-sky-500/10 text-sky-200",
-  };
-  return (
-    <div className={`rounded-xl border p-4 ${tones[tone]}`}>
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <Icon className="h-4 w-4" />
-        {title}
-      </div>
-      <div className="mt-1 space-y-1 text-sm text-current/80">{children}</div>
     </div>
   );
 }
