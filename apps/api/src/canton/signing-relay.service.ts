@@ -535,11 +535,36 @@ export class SigningRelayService {
       feeCc: number;
       feeParty: string;
       atomicFee?: boolean;
+      transferKind?: string;
       recipientPartyId: string;
       recipientLabel: string;
       memo: string;
     };
     const updateId = result?.updateId;
+    const isOffer = meta.transferKind === 'offer';
+
+    // OFFER path: cari TransferInstruction CID yang baru dibuat utk receiver
+    // supaya baris bisa di-flip oleh markTransferInstructionSettled saat
+    // penerima accept/reject, atau withdraw sender (spesifikasi owner: offer
+    // menggantung = PENDING, bukan langsung COMPLETED).
+    let transferInstructionCid: string | null = null;
+    if (isOffer) {
+      try {
+        await new Promise((r) => setTimeout(r, 1500)); // ACS index settle
+        const receiverOffers = await this.ledger.queryPendingOffers(
+          meta.recipientPartyId,
+          'incoming',
+        );
+        // Match by amount (yang baru, paling recent)
+        const match = receiverOffers.find(
+          (o) => Math.abs(parseFloat(o.amount) - meta.amount) < 1e-6,
+        );
+        transferInstructionCid = match?.contractId ?? null;
+      } catch {
+        /* best-effort — tanpa CID, status tetap PENDING tapi tidak auto-flip */
+      }
+    }
+
     try {
       await this.users.recordTransaction({
         userId: entry.userId,
@@ -549,7 +574,16 @@ export class SigningRelayService {
         counterparty: meta.recipientPartyId,
         ledgerTxId: updateId,
         cantonUpdateId: updateId,
+        // OFFER: dana sudah keluar tapi belum diterima → PENDING sampai
+        // accept/reject/withdraw. DIRECT (preapproval) → langsung COMPLETED.
+        status: isOffer ? 'PENDING' : 'COMPLETED',
+        transferInstructionCid,
       });
+      if (isOffer) {
+        this.logger.log(
+          `send_cc OFFER → TRANSFER_OUT PENDING user=${entry.userId.slice(0, 8)}… amount=${meta.amount} → ${meta.recipientLabel} cid=${transferInstructionCid?.slice(0, 14) ?? '?'}`,
+        );
+      }
     } catch (err) {
       this.logger.error(
         `⚠️ AUDIT-TRAIL LOSS: relay send_cc SUCCEEDED on-chain (updateId=${updateId ?? 'n/a'}) ` +
@@ -919,6 +953,7 @@ export class SigningRelayService {
           amount,
           feeCc,
           feeParty: feePartyRaw ?? '',
+          transferKind: main.transferKind,
           recipientPartyId,
           recipientLabel,
           memo,
