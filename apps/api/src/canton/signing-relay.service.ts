@@ -676,21 +676,31 @@ export class SigningRelayService {
 
       if (senderCc) {
         // CC transfer — record TRANSFER_IN utk receiver.
+        // FIX (owner 2026-09-03): referenceId HARUS party ID PENGIRIM (lawan
+        // transaksi dari sudut pandang penerima) — BUKAN disalin dari
+        // senderCc.referenceId yang berisi party ID PENERIMA. Salah salin =
+        // baris terfilter isSelfReferenceWssRow ("(You)→(You)") → received
+        // tidak pernah tampil di Activity/notification badge.
+        const senderUser = await this.users.findById(senderCc.userId);
+        const senderPartyId = senderUser?.cantonPartyId ?? null;
         await this.users.recordTransaction({
           userId: receiverUserId,
           amountCc: Math.abs(Number(senderCc.amountMicroCc)) / 1_000_000,
           type: 'TRANSFER_IN',
           description: senderCc.description ?? 'Received CC',
-          referenceId: senderCc.referenceId,
+          referenceId: senderPartyId, // ← party pengirim, bukan penerima
           ledgerTxId: updateId,
           cantonUpdateId: updateId,
           status: 'COMPLETED',
         });
         this.logger.log(
-          `accept_offer receiver TRANSFER_IN recorded: user=${receiverUserId.slice(0, 8)} amount=${Math.abs(Number(senderCc.amountMicroCc)) / 1_000_000}`,
+          `accept_offer receiver TRANSFER_IN recorded: user=${receiverUserId.slice(0, 8)} amount=${Math.abs(Number(senderCc.amountMicroCc)) / 1_000_000} from=${senderPartyId?.split('::')[0] ?? '?'}`,
         );
       } else if (senderToken) {
         // Token (USDCx dll) — record TOKEN_TRANSFER_IN utk receiver.
+        // FIX yang sama: referenceId = party pengirim.
+        const tokenSenderUser = await this.users.findById(senderToken.userId);
+        const tokenSenderPartyId = tokenSenderUser?.cantonPartyId ?? null;
         await this.users.recordTokenTransaction({
           userId: receiverUserId,
           amount: Math.abs(Number(senderToken.amount)),
@@ -698,7 +708,7 @@ export class SigningRelayService {
           instrumentAdmin: senderToken.instrumentAdmin ?? '',
           type: 'TOKEN_TRANSFER_IN',
           description: senderToken.description ?? 'Token received',
-          referenceId: senderToken.referenceId,
+          referenceId: tokenSenderPartyId,
           ledgerTxId: updateId,
           cantonUpdateId: updateId,
           status: 'COMPLETED',
