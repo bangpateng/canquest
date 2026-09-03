@@ -7,7 +7,7 @@ import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 import { useMe } from "@/lib/hooks/use-me";
 import { getWalletKeyMeta, unlock, signBytesHex, tryDeviceAutoUnlock } from "@/lib/wallet/key-manager";
 import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
-import { signRelayTransaction } from "@/lib/wallet/sign-relay";
+import { signRelayPrepared, signRelayTransaction } from "@/lib/wallet/sign-relay";
 
 /**
  * Sign raw bytes and return hex-encoded signature.
@@ -337,19 +337,13 @@ function ExternalPreapprovalRow() {
         }
         if (!prepRaw?.hash) throw new Error(prepRaw?.message ?? "Prepare failed");
 
-        const hashBytes = new Uint8Array(
-          (String(prepRaw.hash).match(/.{2}/g) ?? []).map((b) => parseInt(b, 16)),
+        // Jalur proposal (bypass limit-200): hash STANDAR relay base64 —
+        // sign + execute sama seperti flow relay lain; provider accept
+        // dijalankan backend di bookkeeping execute.
+        await signRelayPrepared(
+          { hash: prepRaw.hash, description: prepRaw.description },
+          { onWalletLocked: () => promptPassphrase("Enable instant receive (90 days)") },
         );
-        const sigHex = await signHashRaw(hashBytes, promptPassphrase);
-
-        const exec = await fetch("/api/party/sign/preapproval/execute", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signature: sigHex }),
-        });
-        const execRaw = await exec.json().catch(() => null);
-        if (!exec.ok) throw new Error(execRaw?.message ?? "Execute failed");
         setOn(true);
       } else {
         const res = await fetch("/api/party/sign/preapproval/disable", {

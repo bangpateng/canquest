@@ -5973,6 +5973,145 @@ export class CantonLedgerService {
   }
 
   /**
+   * Cari TransferPreapprovalProposal AKTIF milik receiver (dibuat user via
+   * relay). Proposal: signatory receiver, observer provider — terlihat di ACS
+   * provider. Return {contractId, payload}.
+   */
+  async findPreapprovalProposal(
+    providerParty: string,
+    receiverParty: string,
+  ): Promise<{ contractId: string; payload: Record<string, unknown> } | null> {
+    const contracts = await this.queryContractsByTemplate(
+      providerParty,
+      '#splice-wallet:Splice.Wallet.TransferPreapproval:TransferPreapprovalProposal',
+    );
+    for (const c of contracts) {
+      if (
+        typeof c.payload?.receiver === 'string' &&
+        cantonPartyIdsEqual(c.payload.receiver, receiverParty)
+      ) {
+        return { contractId: c.contractId, payload: c.payload };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * ACCEPT TransferPreapprovalProposal — jalur bypass limit-200 party
+   * (dokumen Canton Scalability + keputusan owner 2026-09-04):
+   *
+   *   user   : create TransferPreapprovalProposal (signatory receiver) —
+   *            ditandatangani di browser via signing relay (satu tanda tangan)
+   *   backend: exercise TransferPreapprovalProposal_Accept (controller
+   *            provider, actAs [provider]) → di DALAM body-nya
+   *            AmuletRules_CreateTransferPreapproval → TransferPreapproval
+   *            (3 signatory) TANPA ValidatorRight. Otoritas receiver diwarisi
+   *            dari signatory proposal (pola inherited-authority yang sama
+   *            dengan ClaimOffer v30).
+   *
+   * Auto-renew tetap jalan karena provider = validator operator.
+   */
+  async acceptTransferPreapprovalProposal(params: {
+    providerParty: string;
+    receiverParty: string;
+    lifetimeDays?: number;
+  }): Promise<{
+    ok: boolean;
+    transferPreapprovalCid?: string;
+    updateId?: string;
+    error?: string;
+  }> {
+    const { providerParty, receiverParty, lifetimeDays = 90 } = params;
+
+    // 1) Proposal aktif milik receiver.
+    const proposal = await this.findPreapprovalProposal(providerParty, receiverParty);
+    if (!proposal) {
+      return { ok: false, error: 'TransferPreapprovalProposal tidak ditemukan (user belum sign / sudah dipakai)' };
+    }
+
+    // 2) Context + input pembayaran — mirror createTransferPreapprovalViaLedger.
+    const amuletRules = await this.fetchScanProxyContract('amulet-rules');
+    if (!amuletRules) return { ok: false, error: 'scan-proxy /amulet-rules failed' };
+    const openRound = await this.fetchScanProxyContract('open-and-issuing-mining-rounds');
+    if (!openRound) {
+      return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+    }
+    const holdings = await this.queryAmuletHoldingsRaw(providerParty);
+    if (holdings.length === 0) {
+      return { ok: false, error: 'Provider tidak punya Amulet utk bayar fee preapproval' };
+    }
+    const round = openRound.round ?? 0;
+    const scored = holdings
+      .map((h) => {
+        const init = parseFloat(h.initialAmount) || 0;
+        const rate = parseFloat(h.ratePerRound) || 0;
+        const decay = Math.max(0, round - (h.createdAtRound || 0)) * rate;
+        return { cid: h.contractId, eff: Math.max(0, init - decay) };
+      })
+      .sort((a, b) => b.eff - a.eff);
+    if (scored[0].eff < 2) {
+      return { ok: false, error: `Provider Amulet terlalu kecil (eff ~${scored[0].eff.toFixed(4)} CC)` };
+    }
+
+    // 3) Exercise Accept (controller provider) — single command.
+    const expiresAt = new Date(
+      Date.now() + lifetimeDays * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const choiceArgument = {
+      context: {
+        amuletRules: amuletRules.contractId,
+        context: {
+          openMiningRound: openRound.contractId,
+          issuingMiningRounds: [],
+          validatorRights: [],
+        },
+      },
+      inputs: [{ tag: 'InputAmulet', value: scored[0].cid }],
+      expiresAt,
+    };
+    const disclosed = [
+      { templateId: amuletRules.templateId, contractId: amuletRules.contractId, createdEventBlob: amuletRules.blob },
+      { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+    ];
+    const { ok, status, text } = await this.exerciseChoice(
+      proposal.contractId,
+      '#splice-wallet:Splice.Wallet.TransferPreapproval:TransferPreapprovalProposal',
+      'TransferPreapprovalProposal_Accept',
+      choiceArgument,
+      [providerParty],
+      `v30-pa-accept-${createHash('sha256').update(proposal.contractId).digest('hex').slice(0, 24)}`,
+      'submit-and-wait-for-transaction-tree',
+      disclosed,
+    );
+    if (!ok) {
+      return { ok: false, error: `Accept gagal (${status}): ${text.slice(0, 220)}` };
+    }
+    let transferPreapprovalCid: string | undefined;
+    try {
+      const parsed = JSON.parse(text) as {
+        eventsById?: Record<string, { templateId?: string; contractId?: string }>;
+      };
+      for (const ev of Object.values(parsed.eventsById ?? {})) {
+        if (String(ev.templateId ?? '').endsWith(':TransferPreapproval') && ev.contractId) {
+          transferPreapprovalCid = ev.contractId;
+          break;
+        }
+      }
+    } catch {
+      /* tree parse best-effort — cid opsional */
+    }
+    this.logger.log(
+      `PreapprovalProposal ACCEPTED receiver=${receiverParty.split('::')[0]} → expires ${expiresAt}` +
+        (transferPreapprovalCid ? ` cid=${transferPreapprovalCid.slice(0, 16)}…` : ''),
+    );
+    return {
+      ok: true,
+      transferPreapprovalCid,
+      updateId: extractUpdateIdFromTree(text) ?? undefined,
+    };
+  }
+
+  /**
    * v30: kontrak AKTIF milik party berdasarkan templateId (client-side filter).
    * Pakai WildcardFilter + filter templateId.endsWith — TemplateFilter menolak
    * package-hash penuh di MainNet (temuan yang sama dgn findLockedAmulets).

@@ -492,6 +492,38 @@ export class SigningRelayService {
       return;
     }
 
+    // ── v30: preapproval jalur proposal — provider ACCEPT sesaat setelah
+    // proposal buatan user masuk chain (bypass limit-200: tanpa ValidatorRight).
+    if (entry.flow === 'preapproval_create_proposal') {
+      const provider =
+        this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+      // Kasih ACS index sebentar untuk melihat proposal (mirror index-lag guard).
+      await new Promise((r) => setTimeout(r, 2500));
+      const accept = await this.ledger
+        .acceptTransferPreapprovalProposal({
+          providerParty: provider,
+          receiverParty: entry.partyId,
+        })
+        .catch(
+          (err: unknown): { ok: false; error: string } => ({
+            ok: false,
+            error: String(err).slice(0, 160),
+          }),
+        );
+      if (accept.ok) {
+        this.logger.log(
+          `preapproval ENABLED (jalur proposal, tanpa ValidatorRight) user=${entry.userId.slice(0, 8)}… cid=${accept.transferPreapprovalCid?.slice(0, 14) ?? '?'}…`,
+        );
+      } else {
+        // Proposal tetap on-chain — job preapproval harian akan retry accept
+        // (proposal tidak hangus; idempoten per receiver).
+        this.logger.error(
+          `⚠️ preapproval accept GAGAL (proposal tetap hidup, job akan retry) user=${entry.userId.slice(0, 8)}… — ${accept.error}`,
+        );
+      }
+      return;
+    }
+
     if (entry.flow === 'send_cc' || entry.flow === 'send_token') {
     const meta = entry.meta as {
       amount: number;
@@ -1554,13 +1586,16 @@ export class SigningRelayService {
   // ═══ M5b: PREAPPROVAL via ExternalPartySetupProposal ═══════════════════
 
   /**
-   * Prepare preapproval via validator API (bukan ledger API).
-   * Hash yang di-return: RAW 32 bytes hex-encoded (TANPA 1220 prefix).
-   * Browser sign raw bytes TANPA prefix — berbeda dari relay biasa!
+   * Prepare preapproval — JALUR PROPOSAL (bypass limit-200, keputusan owner
+   * 2026-09-04): user membuat TransferPreapprovalProposal via signing relay
+   * (hash standar base64 — SAMA seperti flow relay lain, browser memakai
+   * signRelayPrepared). TIDAK ada lagi panggilan validator setup-proposal →
+   * tidak lahir ValidatorRight baru. Accept dilakukan backend di bookkeeping
+   * execute (flow 'preapproval_create_proposal').
    */
   async preparePreapproval(
     userId: string,
-    publicKeyHex: string,
+    _publicKeyHex: string,
   ): Promise<{
     flow: string;
     hash: string | null;
@@ -1569,8 +1604,7 @@ export class SigningRelayService {
     alreadyEnabled?: boolean;
   }> {
     this.sweepExpired();
-    // Auto-clear stale pending dari auto-accept / attempt sebelumnya —
-    // preapproval prepare selalu boleh mulai fresh.
+    // Auto-clear stale pending — preapproval prepare selalu boleh mulai fresh.
     if (this.pending.has(userId)) {
       const existing = this.pending.get(userId);
       this.logger.warn(
@@ -1580,123 +1614,65 @@ export class SigningRelayService {
     }
 
     const user = await this.requireExternalUser(userId);
-    const valUrl = (this.config.get<string>('CANTON_VALIDATOR_URL') ?? '').replace(/\/$/, '');
-    if (!valUrl) throw new BadRequestException('CANTON_VALIDATOR_URL not set');
+    const provider =
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+    const dso = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ?? '';
+    if (!provider) throw new BadRequestException('CANTON_VALIDATOR_PARTY_ID not set');
+    if (!dso) throw new BadRequestException('CANTON_DSO_PARTY_ID not set');
 
-    // Preflight: fingerprint dari kunci browser HARUS sama dengan fingerprint di
-    // party ID. Kalau beda (user re-create wallet key tanpa re-register), semua
-    // signature akan ditolak validator dengan error kabur "0 valid signatures".
-    const partyFp = user.partyId.split('::')[1];
-    if (partyFp) {
-      const computed =
-        '1220' +
-        createHash('sha256')
-          .update(Buffer.concat([Buffer.from([0, 0, 0, 12]), Buffer.from(publicKeyHex, 'hex')]))
-          .digest('hex');
-      if (computed !== partyFp) {
-        throw new BadRequestException(
-          'Your wallet key does not match this wallet on-chain. ' +
-            'Restore your original key via Settings → Restore from Backup Key.',
-        );
-      }
-    }
-
-    const token = await this.getValidatorToken();
-    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-
-    // Step 1: Create or reuse setup proposal
-    let contractId: string | null = null;
-    const propRes = await fetch(`${valUrl}/api/validator/v0/admin/external-party/setup-proposal`, {
-      method: 'POST', headers, body: JSON.stringify({ user_party_id: user.partyId }),
-    });
-    const propText = await propRes.text();
-    if (propRes.ok) {
-      contractId = JSON.parse(propText).contract_id;
-    } else if (propRes.status === 409) {
-      // Dua makna 409 yang BERBEDA:
-      //  a. "TransferPreapproval contract already exists" → preapproval SUDAH AKTIF.
-      //     Tidak ada yang perlu di-sign — idempotent success (toggle harus ON).
-      //  b. Proposal accept masih hidup dari attempt sebelumnya → pakai contract_id itu.
-      if (/TransferPreapproval contract already exists/i.test(propText)) {
+    // Idempoten: preapproval sudah aktif → tidak ada yang perlu di-sign.
+    try {
+      const pa = await this.ledger.getTransferPreapprovalAuthoritative(user.partyId);
+      if (pa.active) {
         this.logger.log(
           `prepare preapproval: already enabled on-chain, user=${userId.slice(0, 8)}…`,
         );
         return {
-          flow: 'preapproval_enable', hash: null, commandId: '',
-          description: 'Instant receive already active', alreadyEnabled: true,
+          flow: 'preapproval_enable',
+          hash: null,
+          commandId: '',
+          description: 'Instant receive already active',
+          alreadyEnabled: true,
         };
       }
-      contractId = propText.match(/ContractId\(([^)]+)\)/)?.[1] ?? null;
+    } catch {
+      /* status unknown → lanjut; ledger yang memutuskan saat execute */
     }
-    if (!contractId) throw new BadRequestException(`Setup proposal failed: ${propText.slice(0, 150)}`);
 
-    // Step 2: Prepare accept
-    const prepRes = await fetch(`${valUrl}/api/validator/v0/admin/external-party/setup-proposal/prepare-accept`, {
-      method: 'POST', headers,
-      body: JSON.stringify({ user_party_id: user.partyId, contract_id: contractId }),
-    });
-    const prepText = await prepRes.text();
-    if (!prepRes.ok) throw new BadRequestException(`prepare-accept failed: ${prepText.slice(0, 150)}`);
-    const prep = JSON.parse(prepText);
-
-    const commandId = `relay-preapproval-${randomUUID()}`;
-    this.pending.set(userId, {
-      userId, flow: 'preapproval_enable', partyId: user.partyId, commandId,
-      prepared: {
-        __preapproval: true,
-        transaction: prep.transaction,
-        txHash: prep.tx_hash,
+    // CreateCommand proposal — bentuk PERSIS output
+    // sdk.amulet.preapproval.command.create() (template #splice-wallet,
+    // createArguments {provider, receiver, expectedDso}).
+    const command = {
+      CreateCommand: {
+        templateId:
+          '#splice-wallet:Splice.Wallet.TransferPreapproval:TransferPreapprovalProposal',
+        createArguments: {
+          provider,
+          receiver: user.partyId,
+          expectedDso: dso,
+        },
       },
-      meta: { contractId, publicKeyHex },
-      createdAt: Date.now(),
-    });
+    };
 
-    this.logger.log(`prepare preapproval user=${userId.slice(0, 8)}… hash=${prep.tx_hash.slice(0, 12)}…`);
-    return { flow: 'preapproval_enable', hash: prep.tx_hash, commandId, description: 'Enable instant receive (90 days)' };
+    return this.prepareWithCommands(userId, 'preapproval_create_proposal', [command], {
+      commandId: `v30-pa-propose-${createHash('sha256').update(user.partyId + Date.now()).digest('hex').slice(0, 24)}`,
+      description: 'Enable instant receive (90 days)',
+      partyId: user.partyId,
+    });
   }
 
   /**
-   * Execute preapproval via validator API submit-accept.
-   * Signature: raw 32 bytes hex-decoded tx_hash, TANPA 1220 prefix, hex-encoded sig.
+   * Execute preapproval — legacy jalur validator setup-proposal (TIDAK dipakai
+   * lagi; toggle kini memakai /party/sign/execute standar + bookkeeping accept
+   * di bawah). Dipertahankan hanya sebagai error jelas kalau ada client lama.
    */
   async executePreapproval(
-    userId: string,
-    signatureHex: string,
+    _userId: string,
+    _signatureHex: string,
   ): Promise<{ transferPreapprovalCid: string; updateId?: string }> {
-    const entry = this.pending.get(userId);
-    if (!entry || entry.flow !== 'preapproval_enable') {
-      throw new BadRequestException('No preapproval pending — run prepare again.');
-    }
-    const prep = entry.prepared as { __preapproval: boolean; transaction: string; txHash: string };
-    if (!prep?.__preapproval) throw new BadRequestException('Invalid pending entry.');
-
-    const valUrl = (this.config.get<string>('CANTON_VALIDATOR_URL') ?? '').replace(/\/$/, '');
-    const token = await this.getValidatorToken();
-    const pubKeyHex = (entry.meta as { publicKeyHex?: string })?.publicKeyHex;
-    if (!pubKeyHex) throw new BadRequestException('publicKeyHex missing from meta.');
-
-    const subRes = await fetch(`${valUrl}/api/validator/v0/admin/external-party/setup-proposal/submit-accept`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        submission: {
-          party_id: entry.partyId,
-          transaction: prep.transaction,
-          signed_tx_hash: signatureHex,
-          public_key: pubKeyHex,
-        },
-      }),
-    });
-    const subText = await subRes.text();
-    this.pending.delete(userId);
-
-    if (subRes.ok) {
-      const result = JSON.parse(subText);
-      this.logger.log(`preapproval ENABLED user=${userId.slice(0, 8)}… cid=${result.transfer_preapproval_contract_id?.slice(0, 16)}…`);
-      return { transferPreapprovalCid: result.transfer_preapproval_contract_id, updateId: result.update_id };
-    }
-    this.logger.warn(`preapproval submit failed: ${subText.slice(0, 200)}`);
-    throw new BadRequestException(`Preapproval failed: ${subText.slice(0, 150)}`);
+    throw new BadRequestException(
+      'Preapproval kini memakai jalur proposal — sign via /party/sign/execute (standar relay).',
+    );
   }
 
   /** Get Keycloak token for validator API calls. */
@@ -1706,22 +1682,18 @@ export class SigningRelayService {
    */
   async disablePreapproval(userId: string): Promise<{ ok: boolean }> {
     const user = await this.requireExternalUser(userId);
-    const valUrl = (this.config.get<string>('CANTON_VALIDATOR_URL') ?? '').replace(/\/$/, '');
-    if (!valUrl) throw new BadRequestException('CANTON_VALIDATOR_URL not set');
-    const token = await this.getValidatorToken();
+    const provider =
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+    if (!provider) throw new BadRequestException('CANTON_VALIDATOR_PARTY_ID not set');
 
-    const res = await fetch(
-      `${valUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encodeURIComponent(user.partyId)}`,
-      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
-    );
-    const text = await res.text();
-
-    if (res.ok || res.status === 404) {
-      this.logger.log(`preapproval disabled user=${userId.slice(0, 8)}…`);
+    // Jalur LEDGER (pengganti validator-API DELETE — bebas ValidatorRight):
+    // operator (provider) berhak cancel TransferPreapproval.
+    const res = await this.ledger.cancelTransferPreapprovalViaLedger(user.partyId);
+    if (res.ok || res.error?.includes('tidak ditemukan')) {
+      this.logger.log(`preapproval disabled (ledger) user=${userId.slice(0, 8)}…`);
       return { ok: true };
     }
-    this.logger.warn(`preapproval disable failed: ${text.slice(0, 200)}`);
-    throw new BadRequestException(`Disable failed: ${text.slice(0, 150)}`);
+    throw new BadRequestException(`Disable failed: ${res.error ?? 'unknown'}`);
   }
 
   private tokenCache: { token: string; exp: number } | null = null;

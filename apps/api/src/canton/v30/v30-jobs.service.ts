@@ -102,10 +102,48 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.renewPreapprovals();
       await this.expireLocks();
+      await this.acceptPendingPreapprovalProposals();
     } catch (err) {
       this.logger.error(`dailyTick error: ${String(err).slice(0, 200)}`);
     } finally {
       this.running = false;
+    }
+  }
+
+  /**
+   * Retry ACCEPT proposal preapproval yang gagal saat toggle (jalur bypass
+   * limit-200). Proposal tetap on-chain sampai di-accept — idempoten.
+   */
+  private async acceptPendingPreapprovalProposals(): Promise<void> {
+    try {
+      const provider =
+        this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+      if (!provider) return;
+      // Pemakai external yang preapproval-nya belum aktif tapi punya proposal.
+      const users = await this.prisma.user.findMany({
+        where: { walletKind: 'external', cantonPartyId: { not: null }, status: 'ACTIVE' },
+        select: { cantonPartyId: true },
+        take: 500,
+      });
+      for (const u of users) {
+        const pa = await this.ledger
+          .getTransferPreapprovalAuthoritative(u.cantonPartyId!)
+          .catch(() => null);
+        if (pa?.active) continue;
+        const proposal = await this.ledger
+          .findPreapprovalProposal(provider, u.cantonPartyId!)
+          .catch(() => null);
+        if (!proposal) continue;
+        const res = await this.ledger.acceptTransferPreapprovalProposal({
+          providerParty: provider,
+          receiverParty: u.cantonPartyId!,
+        });
+        this.logger.log(
+          `pa-proposal retry: user=${u.cantonPartyId!.split('::')[0]} → ${res.ok ? 'ACCEPTED' : `GAGAL: ${res.error}`}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`acceptPendingPreapprovalProposals error: ${String(err).slice(0, 140)}`);
     }
   }
 
