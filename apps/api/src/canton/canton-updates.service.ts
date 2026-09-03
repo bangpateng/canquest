@@ -229,6 +229,13 @@ const RECONNECT_MAX_DELAY_MS = 60_000;
 const TOKEN_REFRESH_LEAD_MS = 60_000;
 /** Fallback reconnect delay bila exp claim JWT tidak terbaca (240s = 300s - 60s). */
 const DEFAULT_RECONNECT_DELAY_MS = 240_000;
+/** Key baris checkpoint untuk stream ini di tabel LedgerStreamCheckpoint. */
+const STREAM_KEY = 'canton-updates';
+/** Maks umur checkpoint (jam) yang masih layak di-resume. Lebih tua dari ini
+ *  → mulai dari ledgerEnd (replay terlalu jauh; saldo ditangung reconciler). */
+const DEFAULT_RESUME_MAX_AGE_HOURS = 48;
+/** Debounce persist checkpoint (trailing) — batch burst event jadi 1 write. */
+const PERSIST_DEBOUNCE_MS = 1_500;
 
 @Injectable()
 export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
@@ -255,6 +262,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    *  dua-duanya memanggil startStream; tanpa guard, dua WS bisa terbentuk
    *  (yang lama leak — listener-nya inert tapi koneksi tetap hidup). */
   private connecting = false;
+  /** Debounce timer persist checkpoint ke DB (LedgerStreamCheckpoint). */
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Maks umur checkpoint (jam) yang masih di-resume saat startup. */
+  private readonly resumeMaxAgeHours: number;
   /** Track party yang punya created event sejak flush reconcile terakhir —
    *  dipakai untuk emit SSE `offer:new` ke potential receiver (idempoten). */
   private readonly partyHadCreated = new Set<string>();
@@ -277,6 +288,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       config.get<string>('CANTON_JSON_API_URL');
     this.baseUrl = ledgerUrl?.replace(/\/$/, '') ?? '';
     this.enabled = config.get<string>('CANTON_UPDATES_WS_ENABLED') === 'true';
+    this.resumeMaxAgeHours = Number(
+      config.get<string>('CANTON_UPDATES_RESUME_MAX_AGE_HOURS') ??
+        String(DEFAULT_RESUME_MAX_AGE_HOURS),
+    );
   }
 
   onModuleInit(): void {
@@ -413,6 +428,12 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     // Bersihkan debounce timers.
     for (const t of this.partyDebounce.values()) clearTimeout(t);
     this.partyDebounce.clear();
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    // Flush checkpoint best-effort supaya restart berikutnya resume akurat.
+    void this.persistCheckpointNow();
     this.updates$.complete();
   }
 
@@ -496,6 +517,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
     // Offset awal: kalau belum punya checkpoint, ambil dari ledgerEnd (offset
     // terbaru) supaya tidak replay seluruh history ledger (bisa jutaan event).
+    // Tapi CEGAH dulu cek checkpoint persist — kalau ada yang masih fresh,
+    // resume dari situ supaya event selama downtime di-replay, tidak hilang
+    // (pola "beginExclusive = last_offset tersimpan" — docs /v2/updates).
     // Tipe WAJIB number — AsyncAPI spec /v2/updates menolak string (close 1000).
     let beginExclusive: number | undefined;
     if (!this.lastOffset) {
@@ -518,10 +542,21 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         );
         return;
       }
-      this.lastOffset = beginExclusive;
-      this.logger.log(
-        `CantonUpdates: starting from ledgerEnd offset=${beginExclusive}`,
-      );
+      const resumed = await this.tryResumeFromCheckpoint(beginExclusive);
+      if (resumed !== null) {
+        const gap = beginExclusive - resumed;
+        beginExclusive = resumed;
+        this.lastOffset = resumed;
+        this.logger.log(
+          `CantonUpdates: RESUME from persisted checkpoint offset=${resumed} ` +
+            `(≈${gap} offset selama downtime akan di-replay — idempotent via WssBalanceApplied)`,
+        );
+      } else {
+        this.lastOffset = beginExclusive;
+        this.logger.log(
+          `CantonUpdates: starting from ledgerEnd offset=${beginExclusive}`,
+        );
+      }
     } else {
       beginExclusive = this.lastOffset;
     }
@@ -749,7 +784,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         : update.offset?.absolute;
     if (offsetRaw !== undefined && offsetRaw !== null) {
       const offsetNum = Number(offsetRaw);
-      if (Number.isFinite(offsetNum)) this.lastOffset = offsetNum;
+      if (Number.isFinite(offsetNum)) {
+        this.lastOffset = offsetNum;
+        this.schedulePersistCheckpoint();
+      }
     }
     const offset = this.lastOffset;
 
@@ -879,7 +917,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       | undefined;
     if (checkpoint?.value?.offset !== undefined) {
       const offsetNum = Number(checkpoint.value.offset);
-      if (Number.isFinite(offsetNum)) this.lastOffset = offsetNum;
+      if (Number.isFinite(offsetNum)) {
+        this.lastOffset = offsetNum;
+        this.schedulePersistCheckpoint();
+      }
       return null;
     }
 
@@ -925,6 +966,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       );
       if (Number.isFinite(num)) {
         this.lastOffset = num;
+        this.schedulePersistCheckpoint();
         return;
       }
     }
@@ -988,6 +1030,80 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Coba resume dari checkpoint persist (LedgerStreamCheckpoint).
+   * Return offset resume, atau null bila tidak layak (tidak ada baris /
+   * terlalu tua / > ledgerEnd / DB error) → caller fallback ke ledgerEnd.
+   *
+   * Dokumentasi Canton mewajibkan reconnect pakai `beginExclusive = last_offset`
+   * yang PERSIST (bukan 0, bukan head) supaya event selama downtime tidak
+   * hilang. Replay aman karena apply balance + insert history idempotent
+   * (WssBalanceApplied + @@unique([userId, ledgerTxId])).
+   */
+  private async tryResumeFromCheckpoint(
+    ledgerEnd: number,
+  ): Promise<number | null> {
+    try {
+      const cp = await this.prisma.ledgerStreamCheckpoint.findUnique({
+        where: { streamKey: STREAM_KEY },
+      });
+      if (!cp) return null;
+      const off = Number(cp.lastOffset);
+      if (!Number.isFinite(off) || off < 0) return null;
+      if (off >= ledgerEnd) return null; // tidak ada gap / ledger ter-reset
+      const ageHours =
+        (Date.now() - cp.updatedAt.getTime()) / 3_600_000;
+      if (ageHours > this.resumeMaxAgeHours) {
+        this.logger.warn(
+          `CantonUpdates: checkpoint offset=${off} terlalu tua ` +
+            `(${ageHours.toFixed(1)}h > ${this.resumeMaxAgeHours}h) — mulai dari ledgerEnd. ` +
+            `Event selama downtime TIDAK di-replay; saldo ditutup reconciler poll.`,
+        );
+        return null;
+      }
+      return off;
+    } catch (err) {
+      this.logger.warn(
+        `CantonUpdates: baca checkpoint gagal (fallback ledgerEnd): ${String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Jadwalkan persist checkpoint (debounced). Dipanggil tiap kali lastOffset
+   * maju — burst event digabung jadi 1 write per PERSIST_DEBOUNCE_MS.
+   */
+  private schedulePersistCheckpoint(): void {
+    if (this.persistTimer) return;
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      void this.persistCheckpointNow();
+    }, PERSIST_DEBOUNCE_MS);
+  }
+
+  /** Tulis lastOffset ke LedgerStreamCheckpoint (upsert, best-effort). */
+  private async persistCheckpointNow(): Promise<void> {
+    const off = this.lastOffset;
+    if (off === null || !Number.isFinite(off)) return;
+    try {
+      await this.prisma.ledgerStreamCheckpoint.upsert({
+        where: { streamKey: STREAM_KEY },
+        create: {
+          streamKey: STREAM_KEY,
+          lastOffset: BigInt(Math.trunc(off)),
+        },
+        update: { lastOffset: BigInt(Math.trunc(off)) },
+      });
+    } catch (err) {
+      // Non-fatal: offset in-memory tetap benar; hanya replay-setelah-restart
+      // yang melebar. Jangan ganggu stream.
+      this.logger.warn(
+        `CantonUpdates: persist checkpoint failed: ${String(err)}`,
+      );
+    }
+  }
 
   private async getTokenSafe(): Promise<string | null> {
     try {

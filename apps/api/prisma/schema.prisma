@@ -373,6 +373,36 @@ model TokenTransaction {
   @@index([userId, instrumentId, instrumentAdmin])
 }
 
+/// Checkpoint persist untuk stream WSS /v2/updates (CantonUpdatesService).
+/// Offset disimpan ke DB supaya restart API TIDAK kehilangan event selama
+/// downtime — resume dari offset ini (bukan ledgerEnd). Idempotency replay
+/// dijamin oleh WssBalanceApplied + @@unique([userId, ledgerTxId]) di tabel
+/// transaksi (pola "beginExclusive per-user persist" — docs Canton
+/// Finding & Reading Data / v2-updates).
+model LedgerStreamCheckpoint {
+  streamKey  String   @id // mis. "canton-updates"
+  lastOffset BigInt
+  updatedAt  DateTime @updatedAt
+}
+
+/// Guard idempotensi apply balance oleh WSS handler (BalanceEventHandler).
+/// Satu baris = satu (updateId, userId, scope) yang SUDAH di-apply ke
+/// CcBalance / CantexTokenBalance. Insert-BEFORE-apply (fail-closed): replay
+/// setelah restart (resume checkpoint) tidak akan double-credit saldo; kalau
+/// crash di antara, saldo miss sekali lalu dikoreksi reconciler — lebih aman
+/// daripada double-credit.
+model WssBalanceApplied {
+  id        String   @id @default(cuid())
+  updateId  String
+  userId    String
+  /// "cc" atau "token:<instrumentId>:<instrumentAdmin>" (lowercase).
+  scope     String
+  appliedAt DateTime @default(now())
+
+  @@unique([updateId, userId, scope])
+  @@index([userId])
+}
+
 /// Tipe event TokenTransaction (P2P token transfer on-chain, CIP-0056).
 enum TokenTxType {
   /// Sender mengirim token (offer dibuat di on-chain).

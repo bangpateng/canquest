@@ -25,6 +25,8 @@
  *   - ledgerTxId = updateId (per-event unique)
  *   - @@unique([userId, ledgerTxId]) di CcTransaction / TokenTransaction cegah duplikat
  *   - In-memory `processedUpdates` Set cegah reprocess same updateId (missed-dedup safety)
+ *   - WssBalanceApplied (DB) cegah double-increment saldo saat REPLAY setelah
+ *     restart API (resume dari checkpoint persist — insert-before-apply, fail-closed)
  *
  * Non-fatal:
  *   - Error satu event tidak crash handler. Wrap per-event try/catch.
@@ -151,6 +153,17 @@ export class BalanceEventHandlerService
     this.markProcessed(ev.updateId);
 
     try {
+      // ── 0. Exercised events DULU (accept/reject/withdraw offer) ──────────
+      // URUTAN PENTING: markTransferInstructionSettled men-stamp row PENDING
+      // sender (TRANSFER_OUT / TOKEN_TRANSFER_OUT) dengan cantonUpdateId =
+      // updateId transaksi ACCEPT ini. Lookup pengirim di applyCcIncrement /
+      // applyTokenIncrement (langkah 2-3) mencari by cantonUpdateId — kalau
+      // exercised belum jalan, row sender masih memakai updateId create-offer
+      // → tidak ketemu → referenceId null → row received kurang informatif.
+      for (const ex of ev.exercised) {
+        await this.handleExercisedEvent(ex, ev);
+      }
+
       // ── 1. AGGREGATE created Amulet events per owner ─────────────────────
       // Sum semua initialAmount Amulet yang owner-nya sama dalam 1 updateId.
       // Lalu apply 1x increment per user (bukan per event).
@@ -221,11 +234,6 @@ export class BalanceEventHandlerService
       for (const a of ev.archived) {
         await this.handleArchivedEvent(a);
       }
-
-      // ── 5. Exercised events: choice exercises (accept/reject offer) ──────
-      for (const ex of ev.exercised) {
-        await this.handleExercisedEvent(ex, ev);
-      }
     } catch (err) {
       // Error satu event tidak boleh crash handler. Log + lanjut.
       this.logger.warn(
@@ -253,6 +261,25 @@ export class BalanceEventHandlerService
     const user = await this.resolveUserByParty(ownerPartyId);
     if (!user) {
       // Owner bukan user Canquest (DSO, validator, fee, Cantex trading account).
+      return;
+    }
+
+    // STEP 0: Guard replay — insert dedup row SEBELUM apply (fail-closed).
+    // Resume dari checkpoint persist (restart API) me-replay event yang sudah
+    // pernah diproses; tanpa guard ini saldo ter-increment ganda. Kalau DB
+    // bermasalah, skip apply (miss sekali → dikoreksi reconciler; lebih aman
+    // daripada double-credit).
+    const applied = await this.tryMarkBalanceApplied(
+      updateId,
+      user.userId,
+      'cc',
+    );
+    if (!applied) {
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: skip CC +${totalAmount} untuk @${user.username ?? user.userId.slice(0, 8)} (sudah pernah di-apply / replay, updateId=${updateId.slice(0, 16)}…)`,
+        );
+      }
       return;
     }
 
@@ -332,7 +359,9 @@ export class BalanceEventHandlerService
         amountCc: totalAmount,
         type: 'TRANSFER_IN',
         description: `Received ${totalAmount.toFixed(6)} CC (on-chain)`,
-        referenceId: senderPartyId ?? ownerPartyId, // ← pengirim; fallback diri jika eksternal
+        // ← pengirim; null bila eksternal/tidak dikenal (row TETAP tampil —
+        //   self-reference malah menyembunyikan row via isSelfReferenceWssRow).
+        referenceId: senderPartyId,
         ledgerTxId: `wss:${updateId}`,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
@@ -377,6 +406,20 @@ export class BalanceEventHandlerService
     },
     updateId: string,
   ): Promise<void> {
+    // STEP 0: Guard replay — insert dedup row SEBELUM apply (fail-closed),
+    // sama seperti applyCcIncrement. Scope per instrument supaya 1 transaksi
+    // multi-token tetap apply sekali per token.
+    const scope = `token:${tk.instrumentId.toLowerCase()}:${tk.instrumentAdmin.toLowerCase()}`;
+    const applied = await this.tryMarkBalanceApplied(updateId, tk.userId, scope);
+    if (!applied) {
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: skip ${tk.instrumentId} +${tk.amount} untuk @${tk.username ?? tk.userId.slice(0, 8)} (sudah pernah di-apply / replay, updateId=${updateId.slice(0, 16)}…)`,
+        );
+      }
+      return;
+    }
+
     // STEP 1: SELALU increment CantexTokenBalance (single source of truth = WSS event).
     // Controller (acceptOffer, sendToken) catat history row TAPI tidak increment
     // CantexTokenBalance → handler WAJIB lakukan ini supaya saldo token user
@@ -455,14 +498,51 @@ export class BalanceEventHandlerService
       return;
     }
 
-    // STEP 3: Kalau controller belum catat, skip history insert untuk token
-    // (TokenTransaction di-handle controller via recordTokenTransaction).
-    // Token history row tidak di-insert oleh handler untuk hindari kompleksitas
-    // cross-table dedup — controller (acceptOffer/sendToken) sudah reliable.
-    if (DEBUG_LEDGER) {
-      this.logger.debug(
-        `BalanceEventHandler: token history untuk ${tk.instrumentId} +${tk.amount} tidak di-insert handler (controller akan handle)`,
-      );
+    // STEP 3: Insert history row TOKEN_TRANSFER_IN kalau controller belum
+    // catat (parity dengan path CC). Kasus nyata: receiver accept offer dari
+    // wallet eksternal (bukan lewat API kami) — tanpa ini USDCx masuk tidak
+    // pernah muncul di Activity/badge. Idempotent via @@unique([userId, ledgerTxId]).
+    try {
+      // Cari pengirim dari row TOKEN_TRANSFER_OUT dengan cantonUpdateId sama
+      // (sudah di-stamp markTransferInstructionSettled di tahap exercised).
+      const senderRow = await this.prisma.tokenTransaction.findFirst({
+        where: {
+          cantonUpdateId: updateId,
+          type: 'TOKEN_TRANSFER_OUT',
+          userId: { not: tk.userId },
+        },
+        select: { userId: true },
+      });
+      const senderUser = senderRow
+        ? await this.users.findById(senderRow.userId)
+        : null;
+      const senderPartyId = senderUser?.cantonPartyId ?? null;
+
+      await this.users.recordTokenTransaction({
+        userId: tk.userId,
+        amount: tk.amount,
+        instrumentId: tk.instrumentId,
+        instrumentAdmin: tk.instrumentAdmin,
+        type: 'TOKEN_TRANSFER_IN',
+        description: `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
+        // null bila pengirim eksternal — row tetap tampil (jangan self-reference).
+        referenceId: senderPartyId,
+        ledgerTxId: `wss:${updateId}`,
+        cantonUpdateId: updateId,
+        status: 'COMPLETED',
+      });
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: +${tk.amount} ${tk.instrumentId} → @${tk.username ?? tk.userId.slice(0, 8)}`,
+        );
+      }
+    } catch (err) {
+      const errMsg = String(err);
+      if (!errMsg.includes('P2002') && !errMsg.includes('Unique constraint')) {
+        this.logger.warn(
+          `BalanceEventHandler: TOKEN_TRANSFER_IN record failed (balance already updated): ${errMsg}`,
+        );
+      }
     }
   }
 
@@ -1028,6 +1108,37 @@ export class BalanceEventHandlerService
     ) {
       const first = this.processedUpdates.values().next().value;
       if (first) this.processedUpdates.delete(first);
+    }
+  }
+
+  /**
+   * Guard idempotensi apply balance lintas-restart: insert dedup row
+   * (WssBalanceApplied) SEBELUM balance di-increment.
+   *
+   * Return true = baris baru berhasil dibuat → aman apply (belum pernah).
+   * Return false = sudah pernah di-apply (replay dari checkpoint persist)
+   * ATAU DB error → caller WAJIB skip apply. Fail-closed: saldo miss sekali
+   * (dikoreksi reconciler) jauh lebih aman daripada double-credit.
+   */
+  private async tryMarkBalanceApplied(
+    updateId: string,
+    userId: string,
+    scope: string,
+  ): Promise<boolean> {
+    try {
+      await this.prisma.wssBalanceApplied.create({
+        data: { updateId, userId, scope },
+      });
+      return true;
+    } catch (err) {
+      const errMsg = String(err);
+      if (errMsg.includes('P2002') || errMsg.includes('Unique constraint')) {
+        return false; // replay — sudah pernah di-apply
+      }
+      this.logger.warn(
+        `BalanceEventHandler: WssBalanceApplied create failed (${scope}): ${errMsg}`,
+      );
+      return false; // DB bermasalah — skip apply (fail-closed)
     }
   }
 }
