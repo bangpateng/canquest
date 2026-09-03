@@ -254,7 +254,7 @@ export class LockProposalService {
           createdEventBlob: openRound.blob,
         },
       ],
-      commandId: `v30-acceptlock-${createHash(record.id).digest('hex').slice(0, 24)}`,
+      commandId: `v30-acceptlock-${createHash('sha256').update(record.id).digest('hex').slice(0, 24)}`,
       meta: {
         lockRecordId: record.id,
         questId,
