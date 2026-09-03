@@ -539,9 +539,13 @@ export class SigningRelayService {
       recipientPartyId: string;
       recipientLabel: string;
       memo: string;
+      // send_token: instrument spesifik (USDCx dll) — masuk TokenTransaction.
+      instrumentId?: string;
+      instrumentAdmin?: string;
     };
     const updateId = result?.updateId;
     const isOffer = meta.transferKind === 'offer';
+    const isToken = entry.flow === 'send_token' && !!meta.instrumentId;
 
     // OFFER path: cari TransferInstruction CID yang baru dibuat utk receiver
     // supaya baris bisa di-flip oleh markTransferInstructionSettled saat
@@ -566,22 +570,38 @@ export class SigningRelayService {
     }
 
     try {
-      await this.users.recordTransaction({
-        userId: entry.userId,
-        amountCc: meta.amount,
-        type: 'TRANSFER_OUT',
-        description: meta.memo,
-        counterparty: meta.recipientPartyId,
-        ledgerTxId: updateId,
-        cantonUpdateId: updateId,
-        // OFFER: dana sudah keluar tapi belum diterima → PENDING sampai
-        // accept/reject/withdraw. DIRECT (preapproval) → langsung COMPLETED.
-        status: isOffer ? 'PENDING' : 'COMPLETED',
-        transferInstructionCid,
-      });
+      if (isToken) {
+        // ── TOKEN (USDCx dll) → TokenTransaction dgn instrument benar ──
+        await this.users.recordTokenTransaction({
+          userId: entry.userId,
+          amount: meta.amount,
+          instrumentId: meta.instrumentId!,
+          instrumentAdmin: meta.instrumentAdmin ?? '',
+          type: 'TOKEN_TRANSFER_OUT',
+          description: meta.memo,
+          referenceId: meta.recipientPartyId,
+          ledgerTxId: updateId,
+          cantonUpdateId: updateId,
+          status: isOffer ? 'PENDING' : 'COMPLETED',
+          transferInstructionCid,
+        });
+      } else {
+        // ── CC (Amulet) → CcTransaction ──
+        await this.users.recordTransaction({
+          userId: entry.userId,
+          amountCc: meta.amount,
+          type: 'TRANSFER_OUT',
+          description: meta.memo,
+          counterparty: meta.recipientPartyId,
+          ledgerTxId: updateId,
+          cantonUpdateId: updateId,
+          status: isOffer ? 'PENDING' : 'COMPLETED',
+          transferInstructionCid,
+        });
+      }
       if (isOffer) {
         this.logger.log(
-          `send_cc OFFER → TRANSFER_OUT PENDING user=${entry.userId.slice(0, 8)}… amount=${meta.amount} → ${meta.recipientLabel} cid=${transferInstructionCid?.slice(0, 14) ?? '?'}`,
+          `${entry.flow} OFFER → ${isToken ? 'TOKEN_' : ''}TRANSFER_OUT PENDING user=${entry.userId.slice(0, 8)}… amount=${meta.amount}${isToken ? ` ${meta.instrumentId}` : ''} → ${meta.recipientLabel} cid=${transferInstructionCid?.slice(0, 14) ?? '?'}`,
         );
       }
     } catch (err) {
@@ -1399,6 +1419,7 @@ export class SigningRelayService {
           recipientLabel,
           memo,
           instrumentId,
+          instrumentAdmin,
         },
         description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
       };
