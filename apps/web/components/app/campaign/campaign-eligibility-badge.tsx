@@ -37,10 +37,11 @@ export function CampaignEligibilityBadge({ questId }: { questId: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/quests/${questId}/eligibility`, {
-      credentials: "include",
-      cache: "no-store",
-    })
+    const load = () =>
+      fetch(`/api/quests/${questId}/eligibility`, {
+        credentials: "include",
+        cache: "no-store",
+      })
       .then((r) => {
         if (!r.ok) throw new Error("eligibility fetch failed");
         return r.json() as Promise<EligibilityResponse>;
@@ -49,14 +50,21 @@ export function CampaignEligibilityBadge({ questId }: { questId: string }) {
         if (cancelled) return;
         setData(res);
         setError(false);
+        // Belum eligible → poll ringan tiap 4s supaya badge FLIP REALTIME
+        // begitu lock event selesai diverifikasi (tanpa refresh manual).
+        if (!res.eligible) {
+          window.setTimeout(() => { if (!cancelled) void load(); }, 4000);
+        }
       })
       .catch(() => {
         if (cancelled) return;
         setError(true);
+        window.setTimeout(() => { if (!cancelled) void load(); }, 6000);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    void load();
     return () => {
       cancelled = true;
     };

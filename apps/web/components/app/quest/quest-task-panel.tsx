@@ -159,7 +159,21 @@ export function QuestTaskPanel({
     Record<string, { required: number; today: number }>
   >({});
   /** While a task is counting down or submitting, no other task can be started. */
+  const isV30 = isV30Quest(quest);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
+  // v30: eligibility per-event — tugas baru aktif setelah lock event ini.
+  const [v30Eligible, setV30Eligible] = useState<boolean | null>(null);
+  const [eligibilityKey, setEligibilityKey] = useState(0);
+  useEffect(() => {
+    if (!isV30 || !partyId) { setV30Eligible(null); return; }
+    let cancelled = false;
+    fetch(`/api/quests/${quest.id}/eligibility`, { credentials: "include", cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { eligible?: boolean }) => { if (!cancelled) setV30Eligible(!!d.eligible); })
+      .catch(() => { if (!cancelled) setV30Eligible(null); });
+    return () => { cancelled = true; };
+    // eligibilityKey bump pasca-lock → refetch → badge & gate flip REALTIME.
+  }, [isV30, partyId, quest.id, eligibilityKey]);
 
   // Ticks every minute so quizzes that cross the 24h boundary disappear live
   // (without a full page reload). Points already earned stay in the balance.
@@ -390,15 +404,18 @@ export function QuestTaskPanel({
     isFcfsSlotsFull(campaignMeta?.remainingSlots, campaignMeta?.maxWinners);
   const userParticipated =
     verifiedCount > 0 || questCompleted || Object.keys(submissions).length > 0;
+  const v30GateBlocksTasks =
+    isV30 && partyId != null && v30Eligible === false;
   const taskSubmissionsBlocked =
-    campaignEnded || (fcfsSlotsFull && !userParticipated);
+    campaignEnded ||
+    (fcfsSlotsFull && !userParticipated) ||
+    v30GateBlocksTasks;
   const requiresFcfsClaim = campaignMeta?.requiresFcfsClaim ?? false;
   const requiresDrawCcClaim = campaignMeta?.requiresDrawCcClaim ?? false;
   const requiresPaidInviteClaim =
     campaignMeta?.requiresPaidInviteClaim ?? false;
   // v30 (canquest-claim + canquest-lock): klaim via ClaimOffer — komponen
   // legacy di bawah TIDAK dipakai utk quest v30 (jalur lama utk quest v29).
-  const isV30 = isV30Quest(quest);
   const showFcfsClaim =
     !isV30 &&
     requiresFcfsClaim &&
@@ -562,7 +579,13 @@ export function QuestTaskPanel({
       {/* Task list — Quest hub & campaign sama-sama quest-timeline (dots +
           guide line, gaya Earn Campaign); info khas hub (cooldown/New badge/
           quiz) tetap tampil di dalam kartu. */}
-      <ul className="quest-timeline">
+      {v30GateBlocksTasks ? (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3 text-sm text-[var(--muted-foreground)]">
+          🔒 Tasks unlock after you lock{" "}
+          {quest.entryCcLock ?? 1} CC for this event — use the button above.
+        </div>
+      ) : null}
+      <ul className={v30GateBlocksTasks ? "quest-timeline pointer-events-none opacity-50" : "quest-timeline"}>
         {visibleTasks.map((task, idx) => (
           <TaskRow
             key={task.id}
@@ -646,7 +669,10 @@ export function QuestTaskPanel({
           questId={quest.id}
           partyId={partyId}
           entryCcLock={quest.entryCcLock}
-          onLocked={() => loadProgress()}
+          onLocked={() => {
+            loadProgress();
+            setEligibilityKey((k) => k + 1);
+          }}
         />
       ) : null}
 

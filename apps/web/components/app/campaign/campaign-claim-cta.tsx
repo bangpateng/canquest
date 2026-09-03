@@ -44,8 +44,7 @@ export function CampaignClaimCta({
           "h-12 text-sm font-bold",
         )}
       >
-        {isSubmitting ? <LoadingSpinner size="sm" /> : null}
-        {isSubmitting ? "Claiming…" : label}
+        {isSubmitting ? <LoadingSpinner size="sm" /> : label}
       </button>
 
       {needsWallet ? (

@@ -2257,9 +2257,24 @@ export class QuestsService {
         entryGateMode: true,
         entryCcLock: true,
         entryCostPoints: true,
+        ledgerPackage: true,
       },
     });
     if (!quest) throw new NotFoundException('Quest not found');
+
+    // v30 (spesifikasi owner): tugas baru bisa dikerjakan SETELAH lock event
+    // ini — lock campaign lain tidak berlaku (eligibility per-event).
+    if (isV30Quest(quest) && v30ClaimModel(quest).requiresLock) {
+      const eligible = await this.prisma.campaignEligibilityLedger.findFirst({
+        where: { questId, userId, status: 'ELIGIBLE' },
+        select: { id: true },
+      });
+      if (!eligible) {
+        throw new BadRequestException(
+          `Lock ${(quest.entryCcLock ?? 1).toString()} CC for this event first — tasks unlock after the lock.`,
+        );
+      }
+    }
 
     if (quest.questKind === QuestKind.CAMPAIGN && this.isCampaignEnded(quest)) {
       throw new BadRequestException(

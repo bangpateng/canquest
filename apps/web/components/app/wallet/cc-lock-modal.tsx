@@ -320,14 +320,16 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         }
         subText={
           review?.kind === "unlock"
-            ? "Funds return to your wallet"
+            ? review.lock.campaignTitle ?? "Funds return to your wallet"
             : `for ${termLabel(selectedTerm)}`
         }
         rows={
           review?.kind === "unlock"
             ? [
                 { label: "Amount", value: `${review.lock.amountCc} CC` },
-                { label: "Duration", value: termLabel(review.lock.termKey) },
+                ...(review.lock.campaignTitle
+                  ? [{ label: "Campaign", value: review.lock.campaignTitle }]
+                  : [{ label: "Duration", value: termLabel(review.lock.termKey) }]),
                 { label: "Network", value: "Canton" },
               ]
             : [
@@ -520,7 +522,7 @@ function ActiveLockRow({
             {lock.amountCc} CC ·{" "}
             {isCampaignLock ? (
               <span className="text-canton">
-                Campaign lock{lock.campaignTitle ? ` · ${lock.campaignTitle}` : ""}
+                {lock.campaignTitle ?? "Campaign lock"}
               </span>
             ) : (
               termLabel(lock.termKey)
