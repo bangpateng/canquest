@@ -167,47 +167,63 @@ function extractRows(txValue) {
     try { ws && ws.close(1000); } catch {}
   });
 
-  async function flush(reason) {
+  /**
+   * Flush TERSERIALISASI + SNAPSHOT SINKRON. Pelajaran pilot #2: flush lama
+   * fire-and-forget — dua transaksi berlari memakai `buffer` yang sama,
+   * snapshot dibaca SETELAH await (race), pool habis → "Unable to start a
+   * transaction", dan cursor bisa MUNDUR antar batch (849849 → 845853 di
+   * log). Perbaikan: buffer diambil-alih secara sinkron di sini; transaksi
+   * memakai snapshot; antrean promise menjamin satu transaksi pada satu
+   * waktu; cursor hanya maju bersama batch yang berhasil commit (error =
+   * exit 1, replay aman karena idempoten).
+   */
+  let flushChain = Promise.resolve();
+  function requestFlush(reason) {
     if (buffer.updates.length === 0) return;
-    const t0 = Date.now();
-    const cur = buffer.maxOffset;
-    // timeout 30s — default $transaction (5s) terlalu ketat untuk batch JSONB
-    // besar; terbukti saat pilot: "Unable to start a transaction in the given time".
-    await prisma.$transaction(
-      async (tx) => {
-        await tx.ledgerUpdate.createMany({ data: buffer.updates, skipDuplicates: true });
-        if (buffer.events.length)
-          await tx.ledgerEvent.createMany({ data: buffer.events, skipDuplicates: true });
-        await tx.ledgerStreamCheckpoint.upsert({
-          where: { streamKey: STREAM_KEY },
-          create: { streamKey: STREAM_KEY, lastOffset: BigInt(cur) },
-          update: { lastOffset: BigInt(cur) },
-        });
-      },
-      { timeout: 30_000 },
-    );
-    stats.updates += buffer.updates.length;
-    stats.events += buffer.events.length;
-    stats.batches++;
-    stats.lastTxOffset = cur;
-    if (stats.firstOffset === null) stats.firstOffset = buffer.updates[0] ? Number(buffer.updates[0].offset) : null;
-    const n = buffer.updates.length;
+    const batch = buffer;
     buffer = { updates: [], events: [], maxOffset: null };
-    // Throttle: pastikan kecepatan <= RATE.
-    const minMs = (n / RATE) * 1000;
-    const elapsed = Date.now() - t0;
-    if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
-    if (stats.batches % 10 === 0 || reason === 'final')
-      console.log(
-        `[L5] batch#${stats.batches} (${reason}) +${n} upd → total ${stats.updates} upd / ${stats.events} evt, cursor=${cur}`,
-      );
+    flushChain = flushChain
+      .then(async () => {
+        const t0 = Date.now();
+        await prisma.$transaction(
+          async (tx) => {
+            await tx.ledgerUpdate.createMany({ data: batch.updates, skipDuplicates: true });
+            if (batch.events.length)
+              await tx.ledgerEvent.createMany({ data: batch.events, skipDuplicates: true });
+            await tx.ledgerStreamCheckpoint.upsert({
+              where: { streamKey: STREAM_KEY },
+              create: { streamKey: STREAM_KEY, lastOffset: BigInt(Number(batch.maxOffset)) },
+              update: { lastOffset: BigInt(Number(batch.maxOffset)) },
+            });
+          },
+          { timeout: 30_000, maxWait: 15_000 },
+        );
+        stats.updates += batch.updates.length;
+        stats.events += batch.events.length;
+        stats.batches++;
+        stats.lastTxOffset = Number(batch.maxOffset);
+        if (stats.firstOffset === null && batch.updates[0])
+          stats.firstOffset = Number(batch.updates[0].offset);
+        // Throttle: pastikan kecepatan <= RATE.
+        const minMs = (batch.updates.length / RATE) * 1000;
+        const elapsed = Date.now() - t0;
+        if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
+        if (stats.batches % 10 === 0 || reason !== 'full')
+          console.log(
+            `[L5] batch#${stats.batches} (${reason}) +${batch.updates.length} upd → total ${stats.updates} upd / ${stats.events} evt, cursor=${Number(batch.maxOffset)}`,
+          );
+      })
+      .catch((e) => {
+        console.error('[L5] flush error — exit tanpa memajukan cursor (replay aman):', String(e).slice(0, 300));
+        process.exit(1);
+      });
   }
 
   function scheduleIdleFlush() {
     if (flushTimer) return;
-    flushTimer = setTimeout(async () => {
+    flushTimer = setTimeout(() => {
       flushTimer = null;
-      if (buffer.updates.length > 0) await flush('idle');
+      requestFlush('idle');
       scheduleIdleFlush();
     }, FLUSH_IDLE_MS);
   }
@@ -253,12 +269,7 @@ function extractRows(txValue) {
       buffer.events.push(...eventRows);
       buffer.maxOffset = off;
       lastOffset = off;
-      if (buffer.updates.length >= BATCH_SIZE) {
-        void flush('full').catch((e) => {
-          console.error('[L5] flush error:', String(e).slice(0, 300));
-          process.exit(1);
-        });
-      }
+      if (buffer.updates.length >= BATCH_SIZE) requestFlush('full');
       if (MAX_OFFSET !== null && off >= MAX_OFFSET) {
         // Berhenti SEGERA: tutup WS supaya tidak ada pesan lanjutan yang
         // di-buffer; buffer saat ini di-flush satu kali di jalur keluar.
@@ -307,7 +318,8 @@ function extractRows(txValue) {
     }, 250);
   });
   if (flushTimer) clearTimeout(flushTimer);
-  await flush('final');
+  requestFlush('final');
+  await flushChain; // tunggu seluruh antrean batch termasuk yang terakhir
   console.log(
     `[L5] SELESAI — mode=${MAX_OFFSET ? 'PILOT' : 'KONTINU-dihentikan'}: ${stats.updates} update, ${stats.events} event, ${stats.batches} batch, offset ${stats.firstOffset}..${stats.lastTxOffset}, cursor=${lastOffset}`,
   );
