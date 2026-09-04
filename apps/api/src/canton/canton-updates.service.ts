@@ -55,8 +55,11 @@
  *   sekali reverse proxy 502, stream mati sampai API direstart meski infra
  *   sudah sembuh → saldo user berhenti sinkron. Sekarang: retry selamanya
  *   dengan delay terkap, jadi self-heal otomatis.)
- * - Offset tracking: simpan offset terakhir, resume dari situ saat reconnect
- *   (event tidak hilang, tidak duplikat — offset bersifat exclusive begin)
+ * - Offset tracking (L2a): lastOffset HANYA dimajukan SETELAH event
+ *   di-dispatch, dan dipersist lewat promise chain terserialisasi (tanpa
+ *   timer-debounce). Semantik at-least-once: crash di tengah memicu replay,
+ *   bukan event hilang — replay aman karena handler idempoten
+ *   (WssBalanceApplied + @@unique([userId, ledgerTxId])).
  * - Feature flag CANTON_UPDATES_WS_ENABLED (default false — harus di-enable
  *   eksplisit setelah deploy, supaya poller existing tetap jalan sebagai
  *   fallback sampai WS terverifikasi stabil di production)
@@ -234,8 +237,6 @@ const STREAM_KEY = 'canton-updates';
 /** Maks umur checkpoint (jam) yang masih layak di-resume. Lebih tua dari ini
  *  → mulai dari ledgerEnd (replay terlalu jauh; saldo ditangung reconciler). */
 const DEFAULT_RESUME_MAX_AGE_HOURS = 48;
-/** Debounce persist checkpoint (trailing) — batch burst event jadi 1 write. */
-const PERSIST_DEBOUNCE_MS = 1_500;
 
 @Injectable()
 export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
@@ -262,8 +263,11 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    *  dua-duanya memanggil startStream; tanpa guard, dua WS bisa terbentuk
    *  (yang lama leak — listener-nya inert tapi koneksi tetap hidup). */
   private connecting = false;
-  /** Debounce timer persist checkpoint ke DB (LedgerStreamCheckpoint). */
-  private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Persist checkpoint terserialisasi (L2a): satu write in-flight + maks
+   *  satu queued — koalesensi alami tanpa jendela hilang ala timer-debounce. */
+  private persistChain: Promise<void> = Promise.resolve();
+  /** True bila sudah ada persist yang menunggu giliran di chain. */
+  private persistQueued = false;
   /** Maks umur checkpoint (jam) yang masih di-resume saat startup. */
   private readonly resumeMaxAgeHours: number;
   /** Watchdog: timestamp pesan WS terakhir (checkpoint ATAU transaksi). */
@@ -451,16 +455,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     // Bersihkan debounce timers + watchdog.
     for (const t of this.partyDebounce.values()) clearTimeout(t);
     this.partyDebounce.clear();
-    if (this.persistTimer) {
-      clearTimeout(this.persistTimer);
-      this.persistTimer = null;
-    }
     if (this.watchdogTimer) {
       clearInterval(this.watchdogTimer);
       this.watchdogTimer = null;
     }
-    // Flush checkpoint best-effort supaya restart berikutnya resume akurat.
-    void this.persistCheckpointNow();
+    // Flush checkpoint best-effort supaya restart berikutnya resume akurat:
+    // tunggu write yang sedang in-flight, lalu tulis nilai terakhir.
+    void this.persistChain.then(() => this.persistCheckpointNow());
     this.updates$.complete();
   }
 
@@ -803,21 +804,20 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // Update checkpoint SEBELUMLAH dispatch, supaya kalau crash mid-handle,
-    // reconnect mulai dari offset yang sama (idempotensi di sisi handler).
-    // Parse ke number — AsyncAPI spec /v2/updates menolak string beginExclusive.
+    // L2a: ekstrak offset transaksi ini sebagai NILAI LOKAL — lastOffset tidak
+    // dimajukan di sini. Pemajuan hanya terjadi SETELAH dispatch berhasil
+    // (at-least-once): crash sebelum titik itu menyebabkan event di-replay,
+    // bukan hilang. Parse ke number — AsyncAPI spec /v2/updates menolak
+    // string beginExclusive.
     const offsetRaw =
       typeof update.offset === 'string'
         ? update.offset
         : update.offset?.absolute;
-    if (offsetRaw !== undefined && offsetRaw !== null) {
-      const offsetNum = Number(offsetRaw);
-      if (Number.isFinite(offsetNum)) {
-        this.lastOffset = offsetNum;
-        this.schedulePersistCheckpoint();
-      }
-    }
-    const offset = this.lastOffset;
+    const offsetNum =
+      offsetRaw !== undefined && offsetRaw !== null
+        ? Number(offsetRaw)
+        : NaN;
+    const hasOffset = Number.isFinite(offsetNum);
 
     // WAVE 6: Parse SEMUA event types (created/archived/exercised) dari top-level events.
     const created: CreatedEventShape[] = [];
@@ -883,8 +883,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    if (created.length === 0 && archived.length === 0 && exercised.length === 0)
+    if (created.length === 0 && archived.length === 0 && exercised.length === 0) {
+      // Transaksi tanpa event yang relevan tetap sudah dikonsumsi — majukan
+      // offset supaya resume tidak me-replay-nya, tapi TIDAK ada dispatch
+      // yang bisa hilang di jalur ini.
+      this.advanceOffset(hasOffset ? offsetNum : null);
       return;
+    }
 
     // Event valid masuk = subscription sukses. Reset counter reconnect di sini
     // (BUKAN di ws.on('open')) supaya close-1000 loop bisa capai MAX & berhenti.
@@ -896,7 +901,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       const partySample = [...parties].slice(0, 3).map((p) => p.split('::')[0]);
       const choices = exercised.map((e) => e.choice).filter(Boolean);
       this.logger.debug(
-        `CantonUpdates: offset=${offset} parties=[${partySample.join(',')}] ` +
+        `CantonUpdates: offset=${hasOffset ? offsetNum : this.lastOffset} parties=[${partySample.join(',')}] ` +
           `created=${created.length} archived=${archived.length} exercised=${exercised.length}` +
           (choices.length > 0 ? ` choices=[${choices.join(',')}]` : '') +
           ` updateId=${update.updateId?.slice(0, 16) ?? '?'}…`,
@@ -904,7 +909,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.updates$.next({
-      offset: offset ?? this.lastOffset ?? 0,
+      offset: hasOffset ? offsetNum : (this.lastOffset ?? 0),
       updateId: update.updateId,
       commandId: update.commandId,
       parties: [...parties],
@@ -912,6 +917,11 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       archived,
       exercised,
     });
+
+    // L2a: offset baru boleh maju SETELAH dispatch di atas — inilah titik
+    // pesanan "at-least-once". Crash antara dispatch dan sini = event
+    // di-replay saat reconnect (aman, handler idempoten), bukan hilang.
+    this.advanceOffset(hasOffset ? offsetNum : null);
   }
 
   /**
@@ -991,8 +1001,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         typeof c === 'object' ? (c as { absolute?: unknown }).absolute : c,
       );
       if (Number.isFinite(num)) {
-        this.lastOffset = num;
-        this.schedulePersistCheckpoint();
+        this.advanceOffset(num);
         return;
       }
     }
@@ -1098,15 +1107,36 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Jadwalkan persist checkpoint (debounced). Dipanggil tiap kali lastOffset
-   * maju — burst event digabung jadi 1 write per PERSIST_DEBOUNCE_MS.
+   * Majukan lastOffset (monotonic — hanya ke atas) lalu jadwalkan persist.
+   * Dipanggil HANYA setelah event transaksi bersangkutan di-dispatch (L2a).
+   */
+  private advanceOffset(offsetNum: number | null): void {
+    if (offsetNum === null || !Number.isFinite(offsetNum)) return;
+    if (this.lastOffset !== null && offsetNum <= this.lastOffset) return;
+    this.lastOffset = offsetNum;
+    this.schedulePersistCheckpoint();
+  }
+
+  /**
+   * Jadwalkan persist checkpoint — L2a: TERSERIALISASI via promise chain,
+   * TANPA timer. Paling banyak satu write in-flight + satu queued; write
+   * yang menunggu selalu membaca lastOffset TERBARU saat gilirannya tiba,
+   * jadi burst event tetap terkoalesensi secara alami tanpa jendela hilang
+   * ala timer-debounce lama (crash saat timer belum menyala = offset di DB
+   * tertinggal — arah yang aman untuk replay, tapi kini jendelanya nol).
    */
   private schedulePersistCheckpoint(): void {
-    if (this.persistTimer) return;
-    this.persistTimer = setTimeout(() => {
-      this.persistTimer = null;
-      void this.persistCheckpointNow();
-    }, PERSIST_DEBOUNCE_MS);
+    if (this.persistQueued) return;
+    this.persistQueued = true;
+    this.persistChain = this.persistChain
+      .then(async () => {
+        this.persistQueued = false;
+        await this.persistCheckpointNow();
+      })
+      .catch(() => {
+        // persistCheckpointNow menangani error internal sendiri (log warn,
+        // non-fatal) — swallow agar chain tidak putus.
+      });
   }
 
   /** Tulis lastOffset ke LedgerStreamCheckpoint (upsert, best-effort). */
