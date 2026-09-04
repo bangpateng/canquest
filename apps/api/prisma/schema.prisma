@@ -429,6 +429,109 @@ model WssBalanceApplied {
   @@index([userId])
 }
 
+// ─── L4: pipeline paralel ledger-derived activity ───────────────────────────
+// Raw layer + proyeksi baru (spec Part B §4 + koreksi Phase 4 #1: raw layer
+// TIDAK di-key per party — stream wildcard menyimpan update apa adanya,
+// sekali; atribusi party terjadi di proyeksi L6 dan bisa di-derive ulang
+// kapan pun tanpa menyentuh ledger).
+
+/// Envelope mentah satu update transaksi — kebenaran tak terubahkan dari
+/// stream /v2/updates (LEDGER_EFFECTS). LedgerEvent (event ternormalisasi)
+/// bisa dibangun ulang dari sini kapan pun; dua-duanya disimpan karena
+/// ukurannya trivial (≤75 MB untuk 3 bulan) dan query L6 jadi murah.
+model LedgerUpdate {
+  updateId       String   @id
+  /// Offset transaksi. Kolom "offset_" — OFFSET adalah keyword SQL.
+  offset         BigInt   @map("offset_")
+  recordTime     DateTime
+  commandId      String?
+  synchronizerId String?
+  /// JSON envelope lengkap apa adanya (update.Transaction.value).
+  envelope       Json
+  ingestedAt     DateTime @default(now())
+
+  @@index([offset])
+  @@index([recordTime])
+}
+
+/// Event ternormalisasi dari satu update — SATU BARIS PER EVENT, bukan per
+/// party. witnessParties disimpan sebagai array; atribusi ke user = query
+/// L6 via User.cantonPartyId (resolver ketat, L1) — TIDAK saat menulis raw.
+model LedgerEvent {
+  updateId       String
+  /// Index event dalam update (posisi di array events / eventsById).
+  eventIndex     Int
+  offset         BigInt   @map("offset_")
+  recordTime     DateTime
+  /// created | archived | exercised
+  eventType      String
+  templateId     String?
+  /// Nama choice (hanya eventType=exercised).
+  choice         String?
+  contractId     String?
+  /// Party yang menyaksikan event ini (pre-compute Canton) — array, tanpa atribusi user.
+  witnessParties String[]
+  /// Event mentah (CreatedEvent | ArchivedEvent | ExercisedEvent object).
+  payload        Json
+  ingestedAt     DateTime @default(now())
+
+  @@id([updateId, eventIndex])
+  @@index([contractId])
+  @@index([offset])
+  @@index([templateId])
+}
+
+/// Identitas instrumen token — NEVER key pada bare id (siapa pun bisa mint
+/// token ber-id "USDC"). Diisi di langkah pasca-L5 dari data raw (bukan
+/// konstanta ketik-manual), lalu di-allowlist secara eksplisit.
+model Instrument {
+  /// Admin party (mis. DSO::1220… / registrar USDC).
+  admin         String
+  id            String
+  symbol        String?
+  displayName   String?
+  decimals      Int?
+  isAllowlisted Boolean  @default(false)
+  updatedAt     DateTime @updatedAt
+
+  @@id([admin, id])
+}
+
+/// Proyeksi activity per-party — ditulis HANYA oleh klasifier L6 (satu
+/// penulis; controller tidak menulis baris ledger-derived lagi). Digabung
+/// dengan app-activity lama (CcTransaction dkk.) hanya saat display.
+model Activity {
+  partyId          String
+  /// TransferInstruction cid (dua-langkah) atau updateId (one-step) — stabil sepanjang lifecycle.
+  activityId       String
+  /// transfer | reward | mint | burn
+  kind             String
+  /// in | out
+  direction        String?
+  instrumentAdmin  String
+  instrumentId     String
+  amount           Decimal  @db.Decimal(38, 10)
+  fee              Decimal? @db.Decimal(38, 10)
+  counterparty     String?
+  memo             String?
+  /// pending | completed | rejected | withdrawn | failed — TIDAK PERNAH "expired"
+  /// (expired = derivasi display dari executeBefore, spec §7).
+  status           String
+  executeBefore    DateTime?
+  correlationId    String?
+  createdUpdateId  String
+  createdAt        DateTime
+  settledUpdateId  String?
+  settledAt        DateTime?
+  /// Offset event terakhir yang mempengaruhi baris — guard monotonic status.
+  lastOffset       BigInt
+
+  @@id([partyId, activityId])
+  @@index([partyId, createdAt(sort: Desc), activityId(sort: Desc)])
+  @@index([instrumentAdmin, instrumentId])
+  @@index([status, executeBefore])
+}
+
 /// Tipe event TokenTransaction (P2P token transfer on-chain, CIP-0056).
 enum TokenTxType {
   /// Sender mengirim token (offer dibuat di on-chain).
