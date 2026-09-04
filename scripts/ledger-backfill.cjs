@@ -171,16 +171,21 @@ function extractRows(txValue) {
     if (buffer.updates.length === 0) return;
     const t0 = Date.now();
     const cur = buffer.maxOffset;
-    await prisma.$transaction(async (tx) => {
-      await tx.ledgerUpdate.createMany({ data: buffer.updates, skipDuplicates: true });
-      if (buffer.events.length)
-        await tx.ledgerEvent.createMany({ data: buffer.events, skipDuplicates: true });
-      await tx.ledgerStreamCheckpoint.upsert({
-        where: { streamKey: STREAM_KEY },
-        create: { streamKey: STREAM_KEY, lastOffset: BigInt(cur) },
-        update: { lastOffset: BigInt(cur) },
-      });
-    });
+    // timeout 30s — default $transaction (5s) terlalu ketat untuk batch JSONB
+    // besar; terbukti saat pilot: "Unable to start a transaction in the given time".
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.ledgerUpdate.createMany({ data: buffer.updates, skipDuplicates: true });
+        if (buffer.events.length)
+          await tx.ledgerEvent.createMany({ data: buffer.events, skipDuplicates: true });
+        await tx.ledgerStreamCheckpoint.upsert({
+          where: { streamKey: STREAM_KEY },
+          create: { streamKey: STREAM_KEY, lastOffset: BigInt(cur) },
+          update: { lastOffset: BigInt(cur) },
+        });
+      },
+      { timeout: 30_000 },
+    );
     stats.updates += buffer.updates.length;
     stats.events += buffer.events.length;
     stats.batches++;
@@ -236,6 +241,7 @@ function extractRows(txValue) {
       }, delay);
     });
     ws.on('message', (d) => {
+      if (stopping) return; // pasca-batas pilot / SIGINT: jangan buffer lagi
       let j = null;
       try { j = JSON.parse(d.toString()); } catch { return; }
       const tx = j?.update?.Transaction?.value ?? (j?.updateId ? j : null);
@@ -254,8 +260,11 @@ function extractRows(txValue) {
         });
       }
       if (MAX_OFFSET !== null && off >= MAX_OFFSET) {
-        console.log(`[L5] PILOT: offset ${off} >= ${MAX_OFFSET} — commit & exit.`);
+        // Berhenti SEGERA: tutup WS supaya tidak ada pesan lanjutan yang
+        // di-buffer; buffer saat ini di-flush satu kali di jalur keluar.
+        console.log(`[L5] PILOT: offset ${off} >= ${MAX_OFFSET} — stop buffering, commit & exit.`);
         stopping = true;
+        try { ws.close(1000); } catch {}
       }
     });
     ws.on('close', () => {
