@@ -1064,6 +1064,27 @@ model LockProposalRecord {
   @@index([expiresAt, status])
 }
 
+// ─── L5.0: baseline rekonsiliasi L9 ─────────────────────────────────────────
+// Snapshot ACS pada offset TITIK NOL node (819747, 2026-06-08) — diambil
+// sekali selagi pruned=0; activeAtOffset historis tidak bisa dilayani lagi
+// begitu node pernah memangkas. Dipakai L9: pembuka + Σnet == ACS kini.
+// firstSeenOffset (dari flats) menjawab definitif: party lahir sebelum /
+// sesudah titik nol. Mencakup SEMUA party di DB (aktif + legacy) — superset
+// dari sembilan party yang diminta; baseline lengkap lebih murah sekarang.
+model AcsOpeningBalance {
+  partyId         String   @id
+  atOffset        BigInt
+  takenAt         DateTime @default(now())
+  /// Offset transaksi pertama party ini sejak 819747 (null = belum pernah
+  /// transaksi terlihat). partyId dengan holdings non-kosong ATAU firstSeen <
+  /// atOffset → lahir SEBELUM titik nol.
+  firstSeenOffset BigInt?
+  /// Daftar holding penuh per kontrak saat snapshot (cid/template/instrumen/amount).
+  holdings        Json
+  /// Agregat amount per (instrumentAdmin, instrumentId).
+  sums            Json
+}
+
 // ─── v25: DAML PlatformTransfer contract tracking ──────────────────────────
 // Mirror on-chain PlatformTransfer contract (atomic send + platform fee).
 // Dibuat backend saat user send token dgn platform fee (feature flag on).
