@@ -380,10 +380,20 @@ export class SigningRelayService {
         // markTransferInstructionSettled hanya update row SENDER — receiver
         // tidak mendapat TRANSFER_IN apa pun → badge tidak muncul.
         if (entry.flow === 'accept_offer') {
+          const offerMeta = entry.meta as {
+            cid: string;
+            offer?: {
+              amount: string;
+              instrumentId: string;
+              instrumentAdmin: string;
+              sender: string;
+            } | null;
+          };
           await this.recordReceiverAccept(
             meta.cid,
             entry.userId,
             result?.updateId,
+            offerMeta.offer ?? null,
           );
         }
       } catch (err) {
@@ -544,30 +554,54 @@ export class SigningRelayService {
       instrumentAdmin?: string;
     };
     const updateId = result?.updateId;
-    const isOffer = meta.transferKind === 'offer';
+    const metaSaysOffer = meta.transferKind === 'offer';
     const isToken = entry.flow === 'send_token' && !!meta.instrumentId;
 
-    // OFFER path: cari TransferInstruction CID yang baru dibuat utk receiver
-    // supaya baris bisa di-flip oleh markTransferInstructionSettled saat
-    // penerima accept/reject, atau withdraw sender (spesifikasi owner: offer
-    // menggantung = PENDING, bukan langsung COMPLETED).
+    // OFFER path: deteksi dari FAKTA on-chain, bukan meta build-time.
+    // Builder WUP batch pernah salah lapor kind='direct' padahal penerima tanpa
+    // preapproval (hasil nyata = offer), dan path legacy membuang transferKind
+    // sama sekali. Tanpa CID benar: baris sender tidak bisa di-flip saat accept
+    // & recordReceiverAccept tidak menemukan sender → penerima tidak dapat
+    // TRANSFER_IN/notifikasi (bug 2026-09-04).
     let transferInstructionCid: string | null = null;
-    if (isOffer) {
-      try {
-        await new Promise((r) => setTimeout(r, 1500)); // ACS index settle
-        const receiverOffers = await this.ledger.queryPendingOffers(
-          meta.recipientPartyId,
-          'incoming',
-        );
-        // Match by amount (yang baru, paling recent)
-        const match = receiverOffers.find(
-          (o) => Math.abs(parseFloat(o.amount) - meta.amount) < 1e-6,
-        );
-        transferInstructionCid = match?.contractId ?? null;
-      } catch {
-        /* best-effort — tanpa CID, status tetap PENDING tapi tidak auto-flip */
-      }
+    try {
+      await new Promise((r) => setTimeout(r, 1500)); // ACS index settle
+      const receiverOffers = await this.ledger.queryPendingOffers(
+        meta.recipientPartyId,
+        'incoming',
+      );
+      // Exclude cid yang sudah tercatat (dua offer sejumlah sama tidak saling
+      // salah-match). Window 3 hari — umur offer cuma 24 jam.
+      const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      const [takenCc, takenTok] = await Promise.all([
+        this.prisma.ccTransaction.findMany({
+          where: { transferInstructionCid: { not: null }, createdAt: { gte: since } },
+          select: { transferInstructionCid: true },
+        }),
+        this.prisma.tokenTransaction.findMany({
+          where: { transferInstructionCid: { not: null }, createdAt: { gte: since } },
+          select: { transferInstructionCid: true },
+        }),
+      ]);
+      const taken = new Set(
+        [...takenCc, ...takenTok]
+          .map((r) => r.transferInstructionCid)
+          .filter((c): c is string => !!c),
+      );
+      const match = receiverOffers.find(
+        (o) =>
+          !taken.has(o.contractId) &&
+          Math.abs(parseFloat(o.amount) - meta.amount) < 1e-6,
+      );
+      transferInstructionCid = match?.contractId ?? null;
+    } catch {
+      /* best-effort — tanpa CID, status tetap PENDING tapi tidak auto-flip */
     }
+    // Fakta menang atas meta: offer pending ditemukan → ini OFFER apa pun kata
+    // meta.transferKind. Tidak ditemukan + meta bilang offer → PENDING tanpa
+    // cid (perilaku lama). Tidak ditemukan + direct → COMPLETED.
+    const isOffer =
+      transferInstructionCid !== null || metaSaysOffer;
 
     try {
       if (isToken) {
@@ -702,6 +736,12 @@ export class SigningRelayService {
     transferInstructionCid: string,
     receiverUserId: string,
     updateId: string | undefined,
+    offerDetail?: {
+      amount: string;
+      instrumentId: string;
+      instrumentAdmin: string;
+      sender: string;
+    } | null,
   ): Promise<void> {
     try {
       // Cari row sender yang baru di-settle — dari situ ambil detail offer.
@@ -769,6 +809,48 @@ export class SigningRelayService {
         });
         this.logger.log(
           `accept_offer receiver TOKEN_TRANSFER_IN recorded: user=${receiverUserId.slice(0, 8)} amount=${senderToken.amount} ${senderToken.instrumentId}`,
+        );
+      } else if (offerDetail) {
+        // FALLBACK (2026-09-04): row sender tidak ditemukan (offer lama yang
+        // dibuat sebelum fix cid, atau bookkeeping sender gagal) — pakai detail
+        // offer yang di-capture buildOfferAction saat PREPARE. Tanpa fallback
+        // ini penerima TIDAK pernah dapat TRANSFER_IN + notifikasi.
+        const amount = Math.abs(parseFloat(offerDetail.amount) || 0);
+        const senderPartyId = offerDetail.sender || null;
+        const isTokenOffer =
+          offerDetail.instrumentId &&
+          offerDetail.instrumentId.toLowerCase() !== 'amulet';
+        if (isTokenOffer) {
+          await this.users.recordTokenTransaction({
+            userId: receiverUserId,
+            amount,
+            instrumentId: offerDetail.instrumentId,
+            instrumentAdmin: offerDetail.instrumentAdmin ?? '',
+            type: 'TOKEN_TRANSFER_IN',
+            description: `Received ${amount} ${offerDetail.instrumentId} (on-chain)`,
+            referenceId: senderPartyId,
+            ledgerTxId: updateId,
+            cantonUpdateId: updateId,
+            status: 'COMPLETED',
+          });
+        } else {
+          await this.users.recordTransaction({
+            userId: receiverUserId,
+            amountCc: amount,
+            type: 'TRANSFER_IN',
+            description: `Received ${amount} CC (on-chain)`,
+            counterparty: senderPartyId ?? undefined,
+            ledgerTxId: updateId,
+            cantonUpdateId: updateId,
+            status: 'COMPLETED',
+          });
+        }
+        this.logger.log(
+          `accept_offer receiver row recorded (offer-detail fallback): user=${receiverUserId.slice(0, 8)} amount=${amount} ${offerDetail.instrumentId}`,
+        );
+      } else {
+        this.logger.warn(
+          `accept_offer receiver row TIDAK tercatat: cid=${transferInstructionCid.slice(0, 16)}… tidak ketemu di row sender & tanpa offer-detail meta`,
         );
       }
     } catch (err) {
@@ -1275,10 +1357,31 @@ export class SigningRelayService {
     if (!cid) throw new BadRequestException('contractId is required.');
 
     // Detail offer (instrumentAdmin utk choice context) — best-effort.
+    // SEKALIGUS di-capture ke meta: recordReceiverAccept pakai ini sebagai
+    // fallback kalau row sender tidak ketemu (offer dibuat sebelum fix cid /
+    // bookkeeping sender gagal) supaya penerima tetap dapat TRANSFER_IN +
+    // notifikasi. Both directions: withdraw = outgoing (user = sender).
     let instrumentAdmin = '';
+    let offerSnapshot: {
+      amount: string;
+      instrumentId: string;
+      instrumentAdmin: string;
+      sender: string;
+    } | null = null;
     try {
-      const detail = await this.ledger.lookupOfferDetail(cid, user.partyId);
-      if (detail?.instrumentAdmin) instrumentAdmin = detail.instrumentAdmin;
+      const detail = await this.ledger.lookupOfferDetailBothDirections(
+        cid,
+        user.partyId,
+      );
+      if (detail) {
+        if (detail.instrumentAdmin) instrumentAdmin = detail.instrumentAdmin;
+        offerSnapshot = {
+          amount: detail.amount,
+          instrumentId: detail.instrumentId || 'Amulet',
+          instrumentAdmin: detail.instrumentAdmin || '',
+          sender: detail.sender || '',
+        };
+      }
     } catch {
       /* default CC (admin kosong) */
     }
@@ -1325,7 +1428,7 @@ export class SigningRelayService {
         },
       ],
       disclosedContracts: choiceCtx.disclosedContracts,
-      meta: { cid, action },
+      meta: { cid, action, offer: offerSnapshot },
       description: labels[action],
     };
   }
@@ -1415,6 +1518,7 @@ export class SigningRelayService {
           amount,
           feeCc,
           feeParty: feePartyRaw ?? '',
+          transferKind: main.transferKind,
           recipientPartyId,
           recipientLabel,
           memo,

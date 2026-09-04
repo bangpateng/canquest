@@ -88,13 +88,21 @@ export class TransactionDetailService {
   ) {}
 
   /**
-   * Build a Modo explorer link for an update id (cc.modo.link/mainnet/event/{id}:0).
+   * Build link explorer untuk sebuah update id.
+   * Default: CantonScan (`https://www.cantonscan.com/tx/{id}`) — explorer
+   * full-Daml yang men-decode SEMUA template (termasuk USDCx/Utility Holding),
+   * bukan hanya Amulet seperti ccview.io/cc.modo.link (link lama membuat tx
+   * USDCx tampil sebagai pergerakan CC — keluhan owner 2026-09-04).
+   * Override via env CANTON_TX_EXPLORER_URL (placeholder {id}).
    * Pure string formatting — tidak ada network call. Null untuk input kosong.
    */
   explorerUrl(eventId: string | null | undefined): string | null {
     if (!eventId?.trim()) return null;
     const id = eventId.trim().replace(/:[0-9]+$/, '');
-    return `https://cc.modo.link/mainnet/event/${encodeURIComponent(id)}%3A0`;
+    const template =
+      this.config.get<string>('CANTON_TX_EXPLORER_URL')?.trim() ||
+      'https://www.cantonscan.com/tx/{id}';
+    return template.replace('{id}', encodeURIComponent(id));
   }
 
   /**

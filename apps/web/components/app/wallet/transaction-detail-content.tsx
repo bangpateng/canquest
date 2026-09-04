@@ -398,14 +398,18 @@ export function TransactionDetailContent({
           </ReceiptField>
 
           {txId ? (() => {
-            // Link explorer ccview.io/updates/{id}/ — pakai cantonUpdateId (update id
-            // on-chain) sebagai prioritas, fallback ke txId. Strip suffix :N kalau ada
-            // (eventId bisa bawa suffix round). id null → tdk ada link (internal marker).
+            // Link explorer — CantonScan (full-Daml: men-decode SEMUA template
+            // termasuk USDCx/Utility Holding; ccview.io lama Amulet-only sehingga
+            // tx USDCx tampil sebagai pergerakan CC). URL utama dari backend
+            // (cantonScanUrl, env-driven CANTON_TX_EXPLORER_URL); fallback lokal
+            // pakai pola default CantonScan. Strip suffix :N kalau ada.
             const rawForUrl = detail.cantonUpdateId ?? txId;
             const urlId = rawForUrl ? rawForUrl.replace(/:[0-9]+$/, "") : null;
-            const explorerUrl = urlId
-              ? `https://ccview.io/updates/${encodeURIComponent(urlId)}/`
-              : null;
+            const explorerUrl =
+              urlId != null
+                ? (detail.cantonScanUrl ??
+                  `https://www.cantonscan.com/tx/${encodeURIComponent(urlId)}`)
+                : null;
             return (
               <ReceiptField label="Tx ID" mono>
                 <span className="inline-flex items-center justify-end gap-1.5">
@@ -429,8 +433,8 @@ export function TransactionDetailContent({
                       target="_blank"
                       rel="noopener noreferrer"
                       className={iconButtonClass("h-7 w-7 shrink-0 text-canton")}
-                      aria-label="View on ccview.io"
-                      title="View on ccview.io"
+                      aria-label="View on CantonScan"
+                      title="View on CantonScan"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </a>

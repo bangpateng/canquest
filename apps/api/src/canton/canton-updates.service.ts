@@ -266,6 +266,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   /** Maks umur checkpoint (jam) yang masih di-resume saat startup. */
   private readonly resumeMaxAgeHours: number;
+  /** Watchdog: timestamp pesan WS terakhir (checkpoint ATAU transaksi). */
+  private lastMessageAt = Date.now();
+  /** Interval timer watchdog (dibersihkan di onModuleDestroy). */
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   /** Track party yang punya created event sejak flush reconcile terakhir —
    *  dipakai untuk emit SSE `offer:new` ke potential receiver (idempoten). */
   private readonly partyHadCreated = new Set<string>();
@@ -340,6 +344,25 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       'CantonUpdatesService ENABLED — connecting WS to /v2/updates.',
     );
+
+    // Watchdog zombie-connection: koneksi WS bisa "connected" tapi TIDAK
+    // mengirim pesan apa pun (kasus nyata 2026-09-04: stream diam total
+    // >30 menit walau 'WS connected' tiap 30s — saldo/activity beku).
+    // Checkpoint heartbeat seharusnya masuk periodik; diam total > 5 menit
+    // = zombie → force reconnect.
+    this.lastMessageAt = Date.now();
+    this.watchdogTimer = setInterval(() => {
+      if (this.closedByUser) return;
+      const silentMs = Date.now() - this.lastMessageAt;
+      if (silentMs > 5 * 60_000) {
+        this.logger.warn(
+          `CantonUpdates watchdog: ${Math.round(silentMs / 60_000)}m tanpa pesan WS (zombie connection) — force reconnect.`,
+        );
+        this.lastMessageAt = Date.now(); // reset supaya tidak spam reconnect
+        this.teardownConnection();
+        void this.startStream();
+      }
+    }, 60_000);
   }
 
   /** Debounce timers per party — coalesce burst jadi 1 reconcile call. */
@@ -425,12 +448,16 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     this.closedByUser = true;
     this.teardownConnection();
-    // Bersihkan debounce timers.
+    // Bersihkan debounce timers + watchdog.
     for (const t of this.partyDebounce.values()) clearTimeout(t);
     this.partyDebounce.clear();
     if (this.persistTimer) {
       clearTimeout(this.persistTimer);
       this.persistTimer = null;
+    }
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
     }
     // Flush checkpoint best-effort supaya restart berikutnya resume akurat.
     void this.persistCheckpointNow();
@@ -666,6 +693,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     // split newline seperti pada HTTP long-poll NDJSON).
     ws.on('message', (data: unknown) => {
       if (this.closedByUser || this.ws !== ws) return;
+      this.lastMessageAt = Date.now(); // feed watchdog
       const text =
         typeof data === 'string'
           ? data
@@ -911,16 +939,17 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     const updateWrapper = raw.update as Record<string, unknown> | undefined;
     if (!updateWrapper || typeof updateWrapper !== 'object') return null;
 
-    // OffsetCheckpoint: extract offset saja, return null (bukan transaction update).
+    // OffsetCheckpoint: HANYA heartbeat — offset yang dibawanya adalah HEAD
+    // ledger, BUKAN posisi terakhir yang kita proses. Memajukan lastOffset ke
+    // head di sini menciptakan skip-window: reconnect berikutnya resume dari
+    // head → transaksi yang belum terkirim TERLEWAT permanen (kasus nyata:
+    // accept USDCx 2026-09-04 02:03 hilang, penerima tanpa notifikasi).
+    // Replay idempotent (WssBalanceApplied + unique ledgerTxId), jadi aman
+    // membiarkan lastOffset hanya maju pada transaction update NYATA.
     const checkpoint = updateWrapper.OffsetCheckpoint as
       | { value?: { offset?: number | string } }
       | undefined;
     if (checkpoint?.value?.offset !== undefined) {
-      const offsetNum = Number(checkpoint.value.offset);
-      if (Number.isFinite(offsetNum)) {
-        this.lastOffset = offsetNum;
-        this.schedulePersistCheckpoint();
-      }
       return null;
     }
 
@@ -947,15 +976,12 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    * dikenali, atau OffsetCheckpoint yg sudah di-handle di unwrap).
    */
   private tryExtractOffsetFromAnyShape(raw: Record<string, unknown>): void {
-    // Cek berbagai path offset yang mungkin.
+    // Cek berbagai path offset yang mungkin — KECUALI OffsetCheckpoint
+    // (heartbeat head; memajukan lastOffset ke head = skip-window, lihat
+    // catatan di unwrapUpdateEnvelope).
     const candidates = [
       raw.offset,
       (raw as { value?: { offset?: unknown } }).value?.offset,
-      (
-        raw as {
-          update?: { OffsetCheckpoint?: { value?: { offset?: unknown } } };
-        }
-      ).update?.OffsetCheckpoint?.value?.offset,
       (raw as { update?: { Transaction?: { value?: { offset?: unknown } } } })
         .update?.Transaction?.value?.offset,
     ];

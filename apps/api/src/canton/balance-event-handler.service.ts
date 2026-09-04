@@ -553,21 +553,23 @@ export class BalanceEventHandlerService
   /**
    * Cek apakah templateId = token Holding (bukan CC/Amulet).
    *
-   * Mainnet Splice utility-registry holding: `…Utility.Registry.Holding.V0.Holding:Holding`
-   * (terverifikasi dari WSS log produksi). Cabang match LAMA pakai
-   * `includes(':HoldingV1:Holding')` dll. GAGAL karena:
-   *   - mainnet pakai `Holding.V0` (titik) bukan `HoldingV1`
-   *   - separator sebelum `Holding:Holding` di mainnet adalah TITIK (`...Holding:Holding`),
-   *     bukan titik dua (`:Holding:Holding`)
+   * Mainnet Splice utility-registry holding (USDCx):
+   *   `<hash>:Utility.Registry.Holding.V0.Holding:Holding`
+   * (terverifikasi langsung dari ACS produksi 2026-09-04). Module-nya
+   * `…Holding.V0.Holding` — jadi pemisah sebelum segmen `Holding:Holding`
+   * terakhir adalah TITIK, BUKAN titik dua. Match lama
+   * `endsWith(':Holding:Holding')` (titik dua) TIDAK PERNAH match di mainnet
+   * → seluruh cabang token WSS mati senyap: saldo USDCx tidak ter-kredit,
+   * TOKEN_TRANSFER_IN tidak pernah dibuat handler.
    *
-   * Match strategy: `endsWith(':Holding:Holding')`. Ini robust terhadap prefix
-   * hash package apapun (mis. `#splice-api-token-holding-v1:...`) dan semua
-   * varian versi (V0/V1/V2). CC/Amulet tidak diakhiri string ini → aman.
+   * Fix: `endsWith('Holding:Holding')` (tanpa titik dua) — cocok untuk
+   * `…Holding:Holding` maupun `:Holding:Holding`, semua varian versi/package.
+   * CC/Amulet (`Splice.Amulet:Amulet`) tidak berakhiran string ini → aman.
    */
   private isTokenHoldingTemplate(templateId: string): boolean {
     const t = templateId || '';
     // Mainnet utility-registry holding (USDCx): `…Utility.Registry.Holding.V0.Holding:Holding`
-    if (t.endsWith(':Holding:Holding')) return true;
+    if (t.endsWith('Holding:Holding')) return true;
     // Varian lama / alternatif (defensive).
     if (t.includes(':HoldingV1:Holding') || t.includes(':HoldingV0:Holding'))
       return true;
