@@ -121,6 +121,11 @@ function envFrom(p) {
 
   const instrKey = (inst) => `${inst.admin}|${inst.id}`;
   const isDso = (p) => typeof p === 'string' && p.toLowerCase().startsWith(DSO_HINT);
+  /** Normalizer party: sebagian varian TI memakai {party: "..."} bukan string. */
+  const asParty = (v) =>
+    typeof v === 'string' ? v :
+    v && typeof v === 'object' && typeof v.party === 'string' ? v.party :
+    null;
 
   /** Satu pass klasifikasi → hasil + metrik (deterministik). */
   async function classifyPass() {
@@ -212,14 +217,13 @@ function envFrom(p) {
           }
           const ti = ev.transferInstruction;
           if (ti?.transfer) {
+            const sender = asParty(ti.transfer.sender);
+            const receiver = asParty(ti.transfer.receiver);
             counterparty =
-              ti.transfer.sender?.toLowerCase() === cand
-                ? ti.transfer.receiver
-                : ti.transfer.sender;
+              sender && sender.toLowerCase() === cand ? receiver : sender;
             instrCid = ti.originalInstructionCid ?? instrCid;
             executeBefore = ti.transfer.executeBefore ?? executeBefore;
           }
-          // fee leg: transfer ke party fee/DSO dicatat sebagai counterparty, tidak dipisah v1.
         }
 
         for (const [k, v] of netAll) {
@@ -243,7 +247,6 @@ function envFrom(p) {
         for (const [k, v] of netUnlockedArr) {
           const [admin, id] = k.split('|');
           const direction = v > 0 ? 'in' : 'out';
-          const kind = v > 0 && (isDso(counterparty) || isDso(admin) === false && false) ? 'reward' : 'transfer';
           // Reward = net positif yang counterparty-nya DSO (mint reward).
           const isReward = v > 0 && isDso(counterparty);
           if (isReward) m.rewardCount++;
