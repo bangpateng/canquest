@@ -1085,6 +1085,27 @@ model AcsOpeningBalance {
   sums            Json
 }
 
+// ─── Insiden 2026-09-05: monitor ACS party-scoped gelap ─────────────────────
+// Endpoint /v2/state/active-contracts mengembalikan 0 baris (party-scoped DAN
+// wildcard) sejak ±00:30 meski WS/ledger-end/pruning normal. Gejala KAMBUHAN —
+// lihat docs/incident-acs-party-empty-20260905.md + komentar lama di
+// balance-event-handler.service.ts. Bukti dicatat ke DB, bukan hanya log —
+// pelajaran pola gagal-senyap rangkaian ini.
+model AcsHealthCheck {
+  id         String   @id @default(cuid())
+  checkedAt  DateTime @default(now())
+  /// Party yang dicek; '*' = varian filtersForAnyParty (wildcard).
+  party      String
+  httpStatus Int
+  rows       Int
+  ledgerEnd  BigInt
+  /// Ringkasan per-cycle (mis. jumlah party OK) — dipakai deteksi pemulihan.
+  note       String?
+
+  @@index([checkedAt])
+  @@index([party, checkedAt])
+}
+
 // ─── v25: DAML PlatformTransfer contract tracking ──────────────────────────
 // Mirror on-chain PlatformTransfer contract (atomic send + platform fee).
 // Dibuat backend saat user send token dgn platform fee (feature flag on).
