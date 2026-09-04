@@ -115,50 +115,70 @@ function envFrom(p) {
       sums[key] = (sums[key] ?? 0) + (Number.isFinite(amt) ? amt : 0);
     }
 
-    // ── firstSeenOffset via flats (offset transaksi pertama sejak 819747) ──
+    // ── firstSeenOffset via flats — scan jendela mengecil ─────────────────
+    // Endpoint flats membatasi 200 elemen per respons (413) — party berat
+    // (>200 transaksi sejak 819747) harus di-scan per jendela offset.
     let firstSeenOffset = null;
-    // endInclusive WAJIB <= ledger-end aktual — nilai melewati head ditolak
-    // node (dan kegagalan ini pernah tertelan senyap: jangan ulangi).
     const lend = (
       await (await fetch(`${base}/v2/state/ledger-end`, { headers: auth })).json()
     ).offset;
-    const fr = await fetch(`${base}/v2/updates/flats`, {
-      method: 'POST',
-      headers: auth,
-      body: JSON.stringify({
-        updateFormat: {
-          includeTransactions: {
-            eventFormat: {
-              filtersByParty: {
-                [party]: {
-                  cumulative: [
-                    {
-                      identifierFilter: {
-                        WildcardFilter: { value: { includeCreatedEventBlob: false } },
+    const flatsWindow = async (from, to) => {
+      const r = await fetch(`${base}/v2/updates/flats`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({
+          updateFormat: {
+            includeTransactions: {
+              eventFormat: {
+                filtersByParty: {
+                  [party]: {
+                    cumulative: [
+                      {
+                        identifierFilter: {
+                          WildcardFilter: { value: { includeCreatedEventBlob: false } },
+                        },
                       },
-                    },
-                  ],
+                    ],
+                  },
                 },
+                verbose: false,
               },
-              verbose: false,
+              transactionShape: 'TRANSACTION_SHAPE_LEDGER_EFFECTS',
             },
-            transactionShape: 'TRANSACTION_SHAPE_LEDGER_EFFECTS',
           },
-        },
-        beginExclusive: AT_OFFSET,
-        endInclusive: Number(lend),
-        verbose: false,
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!fr.ok) {
-      console.log(`  [firstSeen] flats GAGAL http=${fr.status}: ${(await fr.text()).slice(0, 150)}`);
-    } else {
-      const arr = await fr.json();
-      const offsets = arr
-        .map((x) => x?.update?.Transaction?.value?.offset)
-        .filter((o) => Number.isFinite(o));
-      if (offsets.length > 0) firstSeenOffset = Math.min(...offsets);
+          beginExclusive: from,
+          endInclusive: to,
+          verbose: false,
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      return { status: r.status, arr: r.ok ? await r.json() : null };
+    };
+    {
+      let win = 200_000;
+      let from = AT_OFFSET;
+      let guard = 0;
+      while (from < Number(lend) && guard++ < 200) {
+        let to = Math.min(from + win, Number(lend));
+        let { status, arr } = await flatsWindow(from, to);
+        while (status === 413 && to > from + 1_000) {
+          win = Math.max(20_000, Math.floor(win / 4));
+          to = Math.min(from + win, Number(lend));
+          ({ status, arr } = await flatsWindow(from, to));
+        }
+        if (status !== 200) {
+          console.log(`  [firstSeen] flats GAGAL http=${status} (window ${from}..${to})`);
+          break;
+        }
+        const offsets = (arr || [])
+          .map((x) => x?.update?.Transaction?.value?.offset)
+          .filter((o) => Number.isFinite(o));
+        if (offsets.length > 0) {
+          firstSeenOffset = Math.min(...offsets);
+          break;
+        }
+        from = to;
+      }
     }
 
     const born = holdings.length > 0 || (firstSeenOffset !== null && firstSeenOffset <= AT_OFFSET)
