@@ -71,6 +71,55 @@ export class AppController {
   }
 
   /**
+   * GET /api/health/ingestion — lag stream WSS /v2/updates (L2b).
+   * Sumber tunggal pembacaan lag dari luar: monitoring (L7) tinggal memanggil
+   * endpoint ini atau SELECT LedgerStreamCheckpoint langsung — jangan membangun
+   * ulang. lag = headOffset (heartbeat ledger) − lastOffset (transaksi terakhir
+   * yang di-dispatch). headOffset null = belum ada heartbeat sejak boot.
+   */
+  @Get('ingestion')
+  async ingestion() {
+    let row: {
+      streamKey: string;
+      lastOffset: bigint | null;
+      headOffset: bigint | null;
+      updatedAt: Date | null;
+      headUpdatedAt: Date | null;
+    } | null = null;
+    let error: string | null = null;
+    try {
+      row = await this.prisma.ledgerStreamCheckpoint.findUnique({
+        where: { streamKey: 'canton-updates' },
+        select: {
+          streamKey: true,
+          lastOffset: true,
+          headOffset: true,
+          updatedAt: true,
+          headUpdatedAt: true,
+        },
+      });
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+    const last = row?.lastOffset ?? null;
+    const head = row?.headOffset ?? null;
+    const lag =
+      last !== null && head !== null ? Number(head) - Number(last) : null;
+    return {
+      ok: !error,
+      ts: new Date().toISOString(),
+      stream: 'canton-updates',
+      lastOffset: last !== null ? Number(last) : null,
+      headOffset: head !== null ? Number(head) : null,
+      /** offset yang belum ter-dispatch; ledger sunyi ≠ lag — lihat headUpdatedAt. */
+      lag,
+      lastUpdateAt: row?.updatedAt?.toISOString() ?? null,
+      headUpdatedAt: row?.headUpdatedAt?.toISOString() ?? null,
+      error,
+    };
+  }
+
+  /**
    * GET /api/health/canton — diagnose slow wallet/API (Splice + Ledger reachability).
    * Run on VPS: curl -s http://127.0.0.1:3001/api/health/canton | jq
    */

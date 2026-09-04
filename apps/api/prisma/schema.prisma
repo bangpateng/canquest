@@ -379,10 +379,36 @@ model TokenTransaction {
 /// dijamin oleh WssBalanceApplied + @@unique([userId, ledgerTxId]) di tabel
 /// transaksi (pola "beginExclusive per-user persist" — docs Canton
 /// Finding & Reading Data / v2-updates).
+///
+/// L2b: headOffset = HEAD ledger dari pesan OffsetCheckpoint (heartbeat) —
+/// KHUSUS pengukuran lag (headOffset − lastOffset), TIDAK untuk resume.
+/// Rentang yang diketahui hilang karena pruning dicatat di LedgerStreamGap.
 model LedgerStreamCheckpoint {
-  streamKey  String   @id // mis. "canton-updates"
-  lastOffset BigInt
-  updatedAt  DateTime @updatedAt
+  streamKey      String   @id // mis. "canton-updates"
+  lastOffset     BigInt
+  /// HEAD ledger terakhir terlihat dari heartbeat (lag = head − last). Nullable: sebelum heartbeat pertama.
+  headOffset     BigInt?
+  headUpdatedAt  DateTime?
+  updatedAt      DateTime @updatedAt
+}
+
+/// L2b — rentang offset stream yang DIKETAHUI hilang permanen karena pruning
+/// node (checkpoint ≤ participantPrunedUpToInclusive saat resume). Persist di
+/// DB — bukan hanya log — supaya masih bisa ditanyakan berbulan-tahun kemudian
+/// saat ada yang bertanya kenapa riwayatnya bolong. Log pm2 terputar habis;
+/// baris ini tidak.
+model LedgerStreamGap {
+  id          String   @id @default(cuid())
+  streamKey   String
+  /// Offset pertama yang hilang (inklusif) = checkpoint + 1.
+  fromOffset  BigInt
+  /// Offset terakhir yang hilang (inklusif) = prunedUpToInclusive.
+  toOffset    BigInt
+  /// Sementara satu-satunya penyebab yang diketahui.
+  reason      String   @default("checkpoint-behind-pruning")
+  detectedAt  DateTime @default(now())
+
+  @@index([streamKey, detectedAt])
 }
 
 /// Guard idempotensi apply balance oleh WSS handler (BalanceEventHandler).

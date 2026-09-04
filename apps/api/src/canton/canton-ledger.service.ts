@@ -4047,6 +4047,33 @@ export class CantonLedgerService {
   }
 
   /**
+   * Batas pruning participant: semua update offset ≤ nilai ini sudah dipangkas
+   * node dan TIDAK bisa di-replay (L2b — dasar kebijakan resume + pencatatan
+   * LedgerStreamGap). GET /v2/state/latest-pruned-offsets.
+   * Terbukti 200 di node produksi (Splice 0.7.3) dengan
+   * participantPrunedUpToInclusive saat ini 0 (belum pernah memangkas).
+   */
+  async latestPrunedOffset(): Promise<number> {
+    const res = await fetch(
+      `${this.baseUrl}/v2/state/latest-pruned-offsets`,
+      {
+        headers: await this.authHeaders(),
+        signal: AbortSignal.timeout(6_000),
+      },
+    );
+    const text = await res.text();
+    if (!res.ok)
+      throw new ServiceUnavailableException(
+        `Canton latest-pruned-offsets ${res.status}`,
+      );
+    const body = JSON.parse(text) as {
+      participantPrunedUpToInclusive?: number | string;
+    };
+    const val = Number(body.participantPrunedUpToInclusive ?? 0);
+    return Number.isFinite(val) && val >= 0 ? val : 0;
+  }
+
+  /**
    * Query the Active Contract Set (ACS) for Amulet holdings owned by a party.
    *
    * Uses POST /v2/state/active-contracts with a TemplateFilter for Splice.Amulet:Amulet.

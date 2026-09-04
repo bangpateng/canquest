@@ -91,6 +91,7 @@ import { CantonLedgerService } from './canton-ledger.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
 import { BalanceEventHandlerService } from './balance-event-handler.service';
+import { decideResume } from './resume-policy';
 
 /**
  * Canton `/v2/updates` event shape (subset of fields kita pakai).
@@ -234,9 +235,6 @@ const TOKEN_REFRESH_LEAD_MS = 60_000;
 const DEFAULT_RECONNECT_DELAY_MS = 240_000;
 /** Key baris checkpoint untuk stream ini di tabel LedgerStreamCheckpoint. */
 const STREAM_KEY = 'canton-updates';
-/** Maks umur checkpoint (jam) yang masih layak di-resume. Lebih tua dari ini
- *  → mulai dari ledgerEnd (replay terlalu jauh; saldo ditangung reconciler). */
-const DEFAULT_RESUME_MAX_AGE_HOURS = 48;
 
 @Injectable()
 export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
@@ -268,8 +266,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   private persistChain: Promise<void> = Promise.resolve();
   /** True bila sudah ada persist yang menunggu giliran di chain. */
   private persistQueued = false;
-  /** Maks umur checkpoint (jam) yang masih di-resume saat startup. */
-  private readonly resumeMaxAgeHours: number;
+  /** HEAD ledger terakhir dari heartbeat OffsetCheckpoint (L2b) — KHUSUS
+   *  pengukuran lag (head − last), TIDAK pernah dipakai untuk resume. */
+  private headOffset: number | null = null;
   /** Watchdog: timestamp pesan WS terakhir (checkpoint ATAU transaksi). */
   private lastMessageAt = Date.now();
   /** Interval timer watchdog (dibersihkan di onModuleDestroy). */
@@ -296,10 +295,6 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       config.get<string>('CANTON_JSON_API_URL');
     this.baseUrl = ledgerUrl?.replace(/\/$/, '') ?? '';
     this.enabled = config.get<string>('CANTON_UPDATES_WS_ENABLED') === 'true';
-    this.resumeMaxAgeHours = Number(
-      config.get<string>('CANTON_UPDATES_RESUME_MAX_AGE_HOURS') ??
-        String(DEFAULT_RESUME_MAX_AGE_HOURS),
-    );
   }
 
   onModuleInit(): void {
@@ -570,7 +565,18 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         );
         return;
       }
-      const resumed = await this.tryResumeFromCheckpoint(beginExclusive);
+      let resumed: number | null;
+      try {
+        resumed = await this.tryResumeFromCheckpoint(beginExclusive);
+      } catch (err) {
+        // Baca checkpoint gagal — JANGAN fallback ke ledgerEnd (itu membuat
+        // gap senyap). Retry di cycle berikutnya.
+        this.logger.warn(
+          `CantonUpdates: resolve resume gagal (baca checkpoint/pruned) — retry, tidak lompat ke ledgerEnd: ${String(err)}`,
+        );
+        this.scheduleReconnect(err as Error);
+        return;
+      }
       if (resumed !== null) {
         const gap = beginExclusive - resumed;
         beginExclusive = resumed;
@@ -585,6 +591,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
           `CantonUpdates: starting from ledgerEnd offset=${beginExclusive}`,
         );
       }
+      // L2b: inisialisasi headOffset dari ledgerEnd supaya lag terukur sejak
+      // boot (heartbeat akan memperbaruinya). Bukan untuk resume.
+      this.headOffset = Math.max(this.headOffset ?? 0, beginExclusive);
     } else {
       beginExclusive = this.lastOffset;
     }
@@ -799,6 +808,19 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     // events berisi { ExercisedEvent: {...} } → parser lama tidak extract apa2.
     const update = this.unwrapUpdateEnvelope(raw as Record<string, unknown>);
     if (!update) {
+      // OffsetCheckpoint heartbeat — L2b: majukan HEAD untuk pengukuran lag
+      // (head − last). TIDAK pernah menyentuh lastOffset/resume (lihat catatan
+      // skip-window di unwrapUpdateEnvelope).
+      const hb = (
+        raw as {
+          update?: { OffsetCheckpoint?: { value?: { offset?: unknown } } };
+        }
+      ).update?.OffsetCheckpoint?.value?.offset;
+      const hbNum = Number(hb);
+      if (Number.isFinite(hbNum) && (this.headOffset ?? 0) < hbNum) {
+        this.headOffset = hbNum;
+        this.schedulePersistCheckpoint();
+      }
       // Bukan transaction update (mis. OffsetCheckpoint saja) — coba extract offset.
       this.tryExtractOffsetFromAnyShape(raw as Record<string, unknown>);
       return;
@@ -1067,43 +1089,76 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   /**
-   * Coba resume dari checkpoint persist (LedgerStreamCheckpoint).
-   * Return offset resume, atau null bila tidak layak (tidak ada baris /
-   * terlalu tua / > ledgerEnd / DB error) → caller fallback ke ledgerEnd.
+   * Coba resume dari checkpoint persist (LedgerStreamCheckpoint) — L2b.
+   * Return offset beginExclusive untuk subscribe, atau null bila memang
+   * harus mulai dari ledgerEnd (tidak ada baris / ledger ter-reset).
    *
-   * Dokumentasi Canton mewajibkan reconnect pakai `beginExclusive = last_offset`
-   * yang PERSIST (bukan 0, bukan head) supaya event selama downtime tidak
-   * hilang. Replay aman karena apply balance + insert history idempotent
-   * (WssBalanceApplied + @@unique([userId, ledgerTxId])).
+   * Perbedaan besar vs versi lama:
+   *   - ATURAN 48 JAM DIHAPUS. Downtime berapa pun di-replay selama data
+   *     belum dipangkas node. Kelayakan kini ditentukan node sendiri via
+   *     /v2/state/latest-pruned-offsets (keputusan murni di decideResume(),
+   *     teruji unit dengan pruned disuntik).
+   *   - Bila checkpoint ≤ prunedUpToInclusive: rentang yang tidak bisa
+   *     di-replay DICATAT ke LedgerStreamGap (persist, dengan timestamp —
+   *     log pm2 terputar habis, baris DB tidak), lalu resume dari pruned —
+   *     BUKAN lompat ke ledgerEnd: sisanya tetap di-replay.
+   *   - DB error saat baca checkpoint → THROW (caller retry via
+   *     scheduleReconnect). Jangan pernah lagi fallback diam-diam ke
+   *     ledgerEnd karena baca DB sesaat gagal — itu gap senyap.
    */
   private async tryResumeFromCheckpoint(
     ledgerEnd: number,
   ): Promise<number | null> {
-    try {
-      const cp = await this.prisma.ledgerStreamCheckpoint.findUnique({
-        where: { streamKey: STREAM_KEY },
-      });
-      if (!cp) return null;
-      const off = Number(cp.lastOffset);
-      if (!Number.isFinite(off) || off < 0) return null;
-      if (off >= ledgerEnd) return null; // tidak ada gap / ledger ter-reset
-      const ageHours =
-        (Date.now() - cp.updatedAt.getTime()) / 3_600_000;
-      if (ageHours > this.resumeMaxAgeHours) {
-        this.logger.warn(
-          `CantonUpdates: checkpoint offset=${off} terlalu tua ` +
-            `(${ageHours.toFixed(1)}h > ${this.resumeMaxAgeHours}h) — mulai dari ledgerEnd. ` +
-            `Event selama downtime TIDAK di-replay; saldo ditutup reconciler poll.`,
-        );
-        return null;
-      }
-      return off;
-    } catch (err) {
-      this.logger.warn(
-        `CantonUpdates: baca checkpoint gagal (fallback ledgerEnd): ${String(err)}`,
-      );
-      return null;
+    const cp = await this.prisma.ledgerStreamCheckpoint.findUnique({
+      where: { streamKey: STREAM_KEY },
+    });
+    const checkpointOffset = cp ? Number(cp.lastOffset) : null;
+    if (
+      checkpointOffset !== null &&
+      (!Number.isFinite(checkpointOffset) || checkpointOffset < 0)
+    ) {
+      return null; // baris korup → anggap tidak ada checkpoint
     }
+
+    const pruned = await this.ledger.latestPrunedOffset();
+    const decision = decideResume({
+      checkpointOffset,
+      ledgerEnd,
+      prunedUpToInclusive: pruned,
+    });
+
+    if (decision.reason === 'checkpoint-behind-pruning') {
+      if (decision.gap) {
+        // PERSIST — bukan cuma log. Ini jawaban atas "kenapa riwayat saya
+        // bolong" berbulan-tahun kemudian.
+        try {
+          await this.prisma.ledgerStreamGap.create({
+            data: {
+              streamKey: STREAM_KEY,
+              fromOffset: BigInt(decision.gap.fromOffset),
+              toOffset: BigInt(decision.gap.toOffset),
+              reason: decision.reason,
+            },
+          });
+        } catch (err) {
+          this.logger.error(
+            `CantonUpdates: LedgerStreamGap create FAILED — rentang hilang ${decision.gap.fromOffset}..${decision.gap.toOffset} TIDAK tercatat di DB: ${String(err)}`,
+          );
+        }
+        this.logger.error(
+          `CantonUpdates: PRUNING GAP — offset ${decision.gap.fromOffset}..${decision.gap.toOffset} ` +
+            `tidak bisa di-replay (checkpoint=${checkpointOffset} ≤ pruned=${pruned}). ` +
+            `Rentang dicatat ke LedgerStreamGap; resume dari ${decision.resumeFrom}. ` +
+            `History pada rentang ini bolong secara permanen.`,
+        );
+      } else {
+        this.logger.warn(
+          `CantonUpdates: checkpoint=${checkpointOffset} tepat = pruned=${pruned} — tidak ada rentang hilang, resume dari ${decision.resumeFrom}.`,
+        );
+      }
+    }
+
+    return decision.resumeFrom;
   }
 
   /**
@@ -1139,18 +1194,28 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       });
   }
 
-  /** Tulis lastOffset ke LedgerStreamCheckpoint (upsert, best-effort). */
+  /** Tulis lastOffset (+ headOffset utk lag) ke LedgerStreamCheckpoint
+   *  (upsert, best-effort — persistCheckpointNow menangani error sendiri). */
   private async persistCheckpointNow(): Promise<void> {
     const off = this.lastOffset;
     if (off === null || !Number.isFinite(off)) return;
+    const head = this.headOffset;
     try {
       await this.prisma.ledgerStreamCheckpoint.upsert({
         where: { streamKey: STREAM_KEY },
         create: {
           streamKey: STREAM_KEY,
           lastOffset: BigInt(Math.trunc(off)),
+          ...(head !== null && Number.isFinite(head)
+            ? { headOffset: BigInt(Math.trunc(head)), headUpdatedAt: new Date() }
+            : {}),
         },
-        update: { lastOffset: BigInt(Math.trunc(off)) },
+        update: {
+          lastOffset: BigInt(Math.trunc(off)),
+          ...(head !== null && Number.isFinite(head)
+            ? { headOffset: BigInt(Math.trunc(head)), headUpdatedAt: new Date() }
+            : {}),
+        },
       });
     } catch (err) {
       // Non-fatal: offset in-memory tetap benar; hanya replay-setelah-restart
