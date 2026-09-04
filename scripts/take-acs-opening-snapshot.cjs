@@ -117,6 +117,11 @@ function envFrom(p) {
 
     // ── firstSeenOffset via flats (offset transaksi pertama sejak 819747) ──
     let firstSeenOffset = null;
+    // endInclusive WAJIB <= ledger-end aktual — nilai melewati head ditolak
+    // node (dan kegagalan ini pernah tertelan senyap: jangan ulangi).
+    const lend = (
+      await (await fetch(`${base}/v2/state/ledger-end`, { headers: auth })).json()
+    ).offset;
     const fr = await fetch(`${base}/v2/updates/flats`, {
       method: 'POST',
       headers: auth,
@@ -141,12 +146,14 @@ function envFrom(p) {
           },
         },
         beginExclusive: AT_OFFSET,
-        endInclusive: 2_999_999, // ambil seluruh rentang; ambil offset pertama
+        endInclusive: Number(lend),
         verbose: false,
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(60_000),
     });
-    if (fr.ok) {
+    if (!fr.ok) {
+      console.log(`  [firstSeen] flats GAGAL http=${fr.status}: ${(await fr.text()).slice(0, 150)}`);
+    } else {
       const arr = await fr.json();
       const offsets = arr
         .map((x) => x?.update?.Transaction?.value?.offset)
