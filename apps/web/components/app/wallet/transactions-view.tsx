@@ -414,11 +414,15 @@ function txDisplayTitle(tx: TxItem, fallback: string): string {
 
 /** Label description untuk Activity. Description user/memo diprioritaskan;
  *  bila kosong, fallback ke label generik per-tipe (mis. "Sent CC" / "Sent USDCx").
- *  Dipakai supaya kolom description tidak kosong saat sender tidak isi memo. */
+ *  Dipakai supaya kolom description tidak kosong saat sender tidak isi memo.
+ *  KECUALI kaki swap (SWAP_IN/OUT): selalu "Swap" — description mentah
+ *  ("Swap received ...", "Swap 1.7 ... fee incl.") disembunyikan supaya 1 swap
+ *  = 1 bahasa, tidak redundan dengan label tipe. */
 function txDisplayDescription(
   tx: TxItem,
   fallback: string,
 ): string {
+  if (tx.type === "SWAP_IN" || tx.type === "SWAP_OUT") return "Swap";
   const d = tx.description?.trim() ?? "";
   if (d) return d;
   // Memo kosong → label generik (bukan party-id mentah).
