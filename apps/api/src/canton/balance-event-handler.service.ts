@@ -312,6 +312,9 @@ export class BalanceEventHandlerService
     // STEP 2: Cek apakah controller sudah catat history row (anti duplikat row).
     // Skip insert + skip push transaction:new (anti duplikat badge notif).
     // TETAP push balance:changed di atas (sudah dilakukan di STEP 1).
+    // Cek mencakup format LEGACY `wss:` agar row lama (pre-fix) tetap dikenali
+    // dan tidak ditulis ulang; row BARU selalu memakai updateId asli (tanpa
+    // prefix) supaya 1 updateId = 1 ledgerTxId = anti-race via @@unique.
     const existing = await this.prisma.ccTransaction.findFirst({
       where: {
         userId: user.userId,
@@ -362,8 +365,12 @@ export class BalanceEventHandlerService
         description: `Received ${totalAmount.toFixed(6)} CC (on-chain)`,
         // ← pengirim; null bila eksternal/tidak dikenal (row TETAP tampil —
         //   self-reference malah menyembunyikan row via isSelfReferenceWssRow).
+        // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
+        // tanpa prefix `wss:` — sama seperti controller-side (signing-relay).
+        // 1 updateId = 1 ledgerTxId → race controller-vs-handler ditendang oleh
+        // @@unique([userId, ledgerTxId]) (P2002 di-swallow di bawah).
         referenceId: senderPartyId,
-        ledgerTxId: `wss:${updateId}`,
+        ledgerTxId: updateId,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
       });
@@ -479,6 +486,7 @@ export class BalanceEventHandlerService
     // STEP 2: Cek apakah controller sudah catat history row (anti duplikat badge).
     // Skip push transaction:new (anti duplikat badge notif) — controller sudah push.
     // Balance increment di STEP 1 tetap jalan (wajib).
+    // Cek mencakup format LEGACY `wss:` agar row lama (pre-fix) tetap dikenali.
     const existing = await this.prisma.tokenTransaction.findFirst({
       where: {
         userId: tk.userId,
@@ -519,16 +527,32 @@ export class BalanceEventHandlerService
         : null;
       const senderPartyId = senderUser?.cantonPartyId ?? null;
 
+      // KLASIFIKASI SWAP (Opsi A, 2026-09-08): kaki pulang swap lahir sebagai
+      // SWAP_IN (migration 20260908160000), bukan TOKEN_TRANSFER_IN generik.
+      // Kriteria: ada SwapTransaction user ini yang masih PENDING/baru settle
+      // (±15 menit) + buyInstrument cocok (case-insensitive). Tanpa pause-leg:
+      // cukup klasifikasi, tidak ada status leg baru.
+      const swapLeg = await this.findMatchingSwapLeg(
+        tk.userId,
+        tk.instrumentId,
+      );
+
       await this.users.recordTokenTransaction({
         userId: tk.userId,
         amount: tk.amount,
         instrumentId: tk.instrumentId,
         instrumentAdmin: tk.instrumentAdmin,
-        type: 'TOKEN_TRANSFER_IN',
-        description: `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
+        type: swapLeg ? 'SWAP_IN' : 'TOKEN_TRANSFER_IN',
+        description: swapLeg
+          ? `Swap received ${tk.amount} ${tk.instrumentId} (OneSwap)`
+          : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
         // null bila pengirim eksternal — row tetap tampil (jangan self-reference).
-        referenceId: senderPartyId,
-        ledgerTxId: `wss:${updateId}`,
+        // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
+        // tanpa prefix `wss:` — parity dengan path CC + controller-side.
+        // 1 updateId = 1 ledgerTxId → anti-race via @@unique.
+        // Kaki swap: ref = escrow depositParty (oneswap-wallet) bila ketemu.
+        referenceId: swapLeg?.depositParty ?? senderPartyId,
+        ledgerTxId: updateId,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
       });
@@ -1022,6 +1046,56 @@ export class BalanceEventHandlerService
   // ═══════════════════════════════════════════════════════════════════════════
   // Helpers
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Cari SwapTransaction user yang cocok sebagai kaki pulang delivery ini.
+   *
+   * Kriteria (konservatif — lebih baik miss jadi TRANSFER biasa daripada salah
+   * cap sebagai swap): swap milik user ini, buyInstrument cocok
+   * (case-insensitive), dibuat ≤15 menit lalu. Status tidak difilter ketat
+   * (PENDING maupun baru EXECUTED) karena delivery susulan bridge bisa datang
+   * menit setelah settle (kasus nyata 2026-09-06/08: leg kedua +1/+4 menit).
+   *
+   * Return depositParty untuk ref: dicari dari CcTransaction SWAP_OUT milik
+   * user di jendela yang sama yang referenceId-nya party oneswap (pola
+   * controller: ref = escrow depositParty). Null bila tidak ketemu — row tetap
+   * ditulis SWAP_IN (tipe benar), ref fallback ke senderPartyId caller.
+   */
+  private async findMatchingSwapLeg(
+    userId: string,
+    instrumentId: string,
+  ): Promise<{ depositParty: string | null } | null> {
+    try {
+      const since = new Date(Date.now() - 15 * 60_000);
+      const swap = await this.prisma.swapTransaction.findFirst({
+        where: {
+          userId,
+          buyInstrumentId: { equals: instrumentId, mode: 'insensitive' },
+          createdAt: { gte: since },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      if (!swap) return null;
+      // Escrow party dari row SWAP_OUT controller (ref = depositParty).
+      const outRow = await this.prisma.ccTransaction.findFirst({
+        where: {
+          userId,
+          type: 'SWAP_OUT',
+          createdAt: { gte: since },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { referenceId: true },
+      });
+      const ref = outRow?.referenceId?.trim() || null;
+      return {
+        depositParty:
+          ref && ref.includes('::') ? ref : null,
+      };
+    } catch {
+      return null; // non-fatal — gagal cek = tulis TRANSFER biasa
+    }
+  }
 
   /**
    * Resolve owner party → user via DB. Cache 5 menit.

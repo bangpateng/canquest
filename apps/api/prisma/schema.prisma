@@ -549,6 +549,10 @@ enum TokenTxType {
   /// Reward token (mis. USDCx) masuk dari reward wallet quest/campaign (user-side, kredit).
   /// Paralel dgn CcTransactionType.QUEST_REWARD untuk token non-CC.
   QUEST_REWARD
+  /// Kaki swap token (delivery swap DEX/bridge) — lahir sebagai SWAP, bukan
+  /// TRANSFER generik. Paralel CcTransactionType.SWAP_IN/SWAP_OUT.
+  SWAP_IN
+  SWAP_OUT
 }
 
 /// Audit trail lengkap untuk setiap swap CC ↔ token Cantex DEX (multi-leg).

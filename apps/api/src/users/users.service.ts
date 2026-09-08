@@ -172,6 +172,10 @@ export const FEED_TOKEN_TX_TYPES: TokenTxType[] = [
   'TOKEN_TRANSFER_OUT',
   'TOKEN_OFFER_REJECTED',
   'TOKEN_OFFER_WITHDRAWN',
+  // Kaki swap token (migration 20260908160000) — tampil di bell seperti kaki
+  // swap CC (SWAP_IN/SWAP_OUT sudah di FEED_TX_TYPES).
+  'SWAP_IN',
+  'SWAP_OUT',
 ];
 export const BADGE_UNREAD_TOKEN_TX_TYPES: TokenTxType[] = FEED_TOKEN_TX_TYPES;
 import {

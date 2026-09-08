@@ -7,7 +7,10 @@
  * ("Received CC", "Sent CC", "CC Locked", …) tanpa duplikasi konstanta.
  */
 
-/** Union semua tipe transaksi (CC + token non-CC). */
+/** Union semua tipe transaksi (CC + token non-CC).
+ * Kaki swap token memakai string yang SAMA dengan CC (SWAP_IN/SWAP_OUT —
+ * migration 20260908160000); pembeda CC vs token = instrumentId (null = CC).
+ */
 export type TxType =
   | "QUEST_REWARD"
   | "SPIN_REWARD"

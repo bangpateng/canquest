@@ -408,7 +408,7 @@ export function TransactionDetailContent({
             const explorerUrl =
               urlId != null
                 ? (detail.cantonScanUrl ??
-                  `https://www.cantonscan.com/tx/${encodeURIComponent(urlId)}`)
+                  `https://www.cantonscan.com/update/${encodeURIComponent(urlId)}`)
                 : null;
             return (
               <ReceiptField label="Tx ID" mono>

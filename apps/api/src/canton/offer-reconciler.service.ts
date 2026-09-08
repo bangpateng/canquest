@@ -103,6 +103,13 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
+      // Align saldo token absolut (self-heal drift delta-handler). Dijalankan
+      // SEBELUM scan PENDING supaya koreksi jalan walau user tidak punya offer
+      // pending (kasus: receive biasa drift, mis. DB 1.40 vs on-chain 0.70).
+      // Non-fatal + di-cap agar tidak overload ledger API.
+      await this.alignAllTokenBalances().catch((err) =>
+        this.logger.warn(`Offer reconciler: alignAllTokenBalances failed: ${String(err)}`),
+      );
       // Scan KEDUA tabel PENDING dengan cid (offer yang belum settled).
       const [pendingCc, pendingToken] = await Promise.all([
         this.prisma.ccTransaction.findMany({
@@ -193,6 +200,78 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
       }
     } finally {
       this.running = false;
+    }
+  }
+
+  /**
+   * Align CantexTokenBalance ke nilai ABSOLUT on-chain (self-heal drift).
+   *
+   * Cermin CcBalance poller (cc-inbound-sync menulis nilai absolut, bukan
+   * delta). Token tidak punya itu: handler hanya increment per created event
+   * dan decrement via holdingCache in-memory (hilang saat restart → drift naik
+   * permanen, mis. DB 1.40 vs on-chain 0.70). Fungsi ini menulis nilai absolut
+   * dari `getTokenBalanceOnChain` (InterfaceFilter, sumber kebenaran yang sama
+   * dengan layar wallet) untuk setiap (user, instrument) di DB.
+   *
+   * - Hanya MENULIS bila on-chain terbaca (null = ledger unreachable → skip,
+   *   jangan timpa dengan 0).
+   * - Hanya UPDATE bila beda (hindari write noise tiap 60s).
+   * - Tidak menyentuh history (CcTransaction/TokenTransaction tidak diubah).
+   * - Cap 25 user/cycle + 1 query on-chain per instrument (sama murahnya dengan
+   *   flipTokenRow yang sudah ada).
+   */
+  private async alignAllTokenBalances(): Promise<void> {
+    const holders = await this.prisma.cantexTokenBalance
+      .groupBy({
+        by: ['userId', 'instrumentId', 'instrumentAdmin'],
+      })
+      .catch(() => []);
+    if (holders.length === 0) return;
+    let processed = 0;
+    for (const h of holders) {
+      if (processed >= 25) break;
+      processed++;
+      try {
+        const user = await this.prisma.user.findUnique({
+          where: { id: h.userId },
+          select: { cantonPartyId: true, username: true },
+        });
+        const partyId = user?.cantonPartyId;
+        if (!partyId || partyId.startsWith('canquest:')) continue;
+        if (!h.instrumentId || !h.instrumentAdmin) continue;
+        let onChain: number | null = null;
+        try {
+          onChain = await this.ledger.getTokenBalanceOnChain(
+            partyId,
+            h.instrumentId,
+          );
+        } catch {
+          continue; // ledger unreachable → skip, jangan timpa
+        }
+        if (onChain === null || !Number.isFinite(onChain)) continue;
+        const current = await this.prisma.cantexTokenBalance.findFirst({
+          where: {
+            userId: h.userId,
+            instrumentId: { equals: h.instrumentId, mode: 'insensitive' },
+            instrumentAdmin: { equals: h.instrumentAdmin, mode: 'insensitive' },
+          },
+          select: { id: true, balance: true },
+        });
+        if (!current) continue;
+        if (Number(current.balance) === onChain) continue;
+        await this.prisma.cantexTokenBalance.update({
+          where: { id: current.id },
+          data: { balance: new Decimal(onChain) },
+        });
+        this.logger.log(
+          `Offer reconciler: align ${h.instrumentId} @${user?.username ?? h.userId.slice(0, 8)} ${Number(current.balance)} → ${onChain} (on-chain absolut)`,
+        );
+        this.realtime.push(h.userId, 'balance:changed', null);
+      } catch (err) {
+        this.logger.warn(
+          `Offer reconciler: align failed user=${h.userId.slice(0, 8)}: ${String(err)}`,
+        );
+      }
     }
   }
 

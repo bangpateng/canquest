@@ -138,11 +138,17 @@ export type TokenTxType =
   | 'TOKEN_FEE_OUT'
   /// Reward token (mis. USDCx) masuk dari reward wallet quest/campaign (user-side, kredit).
   /// Paralel dgn CcTransactionType.QUEST_REWARD untuk token non-CC.
-  | 'QUEST_REWARD';
+  | 'QUEST_REWARD'
+  /// Kaki swap token pulang (delivery swap DEX/bridge ke user).
+  /// Paralel CcTransactionType.SWAP_IN. (Migration 20260908160000.)
+  | 'SWAP_IN'
+  /// Kaki swap token berangkat (input user ke depositParty).
+  /// Paralel CcTransactionType.SWAP_OUT. (Migration 20260908160000.)
+  | 'SWAP_OUT';
 
 /** TokenTxType yang merepresentasikan keluarnya token/CC dari user (debit). */
 export const TOKEN_TX_DEBIT_TYPES: ReadonlySet<TokenTxType> =
-  new Set<TokenTxType>(['TOKEN_TRANSFER_OUT', 'TOKEN_FEE_OUT']);
+  new Set<TokenTxType>(['TOKEN_TRANSFER_OUT', 'TOKEN_FEE_OUT', 'SWAP_OUT']);
 
 export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 export const UserStatus = {

@@ -129,7 +129,15 @@ const TOKEN_TX_TYPES: ReadonlySet<TxItem["type"]> = new Set([
   "TOKEN_OFFER_WITHDRAWN",
 ]);
 
-/** True jika tx adalah token non-CC dengan amount (bukan toggle). */
+/** Kaki swap — CC (SWAP_IN/OUT, instrumentId null) maupun token (SWAP_IN/OUT
+ *  + instrumentId terisi, migration 20260908160000). Kuning + ikon swap. */
+function isSwapTx(tx: TxItem): boolean {
+  return tx.type === "SWAP_IN" || tx.type === "SWAP_OUT";
+}
+
+/** True jika tx adalah token non-CC dengan amount (bukan toggle, bukan swap).
+ *  Kaki swap token (SWAP_IN/OUT + instrumentId) TIDAK termasuk — dia ikut jalur
+ *  AmountText swap (kuning), bukan jalur token generik (hijau). */
 function isTokenAmountTx(tx: TxItem): boolean {
   return (
     (tx.type === "TOKEN_TRANSFER_IN" || tx.type === "TOKEN_TRANSFER_OUT") &&
@@ -217,11 +225,10 @@ function txIconBg(type: TxItem["type"]): string {
     case "AIRDROP":
       return "bg-canton-subtle text-canton-muted ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "SWAP_OUT":
-      // CC keluar — merah (sama transfer out).
-      return "bg-red-500/10 text-red-600 ring-1 ring-red-500/15";
     case "SWAP_IN":
-      // CC masuk — canton/green (sama transfer in).
-      return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
+      // Kaki swap (CC maupun token) — KUNING (approved kepala proyek 2026-09-08).
+      // Beda dari receive hijau / send merah supaya putaran swap kebaca 1 bahasa.
+      return "bg-amber-500/15 text-amber-600 ring-1 ring-amber-500/25";
     default:
       return "bg-[var(--muted)] text-[var(--muted-foreground)]";
   }
@@ -230,6 +237,8 @@ function txIconBg(type: TxItem["type"]): string {
 function amountColor(type: TxItem["type"]): string {
   // Toggle (amount 0) → muted netral.
   if (TOGGLE_TX_TYPES.has(type)) return "text-[var(--muted-foreground)]";
+  // Kaki swap → amber (sama bahasa dengan ikon).
+  if (type === "SWAP_OUT" || type === "SWAP_IN") return "text-amber-600";
   // CC_LOCK = debit (amber, netral — bukan merah transfer).
   if (type === "CC_LOCK") return "text-orange-600";
   // Debit (keluar): muted, bukan merah.
@@ -242,11 +251,12 @@ function amountColor(type: TxItem["type"]): string {
 function amountSign(type: TxItem["type"]): string {
   // Toggle → tanpa tanda (amount 0).
   if (TOGGLE_TX_TYPES.has(type)) return "";
-  // Debit (keluar): TRANSFER_OUT, TOKEN_TRANSFER_OUT, CC_LOCK.
+  // Debit (keluar): TRANSFER_OUT, TOKEN_TRANSFER_OUT, CC_LOCK, SWAP_OUT.
   if (
     type === "TRANSFER_OUT" ||
     type === "TOKEN_TRANSFER_OUT" ||
-    type === "CC_LOCK"
+    type === "CC_LOCK" ||
+    type === "SWAP_OUT"
   )
     return "\u2212";
   return "+";
@@ -271,6 +281,13 @@ function txUsdAmount(tx: TxItem): { token: string; amount: number } | null {
     };
   }
   if (TOGGLE_TX_TYPES.has(tx.type)) return null;
+  // Kaki swap token: USD dari amountDecimal + instrumentId (bukan microCC).
+  if (isSwapTx(tx) && tx.instrumentId != null && tx.instrumentId !== "Amulet") {
+    return {
+      token: tx.instrumentId ?? "token",
+      amount: Math.abs(Number(tx.amountDecimal ?? "0")),
+    };
+  }
   if (isTokenAmountTx(tx)) {
     return {
       token: tx.instrumentId ?? "token",
@@ -324,6 +341,27 @@ function AmountText({ tx }: { tx: TxItem }) {
   }
   if (TOGGLE_TX_TYPES.has(tx.type)) {
     return <span className="text-[var(--muted-foreground)]">\u2014</span>;
+  }
+  // Kaki swap token (SWAP_IN/OUT + instrumentId): nominal unit asli + tanda
+  // arah swap (IN +, OUT −). Warna ikut amountColor (amber) via parent cell.
+  if (isSwapTx(tx) && tx.instrumentId != null && tx.instrumentId !== "Amulet") {
+    const tokenAmt = Math.abs(Number(tx.amountDecimal ?? "0"));
+    const sign = tx.type === "SWAP_OUT" ? "\u2212" : "+";
+    return (
+      <span className="inline-block text-left">
+        <span>
+          {sign}
+          {tokenAmt.toFixed(4)} {tx.instrumentId}
+        </span>
+        {usd ? (
+          <TokenUsdValue
+            amount={usd.amount}
+            token={usd.token}
+            className="block text-xs font-medium text-[var(--muted-foreground)]"
+          />
+        ) : null}
+      </span>
+    );
   }
   // Token non-CC: amount sudah dalam unit asli (decimal), bukan microCC.
   if (isTokenAmountTx(tx)) {
@@ -410,6 +448,8 @@ export function TransactionsView({
     if (type === "CC_LOCK") return t(TX_TYPE_KEYS.CC_LOCK);
     if (type === "CC_UNLOCK") return t(TX_TYPE_KEYS.CC_UNLOCK);
     if (TOGGLE_TX_TYPES.has(type)) return t(TX_TYPE_KEYS[type]);
+    // Kaki swap (CC maupun token) — label "Swap" (approved kepala proyek).
+    if (type === "SWAP_IN" || type === "SWAP_OUT") return "Swap";
     // Token non-CC map ke Sent/Received (sama arah dengan CC transfer).
     if (type === "TOKEN_TRANSFER_OUT") return "Sent";
     if (type === "TOKEN_TRANSFER_IN") return "Received";
