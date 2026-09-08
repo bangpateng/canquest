@@ -100,9 +100,9 @@ function txLabel(
         ? t("transactions.sentTo", { counterparty: cp })
         : t("transactions.tokenSent");
     case "SWAP_IN":
-      return t("transactions.swapReceived");
+      return t("transactions.swapIn");
     case "SWAP_OUT":
-      return t("transactions.swapSent");
+      return t("transactions.swapOut");
     default:
       return tx.description;
   }
@@ -211,15 +211,21 @@ function NotificationRow({ item }: { item: NotificationItem }) {
   const cancelledLabel = isCancelledToken
     ? tx.cancelledInstrumentId ?? tx.instrumentId ?? "token"
     : "CC";
-  // Arah keluar (debit): TRANSFER_OUT, TOKEN_TRANSFER_OUT & CC_LOCK.
+  // Arah keluar (debit): TRANSFER_OUT, TOKEN_TRANSFER_OUT, CC_LOCK, SWAP_OUT
+  // (CC maupun token — kaki swap berangkat).
   const isDebit =
     tx.type === "TRANSFER_OUT" ||
     tx.type === "TOKEN_TRANSFER_OUT" ||
-    tx.type === "CC_LOCK";
+    tx.type === "CC_LOCK" ||
+    tx.type === "SWAP_OUT";
+
+  const isSwap = tx.type === "SWAP_IN" || tx.type === "SWAP_OUT";
 
   const iconClass = cn(
     "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-    tx.type === "TRANSFER_IN" || tx.type === "TOKEN_TRANSFER_IN"
+    isSwap
+      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+      : tx.type === "TRANSFER_IN" || tx.type === "TOKEN_TRANSFER_IN"
       ? "bg-green-500/10 text-green-600 dark:text-green-400"
       : tx.type === "TRANSFER_OUT" || tx.type === "TOKEN_TRANSFER_OUT"
         ? "bg-red-500/10 text-red-600 dark:text-red-400"
@@ -238,7 +244,9 @@ function NotificationRow({ item }: { item: NotificationItem }) {
     "shrink-0 text-sm font-semibold tabular-nums",
     isToggle
       ? "text-[var(--muted-foreground)]"
-      : isDebit
+      : isSwap
+        ? "text-amber-600 dark:text-amber-400"
+        : isDebit
         ? "text-red-600 dark:text-red-400"
         : "text-green-600 dark:text-green-400",
   );
@@ -250,7 +258,9 @@ function NotificationRow({ item }: { item: NotificationItem }) {
         className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--primary)]/8"
       >
         <span className={iconClass}>
-          {tx.type === "TRANSFER_IN" ? (
+          {tx.type === "SWAP_IN" || tx.type === "SWAP_OUT" ? (
+            <ArrowLeftRight className="h-4 w-4" aria-hidden />
+          ) : tx.type === "TRANSFER_IN" ? (
             <ArrowDownLeft className="h-4 w-4" aria-hidden />
           ) : tx.type === "TOKEN_TRANSFER_IN" ? (
             <Coins className="h-4 w-4" aria-hidden />
@@ -411,8 +421,8 @@ export function TransactionNotifications() {
       case "PREAPPROVAL_DISABLED":
         return <ShieldOff className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />;
       case "SWAP_IN":
-        case "SWAP_OUT":
-          return <ArrowLeftRight className="mt-0.5 h-4 w-4 shrink-0 text-canton" />;
+      case "SWAP_OUT":
+        return <ArrowLeftRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />;
       default:
         return <Gift className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
     }
@@ -420,14 +430,10 @@ export function TransactionNotifications() {
 
   function toastMessage(toast: (typeof toasts)[number]) {
     if (toast.txType === "SWAP_IN") {
-      return t("transactions.swapReceivedToast", {
-        amount: toast.amountCc ?? "",
-      });
+      return t("transactions.swapIn");
     }
     if (toast.txType === "SWAP_OUT") {
-      return t("transactions.swapSentToast", {
-        amount: toast.amountCc ?? "",
-      });
+      return t("transactions.swapOut");
     }
     if (toast.kind === "draw" || toast.kind === "code") {
       return toast.description;
