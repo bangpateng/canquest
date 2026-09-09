@@ -358,11 +358,14 @@ export class BalanceEventHandlerService
         : null;
       const senderPartyId = senderUser?.cantonPartyId ?? null;
 
-      // KLASIFIKASI SWAP CC (2026-09-08, cermin token): kaki pulang swap
-      // (delivery CC dari escrow) lahir sebagai SWAP_IN, bukan TRANSFER_IN.
-      // Kriteria: escrow aktif user ±15 menit (arah TOKEN_TO_CC = terima CC).
-      // REFUND: full sellAmount kembali = deposit kembali, bukan receive.
-      const swapMatch = await this.findMatchingSwapLegCc(user.userId);
+      // KLASIFIKASI SWAP CC (R2, forensik 2026-09-09): kaki pulang swap
+      // (delivery CC dari escrow) lahir sebagai SWAP_IN hanya bila matcher
+      // kuat membuktikan (jumlah buyAmount + korelasi escrow). Miss → TRANSFER.
+      const swapMatch = await this.findMatchingSwapLegCc(
+        user.userId,
+        totalAmount,
+        senderPartyId,
+      );
       const isSwapIn = swapMatch !== null;
       const refundMatch = !isSwapIn
         ? await this.findMatchingSwapRefundCc(user.userId, totalAmount)
@@ -412,12 +415,15 @@ export class BalanceEventHandlerService
   }
 
   /**
-   * Cari escrow swap TOKEN_TO_CC aktif user (terima CC) — cermin
-   * findMatchingSwapLeg (token). Dipakai applyCcIncrement untuk klasifikasi
-   * SWAP_IN sejak lahir.
+   * Cari escrow swap TOKEN_TO_CC yang terbukti sebagai kaki pulang delivery
+   * CC ini (R2, forensik 2026-09-09). Syarat KETAT: swap arah TOKEN_TO_CC
+   * ≤15 menit + JUMLAH cocok buyAmount (1e-6) + sender event = escrow party
+   * (dari row TOKEN_TRANSFER_OUT controller). Miss → null = TRANSFER biasa.
    */
   private async findMatchingSwapLegCc(
     userId: string,
+    amountCc: number,
+    senderPartyId: string | null,
   ): Promise<{ depositParty: string | null } | null> {
     try {
       const since = new Date(Date.now() - 15 * 60_000);
@@ -428,9 +434,10 @@ export class BalanceEventHandlerService
           createdAt: { gte: since },
         },
         orderBy: { createdAt: 'desc' },
-        select: { id: true },
+        select: { buyAmount: true },
       });
-      if (!swap) return null;
+      if (!swap || swap.buyAmount == null) return null;
+      if (Math.abs(Number(swap.buyAmount) - amountCc) > 1e-6) return null;
       const outRow = await this.prisma.tokenTransaction.findFirst({
         where: {
           userId,
@@ -441,7 +448,11 @@ export class BalanceEventHandlerService
         select: { referenceId: true },
       });
       const ref = outRow?.referenceId?.trim() || null;
-      return { depositParty: ref && ref.includes('::') ? ref : null };
+      const escrow = ref && ref.includes('::') ? ref : null;
+      if (!escrow) return null;
+      if (!senderPartyId) return null;
+      if (senderPartyId !== escrow) return null;
+      return { depositParty: escrow };
     } catch {
       return null;
     }
@@ -499,7 +510,11 @@ export class BalanceEventHandlerService
     // sama seperti applyCcIncrement. Scope per instrument supaya 1 transaksi
     // multi-token tetap apply sekali per token.
     const scope = `token:${tk.instrumentId.toLowerCase()}:${tk.instrumentAdmin.toLowerCase()}`;
-    const applied = await this.tryMarkBalanceApplied(updateId, tk.userId, scope);
+    const applied = await this.tryMarkBalanceApplied(
+      updateId,
+      tk.userId,
+      scope,
+    );
     if (!applied) {
       if (DEBUG_LEDGER) {
         this.logger.debug(
@@ -608,52 +623,42 @@ export class BalanceEventHandlerService
         : null;
       const senderPartyId = senderUser?.cantonPartyId ?? null;
 
-      // KLASIFIKASI SWAP (Opsi A, 2026-09-08): kaki swap lahir sebagai
-      // SWAP_IN/SWAP_OUT (migration 20260908160000), bukan TOKEN_TRANSFER_*
-      // generik. Dua arah:
-      //  - pulang (CC_TO_TOKEN, terima token) → SWAP_IN, cocok buyInstrument.
-      //  - berangkat (TOKEN_TO_CC, kirim token) → SWAP_OUT, cocok sellInstrument.
-      // REFUND: full sellAmount kembali = deposit returned (deskripsi jujur,
-      // tipe tetap TRANSFER_IN — benar secara ledger). Tanpa pause-leg: cukup
-      // klasifikasi, tidak ada status leg baru.
+      // KLASIFIKASI SWAP (forensik 2026-09-09, R1+R2): holding MASUK tidak
+      // pernah boleh lahir sebagai SWAP_OUT (debit). Hanya SWAP_IN bila
+      // matcher kuat membuktikan kaki pulang (jumlah + korelasi escrow).
+      // Miss → TRANSFER biasa (false negative OK, false positive TIDAK).
       const swapLegIn = await this.findMatchingSwapLeg(
         tk.userId,
         tk.instrumentId,
+        tk.amount,
+        senderPartyId,
       );
-      const swapLegOut = !swapLegIn
-        ? await this.findMatchingSwapLegOut(tk.userId, tk.instrumentId)
-        : null;
-      const refundMatch =
-        !swapLegIn && !swapLegOut
-          ? await this.findMatchingSwapRefundToken(
-              tk.userId,
-              tk.instrumentId,
-              tk.amount,
-            )
-          : false;
+      const refundMatch = !swapLegIn
+        ? await this.findMatchingSwapRefundToken(
+            tk.userId,
+            tk.instrumentId,
+            tk.amount,
+          )
+        : false;
       const isSwapIn = swapLegIn !== null;
-      const isSwapOut = swapLegOut !== null;
 
       await this.users.recordTokenTransaction({
         userId: tk.userId,
         amount: tk.amount,
         instrumentId: tk.instrumentId,
         instrumentAdmin: tk.instrumentAdmin,
-        type: isSwapIn ? 'SWAP_IN' : isSwapOut ? 'SWAP_OUT' : 'TOKEN_TRANSFER_IN',
+        type: isSwapIn ? 'SWAP_IN' : 'TOKEN_TRANSFER_IN',
         description: isSwapIn
           ? `Swap received ${tk.amount} ${tk.instrumentId} (OneSwap)`
-          : isSwapOut
-            ? `Swap ${tk.amount} ${tk.instrumentId} → (OneSwap, awaiting settlement)`
-            : refundMatch
-              ? `Swap deposit returned ${tk.amount} ${tk.instrumentId} (awaiting deposit)`
-              : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
+          : refundMatch
+            ? `Swap deposit returned ${tk.amount} ${tk.instrumentId} (awaiting deposit)`
+            : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
         // null bila pengirim eksternal — row tetap tampil (jangan self-reference).
         // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
         // tanpa prefix `wss:` — parity dengan path CC + controller-side.
         // 1 updateId = 1 ledgerTxId → anti-race via @@unique.
         // Kaki swap: ref = escrow depositParty (oneswap-wallet) bila ketemu.
-        referenceId:
-          swapLegIn?.depositParty ?? swapLegOut?.depositParty ?? senderPartyId,
+        referenceId: swapLegIn?.depositParty ?? senderPartyId,
         ledgerTxId: updateId,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
@@ -1150,15 +1155,25 @@ export class BalanceEventHandlerService
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Cari escrow swap CC_TO_TOKEN aktif user (kirim CC, terima token) — kaki
-   * pulang token. Dipakai applyTokenIncrement untuk klasifikasi SWAP_IN.
+   * Cari escrow swap CC_TO_TOKEN yang terbukti sebagai kaki pulang delivery
+   * token ini (R2, forensik 2026-09-09).
    *
-   * Kriteria (konservatif): buyInstrument cocok (case-insensitive), dibuat
-   * ≤15 menit lalu. Delivery susulan bridge bisa +1/+4 menit setelah settle.
+   * Syarat KETAT (semua harus lolos, miss → null = TRANSFER biasa):
+   *  1. Swap user ini arah CC_TO_TOKEN, buyInstrument cocok (insensitive),
+   *     dibuat ≤15 menit lalu. Ambil yang terbaru.
+   *  2. JUMLAH cocok buyAmount escrow (toleransi 1e-6, konvensi refund-checker).
+   *     Tanpa jumlah yang cocok (mis. transfer 1.0610689885 vs swap sell 1.06)
+   *     → TOLAK. Ini kunci R2.
+   *  3. KORELASI escrow: senderPartyId (sudah di-resolve caller dari row
+   *     TRANSFER_OUT se-updateId) harus = escrow depositParty — dicari dari
+   *     row SWAP_OUT controller (ref = depositParty) di jendela yang sama.
+   *     Tanpa korelasi → TOLAK (false negative OK, false positive TIDAK).
    */
   private async findMatchingSwapLeg(
     userId: string,
     instrumentId: string,
+    amount: number,
+    senderPartyId: string | null,
   ): Promise<{ depositParty: string | null } | null> {
     try {
       const since = new Date(Date.now() - 15 * 60_000);
@@ -1170,10 +1185,12 @@ export class BalanceEventHandlerService
           createdAt: { gte: since },
         },
         orderBy: { createdAt: 'desc' },
-        select: { id: true },
+        select: { buyAmount: true },
       });
-      if (!swap) return null;
-      // Escrow party dari row SWAP_OUT controller (ref = depositParty).
+      if (!swap || swap.buyAmount == null) return null;
+      // (2) jumlah harus cocok.
+      if (Math.abs(Number(swap.buyAmount) - amount) > 1e-6) return null;
+      // (3) korelasi escrow: row SWAP_OUT controller di jendela yang sama.
       const outRow = await this.prisma.ccTransaction.findFirst({
         where: {
           userId,
@@ -1184,53 +1201,23 @@ export class BalanceEventHandlerService
         select: { referenceId: true },
       });
       const ref = outRow?.referenceId?.trim() || null;
-      return {
-        depositParty:
-          ref && ref.includes('::') ? ref : null,
-      };
+      const escrow = ref && ref.includes('::') ? ref : null;
+      if (!escrow) return null;
+      // Sender event harus escrow itu (atau tidak diketahui → tetap tolak bila
+      // sender diketahui tapi beda; null = eksternal tak terkorelasi → tolak).
+      if (!senderPartyId) return null;
+      if (senderPartyId !== escrow) return null;
+      return { depositParty: escrow };
     } catch {
       return null; // non-fatal — gagal cek = tulis TRANSFER biasa
     }
   }
 
   /**
-   * Cermin findMatchingSwapLeg untuk arah TOKEN_TO_CC (kirim token, terima
-   * CC): delivery token sebelum/settle = kaki BERANGKAT → SWAP_OUT.
-   * Kriteria: sellInstrument cocok, ≤15 menit. Ref = escrow depositParty dari
-   * row TOKEN_TRANSFER_OUT controller bila ada.
+   * DIHAPUS (R1, forensik 2026-09-09): kaki berangkat token TIDAK boleh
+   * ditulis dari jalur holding-masuk. (Stub dihapus total — tidak ada
+   * referensi yang tersisa.)
    */
-  private async findMatchingSwapLegOut(
-    userId: string,
-    instrumentId: string,
-  ): Promise<{ depositParty: string | null } | null> {
-    try {
-      const since = new Date(Date.now() - 15 * 60_000);
-      const swap = await this.prisma.swapTransaction.findFirst({
-        where: {
-          userId,
-          direction: 'TOKEN_TO_CC',
-          sellInstrumentId: { equals: instrumentId, mode: 'insensitive' },
-          createdAt: { gte: since },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { id: true },
-      });
-      if (!swap) return null;
-      const outRow = await this.prisma.ccTransaction.findFirst({
-        where: {
-          userId,
-          type: 'SWAP_OUT',
-          createdAt: { gte: since },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { referenceId: true },
-      });
-      const ref = outRow?.referenceId?.trim() || null;
-      return { depositParty: ref && ref.includes('::') ? ref : null };
-    } catch {
-      return null;
-    }
-  }
 
   /**
    * Deteksi refund deposit swap token: full sellAmount kembali dalam jendela
