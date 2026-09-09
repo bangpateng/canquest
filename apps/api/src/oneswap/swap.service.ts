@@ -746,8 +746,25 @@ export class SwapService {
       if (opts?.keepAwaitingDeposit && open.status === 'awaiting_deposit') {
         return open;
       }
-      // awaiting_deposit (belum nerima deposit) → cancel + recreate.
+      // awaiting_deposit: JANGAN langsung cancel — cek dulu apakah deposit
+      // user SUDAH dikirim ke escrow ini (kasus nyata 2026-09-08: 3x swap
+      // refund karena escrow diganti padahal deposit sudah jalan → deposit
+      // yatim → refund full → retry). Deposit sudah jalan → RESUME (perlakukan
+      // semua jalur seperti keepAwaitingDeposit). Deposit belum ada → baru
+      // cancel + recreate.
       if (open.status === 'awaiting_deposit') {
+        const depositGone = await this.hasDepositArrived(
+          args.userRef,
+          open.depositParty,
+          args.inSymbol,
+          args.amountIn,
+        );
+        if (depositGone) {
+          this.logger.log(
+            `createOrResumeSwap: deposit terdeteksi ke ${open.id} — resume, jangan cancel (anti-yatim)`,
+          );
+          return open;
+        }
         try {
           await this.oneswap.cancel(open.id);
         } catch {
@@ -760,6 +777,62 @@ export class SwapService {
       }
       // Sudah deposit / processing → resume (return swap existing).
       return open;
+    }
+  }
+
+  /**
+   * Cek apakah deposit user sudah tiba di escrow depositParty (on-chain).
+   *
+   * Dipakai createOrResumeSwap sebelum cancel escrow awaiting_deposit: kalau
+   * transfer input SUDAH dikirim (ada jejak ledger user → depositParty dalam
+   * 15 menit terakhir), escrow JANGAN diganti — resume. Fail-open (error/ragu
+   * → anggap belum ada → perilaku lama cancel+recreate) supaya tidak block
+   * swap bila ledger query gagal.
+   *
+   * Jejak yang dicari (murah, tanpa query ledger berat):
+   *  1. CcTransaction SWAP_OUT / TokenTransaction TOKEN_TRANSFER_OUT user ini
+   *     yang referenceId-nya cocok depositParty (pola controller) ≤15 menit.
+   *  2. SwapTransaction PENDING lain dengan escrow berbeda (tanda deposit
+   *     sudah jalan di attempt sebelumnya).
+   */
+  private async hasDepositArrived(
+    userRef: string,
+    depositParty: string,
+    inSymbol: string,
+    amountIn: number,
+  ): Promise<boolean> {
+    try {
+      const since = new Date(Date.now() - 15 * 60_000);
+      const short = depositParty.split('::')[0];
+      const [ccOut, tokOut] = await Promise.all([
+        this.prisma.ccTransaction.findFirst({
+          where: {
+            userId: userRef,
+            type: 'SWAP_OUT',
+            createdAt: { gte: since },
+            OR: [
+              { referenceId: { contains: short } },
+              { description: { contains: short } },
+            ],
+          },
+          select: { id: true },
+        }),
+        this.prisma.tokenTransaction.findFirst({
+          where: {
+            userId: userRef,
+            type: { in: ['TOKEN_TRANSFER_OUT', 'SWAP_OUT'] },
+            createdAt: { gte: since },
+            OR: [
+              { referenceId: { contains: short } },
+              { description: { contains: short } },
+            ],
+          },
+          select: { id: true },
+        }),
+      ]);
+      return Boolean(ccOut ?? tokOut);
+    } catch {
+      return false; // fail-open → perilaku lama
     }
   }
 
