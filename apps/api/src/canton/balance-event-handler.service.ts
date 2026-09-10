@@ -220,13 +220,72 @@ export class BalanceEventHandlerService
       }
 
       // ── 2. Apply CC increment per owner (1x per user per updateId) ───────
+      // senderHint: party pengirim dari raw exercised event update yang sama
+      // (acting/witness, bukan receiver, bukan system) — didahulukan atas
+      // lookup DB karena pengirim escrow/eksternal tidak punya baris
+      // TRANSFER_OUT di DB (kasus delivery Cantex). Fallback = lookup lama.
+      const senderHint = this.deriveSenderHint(ev);
       for (const [ownerPartyId, totalAmount] of ccByOwner) {
-        await this.applyCcIncrement(ownerPartyId, totalAmount, ev.updateId);
+        await this.applyCcIncrement(
+          ownerPartyId,
+          totalAmount,
+          ev.updateId,
+          senderHint,
+          ev.exercised,
+        );
+      }
+
+      // ── 2b. Accept-side flip (B2): untuk setiap Accept di update ini,
+      // cari baris PENDING sesama user yang transferInstructionCid-nya =
+      // offer cid yang di-accept → flip COMPLETED + stamp accept updateId.
+      // Ini yang mencegah double delivery (offer-created vs accept).
+      const acceptCids = ev.exercised
+        .filter((ex) => ex.choice === 'TransferInstruction_Accept')
+        .map((ex) => ex.contractId)
+        .filter((cid): cid is string => !!cid);
+      for (const cid of acceptCids) {
+        try {
+          await this.prisma.tokenTransaction.updateMany({
+            where: {
+              transferInstructionCid: cid,
+              status: 'PENDING',
+            },
+            data: {
+              status: 'COMPLETED',
+              cantonUpdateId: ev.updateId,
+            },
+          });
+        } catch (err) {
+          this.logger.warn(
+            `BalanceEventHandler: accept flip failed cid=${cid.slice(0, 16)}…: ${String(err)}`,
+          );
+        }
       }
 
       // ── 3. Apply token increment per owner+instrument ────────────────────
+      // offerCid per tk: offer contract yang dibuat di update yang SAMA
+      // (cari di ev.created, pola template sama seperti handleExercisedEvent
+      // :TransferOffer/:TransferInstruction — bukan tebakan baru). Bila ada
+      // DAN update ini tidak memuat Accept → B1: baris PENDING lifecycle.
+      const offerCidByContract = new Map<string, string>();
+      for (const o of ev.created) {
+        const ot = o.templateId || '';
+        if (
+          ot.includes(':TransferOffer') ||
+          ot.includes(':TransferInstruction')
+        ) {
+          offerCidByContract.set(o.contractId, o.contractId);
+        }
+      }
+      const hasAccept = ev.exercised.some(
+        (ex) => ex.choice === 'TransferInstruction_Accept',
+      );
+      const offerCid =
+        !hasAccept && offerCidByContract.size > 0
+          ? [...offerCidByContract.values()][0]
+          : null;
       for (const tk of tokenByOwnerKey.values()) {
-        await this.applyTokenIncrement(tk, ev.updateId);
+        await this.applyTokenIncrement(tk, ev.updateId, senderHint, offerCid);
       }
 
       // ── 4. Archived events: holding di-archive = balance TURUN ───────────
@@ -244,6 +303,42 @@ export class BalanceEventHandlerService
   }
 
   /**
+   * Turunkan petunjuk pengirim dari exercised event update yang SAMA.
+   *
+   * Pengirim escrow/eksternal (Cantex, DSO, wallet luar) tidak punya baris
+   * TRANSFER_OUT di DB sehingga lookup DB selalu null untuk delivery mereka.
+   * Tapi party mereka ADA di raw event: actingParties (actor exercise) dan
+   * witnessParties. Ambil kandidat pertama yang: bukan owner created mana pun
+   * di update ini, bukan system prefix (isSystemParty). Ambigu/kosong → null
+   * (caller fallback ke lookup DB lama). Sync + tanpa DB — diuji unit via
+   * mirror di spec.
+   */
+  private deriveSenderHint(ev: CantonUpdateEvent): string | null {
+    const receivers = new Set<string>();
+    for (const c of ev.created) {
+      const args = c.createArgument ?? {};
+      const owner =
+        typeof args.owner === 'string'
+          ? args.owner
+          : typeof args.receiver === 'string'
+            ? args.receiver
+            : null;
+      if (owner) receivers.add(owner);
+    }
+    for (const ex of ev.exercised) {
+      const candidates = [
+        ...(ex.actingParties ?? []),
+        ...(ex.witnessParties ?? []),
+      ];
+      for (const p of candidates) {
+        if (!p || receivers.has(p) || this.isSystemParty(p)) continue;
+        return p;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Apply aggregated CC increment untuk 1 owner di 1 transaksi.
    *
    * Anti double-count HANYA untuk HISTORY ROW + NOTIFIKASI (BUKAN balance):
@@ -258,6 +353,13 @@ export class BalanceEventHandlerService
     ownerPartyId: string,
     totalAmount: number,
     updateId: string,
+    senderHint?: string | null,
+    /** Exercised events update yang SAMA — untuk deteksi change output
+     *  sendiri (Fase C). Bila null, deteksi C dilewati (label generik). */
+    exercised?: Array<{
+      choice?: string;
+      actingParties?: string[];
+    }>,
   ): Promise<void> {
     const user = await this.resolveUserByParty(ownerPartyId);
     if (!user) {
@@ -345,18 +447,24 @@ export class BalanceEventHandlerService
       // (same cantonUpdateId, user berbeda) — BUKAN referenceId = diri sendiri.
       // Salah isi = baris ter-filter isSelfReferenceWssRow → received tidak
       // pernah tampil di Activity/badge (bug yang sama dengan recordReceiverAccept).
-      const senderRow = await this.prisma.ccTransaction.findFirst({
-        where: {
-          cantonUpdateId: updateId,
-          type: 'TRANSFER_OUT',
-          userId: { not: user.userId },
-        },
-        select: { userId: true },
-      });
+      // L60-A1: senderHint dari raw exercised event didahulukan — pengirim
+      // escrow/eksternal tidak punya baris TRANSFER_OUT di DB. Fallback =
+      // lookup lama bila hint null.
+      const senderRow = senderHint
+        ? null
+        : await this.prisma.ccTransaction.findFirst({
+            where: {
+              cantonUpdateId: updateId,
+              type: 'TRANSFER_OUT',
+              userId: { not: user.userId },
+            },
+            select: { userId: true },
+          });
       const senderUser = senderRow
         ? await this.users.findById(senderRow.userId)
         : null;
-      const senderPartyId = senderUser?.cantonPartyId ?? null;
+      // L60-A1: hint raw didahulukan; lookup DB hanya bila hint null.
+      const senderPartyId = senderHint ?? senderUser?.cantonPartyId ?? null;
 
       // KLASIFIKASI SWAP CC (R2, forensik 2026-09-09): kaki pulang swap
       // (delivery CC dari escrow) lahir sebagai SWAP_IN hanya bila matcher
@@ -370,6 +478,20 @@ export class BalanceEventHandlerService
       const refundMatch = !isSwapIn
         ? await this.findMatchingSwapRefundCc(user.userId, totalAmount)
         : null;
+      // L60-C: change output sendiri — sender lookup miss (diri sendiri
+      // di-exclude) DAN update yang sama memuat exercise transfer yang
+      // di-actor-kan party receiver sendiri. Label jujur, tipe + identitas
+      // tetap (TRANSFER_IN, updateId asli).
+      const isSelfChange =
+        !isSwapIn &&
+        !refundMatch &&
+        senderPartyId == null &&
+        (exercised ?? []).some(
+          (ex) =>
+            (ex.choice === 'TransferFactory_Transfer' ||
+              ex.choice === 'AmuletRules_Transfer') &&
+            (ex.actingParties ?? []).includes(ownerPartyId),
+        );
 
       await this.users.recordTransaction({
         userId: user.userId,
@@ -379,7 +501,9 @@ export class BalanceEventHandlerService
           ? `Swap received ${totalAmount.toFixed(6)} CC (OneSwap)`
           : refundMatch
             ? `Swap deposit returned ${totalAmount.toFixed(6)} CC (awaiting deposit)`
-            : `Received ${totalAmount.toFixed(6)} CC (on-chain)`,
+            : isSelfChange
+              ? `Change from own transfer ${totalAmount.toFixed(6)} CC (on-chain)`
+              : `Received ${totalAmount.toFixed(6)} CC (on-chain)`,
         // ← pengirim; null bila eksternal/tidak dikenal (row TETAP tampil —
         //   self-reference malah menyembunyikan row via isSelfReferenceWssRow).
         // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
@@ -505,6 +629,12 @@ export class BalanceEventHandlerService
       contractIds: string[];
     },
     updateId: string,
+    senderHint?: string | null,
+    /** Contract id offer yang dibuat di update yang SAMA (bila ada). Bila
+     *  terisi → holding ini masih di-escrow offer yang belum di-accept:
+     *  tulis baris PENDING + transferInstructionCid (lifecycle B1), bukan
+     *  COMPLETED. Null = delivery langsung / accept. */
+    offerCid?: string | null,
   ): Promise<void> {
     // STEP 0: Guard replay — insert dedup row SEBELUM apply (fail-closed),
     // sama seperti applyCcIncrement. Scope per instrument supaya 1 transaksi
@@ -615,18 +745,22 @@ export class BalanceEventHandlerService
     try {
       // Cari pengirim dari row TOKEN_TRANSFER_OUT dengan cantonUpdateId sama
       // (sudah di-stamp markTransferInstructionSettled di tahap exercised).
-      const senderRow = await this.prisma.tokenTransaction.findFirst({
-        where: {
-          cantonUpdateId: updateId,
-          type: 'TOKEN_TRANSFER_OUT',
-          userId: { not: tk.userId },
-        },
-        select: { userId: true },
-      });
+      // L60-A1: senderHint raw didahulukan (escrow Cantex tak punya baris DB);
+      // lookup lama hanya bila hint null.
+      const senderRow = senderHint
+        ? null
+        : await this.prisma.tokenTransaction.findFirst({
+            where: {
+              cantonUpdateId: updateId,
+              type: 'TOKEN_TRANSFER_OUT',
+              userId: { not: tk.userId },
+            },
+            select: { userId: true },
+          });
       const senderUser = senderRow
         ? await this.users.findById(senderRow.userId)
         : null;
-      const senderPartyId = senderUser?.cantonPartyId ?? null;
+      const senderPartyId = senderHint ?? senderUser?.cantonPartyId ?? null;
 
       // KLASIFIKASI SWAP (forensik 2026-09-09, R1+R2): holding MASUK tidak
       // pernah boleh lahir sebagai SWAP_OUT (debit). Hanya SWAP_IN bila
@@ -657,7 +791,9 @@ export class BalanceEventHandlerService
           ? `Swap received ${tk.amount} ${tk.instrumentId} (OneSwap)`
           : refundMatch
             ? `Swap deposit returned ${tk.amount} ${tk.instrumentId} (awaiting deposit)`
-            : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
+            : offerCid
+              ? `Incoming ${tk.instrumentId} offer (awaiting accept)`
+              : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
         // null bila pengirim eksternal — row tetap tampil (jangan self-reference).
         // IDENTITY (fix double-history 2026-09-07): basis = updateId ASLI
         // tanpa prefix `wss:` — parity dengan path CC + controller-side.
@@ -667,10 +803,13 @@ export class BalanceEventHandlerService
         // cantonUpdateId TETAP updateId asli (link explorer + dedup lintas
         // instrumen tetap benar via scope dedupKey).
         // Kaki swap: ref = escrow depositParty (oneswap-wallet) bila ketemu.
+        // L60-B1: offer-created (belum accept) → PENDING + cid offer supaya
+        // update accept nanti FLIP baris ini (B2), bukan insert baris kedua.
         referenceId: swapLegIn?.depositParty ?? senderPartyId,
         ledgerTxId: `${updateId}:${tk.instrumentId.toLowerCase()}`,
         cantonUpdateId: updateId,
-        status: 'COMPLETED',
+        transferInstructionCid: offerCid ?? null,
+        status: offerCid ? 'PENDING' : 'COMPLETED',
       });
       if (DEBUG_LEDGER) {
         this.logger.debug(

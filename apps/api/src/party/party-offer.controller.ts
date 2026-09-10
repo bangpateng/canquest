@@ -290,9 +290,10 @@ export class PartyOfferController {
             referenceId: senderLabel || undefined,
             ledgerTxId: updateId ?? cid,
             cantonUpdateId: updateId ?? undefined,
-            // Receiver dapat 1 notif dari sini. Token non-CC TIDAK dipantau WSS
-            // handler → tidak akan double. CC dipantau WSS tapi handler punya
-            // dedup cantonUpdateId → bila controller catat duluan, WSS skip push.
+            // Receiver dapat 1 notif dari sini. WSS handler JUGA memantau
+            // token (isTokenHoldingTemplate) — dedup via cantonUpdateId di
+            // existing-guard + PENDING-flip lifecycle (transferInstructionCid):
+            // bila controller catat duluan, WSS skip/flip; bukan insert ganda.
           });
         } catch (err) {
           // P2002 = idempotent retry → OK. Error lain = audit loss (non-fatal).

@@ -670,6 +670,15 @@ export class SwapService {
                 .catch(() => null)
             : null;
         const depositUpdateId = swapRow?.ccLedgerTxId ?? null;
+        // L60-A2: referenceId WAJIB party escrow (format "…::1220…") — matcher
+        // WSS (findMatchingSwapLeg*) gate `includes('::')`. Hex deposit
+        // updateId TIDAK boleh di referenceId (regresi L60 awal) — ia tetap
+        // di ccLedgerTxId + deskripsi untuk audit.
+        const liveSwap = await this.oneswap.getSwap(done.id).catch(() => null);
+        const escrowParty =
+          liveSwap?.depositParty && liveSwap.depositParty.includes('::')
+            ? liveSwap.depositParty
+            : null;
         await this.users.recordTransaction({
           userId,
           amountCc: params.amount,
@@ -680,7 +689,7 @@ export class SwapService {
               ? ` [deposit ${depositUpdateId.slice(0, 16)}…]`
               : ' [deposit updateId not recorded]'),
           ledgerTxId: `oneswap:${done.id}:in`,
-          referenceId: depositUpdateId,
+          referenceId: escrowParty,
           status: 'COMPLETED',
           silent: true,
         });
