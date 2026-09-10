@@ -110,7 +110,6 @@ function RailNav({ hasWallet }: { hasWallet: boolean }) {
           <Link
             id={`rail-${key2Id(href)}`}
             href={hrefTarget}
-            title={label}
             aria-label={label}
             aria-current={active ? "page" : undefined}
             className={cn(
