@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Compass,
   Gift,
@@ -38,14 +39,44 @@ const navItems: {
   { href: "/settings", key: "settings", icon: Settings },
 ];
 
-/** Label muncul di kanan ikon saat hover / keyboard-focus (desktop rail).
- *  z-[9999]: background + caption harus paling depan — tidak boleh kepotong
- *  card/konten di sebelahnya. pointer-events-none: tidak mengganggu klik. */
-function RailTooltip({ label }: { label: string }) {
-  return (
-    <span className="pointer-events-none absolute left-full top-1/2 z-[9999] ml-3 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-lg bg-[var(--foreground)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--background)] opacity-0 shadow-md transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
+/** Label hover rail — di-render via portal ke document.body (fixed, mengikuti
+ *  posisi ikon pemicu). ROTI DI ATAS KOTAK: bukan anak rantai kontainer mana
+ *  pun, jadi overflow:hidden di level apa pun tidak bisa menggunting.
+ *  Posisi dihitung saat hover dari bounding rect ikon (data-attr anchor). */
+function RailTooltip({ label, anchorId }: { label: string; anchorId: string }) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    const show = () => {
+      const el = document.getElementById(anchorId);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.top + r.height / 2, left: r.right + 12 });
+    };
+    const hide = () => setPos(null);
+    const anchor = document.getElementById(anchorId);
+    if (!anchor) return;
+    anchor.addEventListener("mouseenter", show);
+    anchor.addEventListener("focus", show);
+    anchor.addEventListener("mouseleave", hide);
+    anchor.addEventListener("blur", hide);
+    return () => {
+      anchor.removeEventListener("mouseenter", show);
+      anchor.removeEventListener("focus", show);
+      anchor.removeEventListener("mouseleave", hide);
+      anchor.removeEventListener("blur", hide);
+    };
+  }, [anchorId]);
+
+  if (!pos) return null;
+  return createPortal(
+    <span
+      className="pointer-events-none fixed z-[9999] -translate-y-1/2 whitespace-nowrap rounded-lg bg-[var(--foreground)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--background)] shadow-md"
+      style={{ top: pos.top, left: pos.left }}
+    >
       {label}
-    </span>
+    </span>,
+    document.body,
   );
 }
 
@@ -65,17 +96,21 @@ function useNavState(hasWallet: boolean) {
   });
 }
 
-/** Desktop icon rail — 72px, ikon saja + tooltip. Aktif = pill gradient brand. */
+/** Desktop icon rail — 72px, ikon saja + hover label via portal (roti di
+ *  atas kotak). Aktif = pill gradient brand. */
 function RailNav({ hasWallet }: { hasWallet: boolean }) {
   const items = useNavState(hasWallet);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <>
       {items.map(({ href, hrefTarget, label, locked, active, Icon }) => (
-        <div key={href} className="group relative">
+        <div key={href} className="relative">
           <Link
+            id={`rail-${key2Id(href)}`}
             href={hrefTarget}
-            title={locked ? label : undefined}
+            title={label}
             aria-label={label}
             aria-current={active ? "page" : undefined}
             className={cn(
@@ -89,11 +124,16 @@ function RailNav({ hasWallet }: { hasWallet: boolean }) {
           >
             <Icon className="h-[21px] w-[21px] shrink-0" strokeWidth={active ? 2.4 : 2} />
           </Link>
-          <RailTooltip label={label} />
+          {mounted && <RailTooltip label={label} anchorId={`rail-${key2Id(href)}`} />}
         </div>
       ))}
     </>
   );
+}
+
+/** href → id aman untuk DOM anchor. */
+function key2Id(href: string): string {
+  return href.replace(/[^a-zA-Z0-9]/g, "") || "item";
 }
 
 /** Bottom nav mobile — ikon + label kecil, aktif = pill hijau lembut. */
@@ -165,15 +205,16 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
         {/* Bottom actions */}
         <div className="mt-auto flex flex-col items-center gap-2 border-t border-[var(--border)] pt-4">
-          <div className="group relative">
+          <div className="relative">
             <Link
+              id="rail-landing"
               href="/"
               aria-label={t("shell.landing")}
               className="flex h-11 w-11 items-center justify-center rounded-2xl text-[var(--muted-foreground)] transition-all duration-200 hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
             >
               <Compass className="h-[21px] w-[21px]" />
             </Link>
-            <RailTooltip label={t("shell.landing")} />
+            <RailTooltip label={t("shell.landing")} anchorId="rail-landing" />
           </div>
         </div>
       </aside>
