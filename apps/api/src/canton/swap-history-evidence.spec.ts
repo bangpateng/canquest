@@ -8,18 +8,18 @@ const ESCROW =
 const USER = 'canquest-user-7fd3df003453::1220a5e003d34981573be4bc35737d6b78176e7117af28e80c90ec339a0262b92260';
 const DSO = 'DSO::1220b1431ef217342db44d516bb9befde802be7d8899637d290895fa58880f19accc';
 
-/** Cermin deriveSenderHint: acting/witness pertama non-receiver non-system. */
+/** Cermin deriveSenderHint baru: kandidat dicocokkan escrow swap aktif.
+ *  Tanpa daftar escrow (kosong) + tunggal → langsung; dengan daftar →
+ *  harus cocok, else null (jujur miss). */
 function deriveSenderHint(
-  createdOwners: string[],
-  exercised: Array<{ actingParties?: string[]; witnessParties?: string[] }>,
-  isSystem: (p: string) => boolean,
+  candidates: string[],
+  escrows: string[],
 ): string | null {
-  const receivers = new Set(createdOwners);
-  for (const ex of exercised) {
-    for (const p of [...(ex.actingParties ?? []), ...(ex.witnessParties ?? [])]) {
-      if (!p || receivers.has(p) || isSystem(p)) continue;
-      return p;
-    }
+  if (candidates.length === 0) return null;
+  if (escrows.length === 0) return candidates.length === 1 ? candidates[0] : null;
+  const set = new Set(escrows);
+  for (const c of candidates) {
+    if (set.has(c)) return c;
   }
   return null;
 }
@@ -69,21 +69,23 @@ function ccDescription(opts: {
 }
 
 describe('swap history evidence fixes (L60 A/B/C)', () => {
-  it('A1: senderHint = escrow dari actingParties (kasus 122080fb nyata)', () => {
+  it('A1: kandidat tunggal non-system → langsung (tanpa DB)', () => {
+    expect(deriveSenderHint([ESCROW], [])).toBe(ESCROW);
+  });
+
+  it('A1: ambigu (auth0 + escrow + rep) → cocok escrow, bukan first-match', () => {
+    // Kasus nyata 1220a4ff: first-match kena auth0 yang salah.
     expect(
       deriveSenderHint(
-        [USER],
-        [{ actingParties: [USER], witnessParties: ['Bridge-Operator::1220x', USER, ESCROW] }],
-        isSystem,
+        ['auth0_007c6643538f2eadd3e573dd05b9::12205bcc', ESCROW, 'decentralized-usdc-interchain-rep::12208115'],
+        [ESCROW],
       ),
     ).toBe(ESCROW);
   });
 
-  it('A1: null bila hanya receiver + system (tidak menebak)', () => {
-    expect(
-      deriveSenderHint([USER], [{ actingParties: [USER], witnessParties: [DSO] }], isSystem),
-    ).toBeNull();
-    expect(deriveSenderHint([USER], [], isSystem)).toBeNull();
+  it('A1: null bila kosong atau tak ada yang cocok escrow (jujur miss)', () => {
+    expect(deriveSenderHint([], [ESCROW])).toBeNull();
+    expect(deriveSenderHint(['auth0_007c::1220x'], [ESCROW])).toBeNull();
   });
 
   it('A2: referenceId hex updateId DITOLAK, party escrow DITERIMA', () => {

@@ -220,17 +220,21 @@ export class BalanceEventHandlerService
       }
 
       // ── 2. Apply CC increment per owner (1x per user per updateId) ───────
-      // senderHint: party pengirim dari raw exercised event update yang sama
-      // (acting/witness, bukan receiver, bukan system) — didahulukan atas
-      // lookup DB karena pengirim escrow/eksternal tidak punya baris
-      // TRANSFER_OUT di DB (kasus delivery Cantex). Fallback = lookup lama.
-      const senderHint = this.deriveSenderHint(ev);
+      // senderHint per user: kandidat pengirim dari raw exercised event yang
+      // dicocokkan escrow swap aktif user itu (bukan first-match — witness
+      // bisa berisi banyak party). Didahulukan atas lookup DB karena
+      // pengirim escrow/eksternal tidak punya baris TRANSFER_OUT di DB.
+      // Fallback = lookup lama bila hint null.
       for (const [ownerPartyId, totalAmount] of ccByOwner) {
+        const ownerUser = await this.resolveUserByParty(ownerPartyId);
+        const hint = ownerUser
+          ? await this.deriveSenderHint(ev, ownerUser.userId)
+          : null;
         await this.applyCcIncrement(
           ownerPartyId,
           totalAmount,
           ev.updateId,
-          senderHint,
+          hint,
           ev.exercised,
         );
       }
@@ -285,7 +289,8 @@ export class BalanceEventHandlerService
           : null;
       if (!skipReceiverRow) {
         for (const tk of tokenByOwnerKey.values()) {
-          await this.applyTokenIncrement(tk, ev.updateId, senderHint, offerCid);
+          const hint = await this.deriveSenderHint(ev, tk.userId);
+          await this.applyTokenIncrement(tk, ev.updateId, hint, offerCid);
         }
       }
 
@@ -309,12 +314,19 @@ export class BalanceEventHandlerService
    * Pengirim escrow/eksternal (Cantex, DSO, wallet luar) tidak punya baris
    * TRANSFER_OUT di DB sehingga lookup DB selalu null untuk delivery mereka.
    * Tapi party mereka ADA di raw event: actingParties (actor exercise) dan
-   * witnessParties. Ambil kandidat pertama yang: bukan owner created mana pun
-   * di update ini, bukan system prefix (isSystemParty). Ambigu/kosong → null
-   * (caller fallback ke lookup DB lama). Sync + tanpa DB — diuji unit via
-   * mirror di spec.
+   * witnessParties.
+   *
+   * BUKAN first-match: kandidat dicocokkan dengan escrow swap AKTIF user
+   * (dari baris SWAP_OUT ber-referenceId party ≤15 menit — fakta DB, bukan
+   * tebakan). Kandidat yang ada di daftar escrow = sender. Tidak cocok =
+   * null (jujur miss, caller fallback ke lookup DB lama). Kasus nyata:
+   * witness berisi auth0 + escrow + interchain-rep — first-match kena auth0
+   * yang salah, pencocokan ini kena escrow yang benar.
    */
-  private deriveSenderHint(ev: CantonUpdateEvent): string | null {
+  private async deriveSenderHint(
+    ev: CantonUpdateEvent,
+    userId?: string,
+  ): Promise<string | null> {
     const receivers = new Set<string>();
     for (const c of ev.created) {
       const args = c.createArgument ?? {};
@@ -326,15 +338,42 @@ export class BalanceEventHandlerService
             : null;
       if (owner) receivers.add(owner);
     }
+    const candidates: string[] = [];
     for (const ex of ev.exercised) {
-      const candidates = [
-        ...(ex.actingParties ?? []),
-        ...(ex.witnessParties ?? []),
-      ];
-      for (const p of candidates) {
+      for (const p of [...(ex.actingParties ?? []), ...(ex.witnessParties ?? [])]) {
         if (!p || receivers.has(p) || this.isSystemParty(p)) continue;
-        return p;
+        if (!candidates.includes(p)) candidates.push(p);
       }
+    }
+    if (candidates.length === 0) return null;
+    // Tanpa userId (tanpa daftar escrow): tunggal → langsung, ambigu → null.
+    if (!userId) return candidates.length === 1 ? candidates[0] : null;
+    // Dengan daftar escrow: harus cocok — tunggal maupun ambigu. Tidak cocok
+    // = null (jujur miss). Kasus nyata 1220a4ff: auth0 tunggal-tapi-salah
+    // harus null, bukan dipakai.
+    try {
+      const since = new Date(Date.now() - 15 * 60_000);
+      const [ccOuts, tokOuts] = await Promise.all([
+        this.prisma.ccTransaction.findMany({
+          where: { userId, type: 'SWAP_OUT', createdAt: { gte: since } },
+          select: { referenceId: true },
+        }),
+        this.prisma.tokenTransaction.findMany({
+          where: { userId, type: 'SWAP_OUT', createdAt: { gte: since } },
+          select: { referenceId: true },
+        }),
+      ]);
+      const escrows = new Set(
+        [...ccOuts, ...tokOuts]
+          .map((r) => r.referenceId?.trim() || '')
+          .filter((r) => r.includes('::')),
+      );
+      if (escrows.size === 0) return candidates.length === 1 ? candidates[0] : null;
+      for (const c of candidates) {
+        if (escrows.has(c)) return c;
+      }
+    } catch {
+      /* non-fatal: jatuh ke null */
     }
     return null;
   }
