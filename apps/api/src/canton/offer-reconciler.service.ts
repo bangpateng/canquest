@@ -111,11 +111,18 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`Offer reconciler: alignAllTokenBalances failed: ${String(err)}`),
       );
       // Scan KEDUA tabel PENDING dengan cid (offer yang belum settled).
+      // L60-D: HANYA baris sender (TRANSFER_OUT). Baris receiver PENDING
+      // (TRANSFER_IN/SWAP_IN lifecycle B1) TIDAK BOLEH dinilai dengan logika
+      // delta sender (flipTokenRow/flipCcRow: turun=accept/naik=reject) —
+      // untuk receiver arahnya terbalik (naik=accept) sehingga offer yang
+      // justru ACCEPTED salah jadi REJECTED (kasus nyata 12208910…).
+      // Lifecycle receiver dipegang B2 (accept flip by cid).
       const [pendingCc, pendingToken] = await Promise.all([
         this.prisma.ccTransaction.findMany({
           where: {
             status: 'PENDING',
             transferInstructionCid: { not: null },
+            type: 'TRANSFER_OUT',
           },
           select: {
             id: true,
@@ -130,6 +137,7 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
           where: {
             status: 'PENDING',
             transferInstructionCid: { not: null },
+            type: 'TOKEN_TRANSFER_OUT',
           },
           select: {
             id: true,
@@ -299,6 +307,7 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
             userId: user.id,
             status: 'PENDING',
             transferInstructionCid: { not: null },
+            type: 'TRANSFER_OUT', // L60-D: sender-side saja (lihat runOnce)
           },
           select: {
             id: true,
@@ -313,6 +322,7 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
             userId: user.id,
             status: 'PENDING',
             transferInstructionCid: { not: null },
+            type: 'TOKEN_TRANSFER_OUT', // L60-D: sender-side saja
           },
           select: {
             id: true,
