@@ -1355,6 +1355,15 @@ export class BalanceEventHandlerService
    */
   private async stampSwapDepositLeg(ev: CantonUpdateEvent): Promise<void> {
     if (!ev.updateId || ev.created.length === 0) return;
+    // Deposit = user MENGIRIM ke escrow: update HARUS memuat exercise
+    // transfer (factory/direct). Tanpa itu (mis. update accept/unlock yang
+    // kebetulan memuat created milik escrow), skip — bukan deposit.
+    const hasTransferOut = ev.exercised.some(
+      (ex) =>
+        ex.choice === 'TransferFactory_Transfer' ||
+        ex.choice === 'AmuletRules_Transfer',
+    );
+    if (!hasTransferOut) return;
     try {
       // Kumpulkan owner created non-system per update.
       const owners = new Map<string, number>(); // party → total amount
