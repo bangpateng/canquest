@@ -51,7 +51,7 @@ export function TransactionDetailModal({
       <button
         type="button"
         className="modal-backdrop"
-        aria-label="Close"
+        title="Close" aria-label="Close"
         onClick={onClose}
       />
       <div
@@ -87,7 +87,7 @@ export function TransactionDetailModal({
             type="button"
             onClick={onClose}
             className={iconButtonClass("h-10 w-10 shrink-0 text-[var(--foreground)]")}
-            aria-label="Close"
+            title="Close" aria-label="Close"
           >
             <X className="h-5 w-5" />
           </button>

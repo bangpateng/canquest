@@ -90,7 +90,7 @@ export function TxReviewModal({
       <button
         type="button"
         className="modal-backdrop"
-        aria-label="Close"
+        title="Close" aria-label="Close"
         onClick={onClose}
       />
       <div
@@ -107,7 +107,7 @@ export function TxReviewModal({
             type="button"
             onClick={onClose}
             className={iconButtonClass("h-9 w-9 shrink-0")}
-            aria-label="Close"
+            title="Close" aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>

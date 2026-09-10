@@ -408,13 +408,13 @@ export function OffersModal({
       <button
         type="button"
         className="modal-backdrop"
-        aria-label="Close"
+        title="Close" aria-label="Close"
         onClick={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Transfer offers"
+        title="Transfer offers" aria-label="Transfer offers"
         className="relative z-10 my-auto w-full max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl sm:p-8"
       >
         <div className="flex items-center justify-between gap-2">
@@ -469,7 +469,7 @@ export function OffersModal({
             type="button"
             onClick={onClose}
             className={iconButtonClass("h-9 w-9 shrink-0")}
-            aria-label="Close"
+            title="Close" aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>

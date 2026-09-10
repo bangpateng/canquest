@@ -96,7 +96,7 @@ export function ClaimDetailsModal({
       aria-modal="true"
       aria-label="Claim reward"
     >
-      <button className="modal-backdrop" aria-label="Close" onClick={onClose} />
+      <button className="modal-backdrop" title="Close" aria-label="Close" onClick={onClose} />
       <div className="claim-modal-pop relative z-10 my-auto max-h-[min(92vh,92dvh)] w-full max-w-[400px] overflow-y-auto rounded-[20px] border border-[var(--border)] bg-[var(--card-solid)] p-7 pb-6 shadow-[0_20px_44px_-24px_rgb(0_0_0/0.8)]">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
@@ -107,7 +107,7 @@ export function ClaimDetailsModal({
             type="button"
             onClick={onClose}
             className={iconButtonClass("h-[30px] w-[30px] shrink-0 rounded-[9px]")}
-            aria-label="Close"
+            title="Close" aria-label="Close"
           >
             <X className="h-3 w-3" strokeWidth={2.4} />
           </button>

@@ -489,7 +489,7 @@ export function TransactionNotifications() {
           type="button"
           onClick={() => setOpen((o) => !o)}
           className={cn(iconButtonClass("relative h-9 w-9"))}
-          aria-label={t("notifications.aria")}
+          title={t("notifications.aria")} aria-label={t("notifications.aria")}
           aria-expanded={open}
           aria-haspopup="dialog"
         >
@@ -575,7 +575,7 @@ export function TransactionNotifications() {
                 buttonVariants({ variant: "ghost", size: "sm" }),
                 "shrink-0 h-auto p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
               )}
-              aria-label="Dismiss"
+              title="Dismiss" aria-label="Dismiss"
             >
               <X className="h-3.5 w-3.5" />
             </button>

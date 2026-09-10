@@ -439,7 +439,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       <button
         type="button"
         className="modal-backdrop"
-        aria-label="Close dialog"
+        title="Close dialog" aria-label="Close dialog"
         onClick={onClose}
       />
       <div
@@ -457,7 +457,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             type="button"
             onClick={onClose}
             className={iconButtonClass("h-8 w-8")}
-            aria-label="Close"
+            title="Close" aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
@@ -512,7 +512,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                   type="button"
                   onClick={flipTokens}
                   className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-[var(--card)] bg-[var(--muted)] text-canton transition hover:rotate-180 hover:bg-[var(--primary)]/10"
-                  aria-label="Flip tokens"
+                  title="Flip tokens" aria-label="Flip tokens"
                 >
                   <ArrowDown className="h-4 w-4" />
                 </button>
@@ -640,7 +640,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           <button
             type="button"
             className="modal-backdrop"
-            aria-label="Close"
+            title="Close" aria-label="Close"
             onClick={() => setRouterOpen(false)}
           />
           <div className="relative z-10 my-auto w-full max-w-[380px] rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl">
@@ -652,7 +652,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 type="button"
                 onClick={() => setRouterOpen(false)}
                 className={iconButtonClass("h-8 w-8")}
-                aria-label="Close"
+                title="Close" aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -735,7 +735,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           <button
             type="button"
             className="modal-backdrop"
-            aria-label="Close"
+            title="Close" aria-label="Close"
             onClick={() => setConfirmOpen(false)}
           />
           <div className="relative z-10 my-auto w-full max-w-[380px] rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl">
@@ -747,7 +747,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 type="button"
                 onClick={() => setConfirmOpen(false)}
                 className={iconButtonClass("h-8 w-8")}
-                aria-label="Close"
+                title="Close" aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -847,7 +847,7 @@ function TokenPicker({
       <button
         type="button"
         className="modal-backdrop"
-        aria-label="Close token list"
+        title="Close token list" aria-label="Close token list"
         onClick={onClose}
       />
       <div className="relative z-10 my-auto max-h-[calc(100dvh-6.75rem)] md:max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl">
@@ -859,7 +859,7 @@ function TokenPicker({
             className={iconButtonClass(
               "h-8 w-8",
             )}
-            aria-label="Close"
+            title="Close" aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>

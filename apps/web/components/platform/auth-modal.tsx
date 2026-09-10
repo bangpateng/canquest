@@ -205,7 +205,7 @@ export function AuthModal() {
       <button
         type="button"
         className="modal-backdrop"
-        aria-label="Close"
+        title="Close" aria-label="Close"
         onClick={closeAuth}
       />
       <div className="relative w-full max-w-[420px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-2xl">
@@ -216,7 +216,7 @@ export function AuthModal() {
             type="button"
             onClick={closeAuth}
             className={iconButtonClass("absolute right-4 top-4 h-9 w-9")}
-            aria-label="Close"
+            title="Close" aria-label="Close"
           >
             <X className="h-5 w-5" />
           </button>

@@ -28,7 +28,7 @@ export function CopyField({ value, label }: { value: string; label: string }) {
           type="button"
           onClick={copy}
           className={iconButtonClass("h-9 w-9 shrink-0")}
-          aria-label="Copy"
+          title="Copy" aria-label="Copy"
         >
           {copied ? (
             <Check className="h-5 w-5 shrink-0 text-canton" />

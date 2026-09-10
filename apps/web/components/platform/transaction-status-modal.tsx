@@ -49,7 +49,7 @@ export function TransactionStatusModal() {
         <button
           className={iconButtonClass("absolute right-3 top-3 h-8 w-8")}
           onClick={dismiss}
-          aria-label="Close"
+          title="Close" aria-label="Close"
         >
           <X className="h-4 w-4" />
         </button>
@@ -179,7 +179,7 @@ export function TransactionStatusModal() {
                         onClick={() => {
                           if (config.txHash) void navigator.clipboard?.writeText(config.txHash);
                         }}
-                        aria-label="Copy hash"
+                        title="Copy hash" aria-label="Copy hash"
                       >
                         <Copy className="h-3 w-3" />
                       </button>

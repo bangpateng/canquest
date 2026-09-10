@@ -476,7 +476,7 @@ export function WalletActions({
         <button
           type="button"
           onClick={() => setSheet("offers")}
-          aria-label={`Incoming offers${offersCount > 0 ? `, ${offersCount} pending` : ""}`}
+          title={`Incoming offers${offersCount > 0 ? `, ${offersCount} aria-label={`Incoming offers${offersCount > 0 ? `, ${offersCount} pending` : ""}`}
           className={cn(
             buttonVariants({ variant: "secondary", size: "sm" }),
             "relative w-full justify-center gap-2",
@@ -510,7 +510,7 @@ export function WalletActions({
         <button
           type="button"
           onClick={() => onLockClick?.()}
-          aria-label={lockedCc > 0 ? `Lock — ${lockedCc} CC locked` : "Lock"}
+          title={lockedCc > 0 ? `Lock — ${lockedCc} aria-label={lockedCc > 0 ? `Lock — ${lockedCc} CC locked` : "Lock"}
           className={cn(
             buttonVariants({ variant: "secondary", size: "sm" }),
             "relative w-full justify-center gap-2",
@@ -554,7 +554,7 @@ export function WalletActions({
           <button
             type="button"
             className="modal-backdrop"
-            aria-label="Close dialog"
+            title="Close dialog" aria-label="Close dialog"
             onClick={close}
           />
           <div
@@ -576,7 +576,7 @@ export function WalletActions({
                 type="button"
                 onClick={close}
                 className={iconButtonClass("h-9 w-9 shrink-0 text-[var(--foreground)]")}
-                aria-label="Close"
+                title="Close" aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -851,7 +851,7 @@ export function WalletActions({
           <button
             type="button"
             className="modal-backdrop"
-            aria-label="Close"
+            title="Close" aria-label="Close"
             onClick={closeConfirm}
           />
           <div className="relative z-10 my-auto w-full max-w-[380px] rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl">
@@ -863,7 +863,7 @@ export function WalletActions({
                 type="button"
                 onClick={closeConfirm}
                 className={iconButtonClass("h-8 w-8")}
-                aria-label="Close"
+                title="Close" aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1018,7 +1018,7 @@ export function WalletActions({
           <button
             type="button"
             className="modal-backdrop"
-            aria-label="Close dialog"
+            title="Close dialog" aria-label="Close dialog"
             onClick={close}
           />
           <div
@@ -1043,7 +1043,7 @@ export function WalletActions({
                 type="button"
                 onClick={close}
                 className={iconButtonClass("h-9 w-9 shrink-0 text-[var(--foreground)]")}
-                aria-label="Close"
+                title="Close" aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>

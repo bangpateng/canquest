@@ -73,7 +73,7 @@ function RailNav({ hasWallet }: { hasWallet: boolean }) {
         <div key={href} className="group relative">
           <Link
             href={hrefTarget}
-            title={locked ? label : undefined}
+            title={label}
             aria-label={label}
             aria-current={active ? "page" : undefined}
             className={cn(
@@ -104,7 +104,7 @@ function MobileNav({ hasWallet }: { hasWallet: boolean }) {
         <Link
           key={href}
           href={hrefTarget}
-          title={locked ? label : undefined}
+          title={label}
           aria-label={label}
           aria-current={active ? "page" : undefined}
           className={cn(
