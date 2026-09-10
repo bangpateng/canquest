@@ -50,6 +50,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { UsersService } from '../users/users.service';
 import type { CantonUpdateEvent } from './canton-updates.service';
+import {
+  readLedgerIntent,
+  hasSwapMarker,
+  transientContractIds,
+  type LedgerEventIntent,
+} from './ledger-event-intent';
 
 /** Owner party → userId cache (di-refresh tiap 5 menit atau on miss). */
 interface OwnerCacheEntry {
@@ -173,6 +179,16 @@ export class BalanceEventHandlerService
       // Fakta dua sisi ledger yang sama — bukan tebakan.
       await this.stampSwapDepositLeg(ev);
 
+      // Intent ledger untuk update ini — dibaca SEKALI dari metadata event
+      // (tx-kind/reason/sender). Ini pengganti matcher DB: klasifikasi swap &
+      // pengirim berasal dari ledger itu sendiri, tanpa jendela waktu/toleransi
+      // jumlah. Sumber history swap on-chain = event WSS, titik.
+      const intent = readLedgerIntent(ev);
+      // Kontrak yang dibuat LALU dikonsumsi di update yang sama = transien
+      // (nilai netto nol). Jangan di-credit — ini yang bikin phantom
+      // "+10.42 Change" (output unlock yang langsung diteruskan ke escrow).
+      const transient = transientContractIds(ev);
+
       // ── 1. AGGREGATE created Amulet events per owner ─────────────────────
       // Sum semua initialAmount Amulet yang owner-nya sama dalam 1 updateId.
       // Lalu apply 1x increment per user (bukan per event).
@@ -192,6 +208,11 @@ export class BalanceEventHandlerService
 
       for (const c of ev.created) {
         const template = c.templateId || '';
+        // Kontrak transien (create + consume di update sama) tidak
+        // memindahkan nilai secara neto → JANGAN credit. Tanpa ini, output
+        // unlock yang langsung diteruskan ke escrow muncul sebagai dana masuk
+        // palsu (kasus nyata 1220b3694878: +10.42 "Change" padahal keluar).
+        if (c.contractId && transient.has(c.contractId)) continue;
         if (template.includes(':Splice.Amulet:Amulet')) {
           const args = c.createArgument ?? {};
           const ownerPartyId =
@@ -228,21 +249,15 @@ export class BalanceEventHandlerService
       }
 
       // ── 2. Apply CC increment per owner (1x per user per updateId) ───────
-      // senderHint per user: kandidat pengirim dari raw exercised event yang
-      // dicocokkan escrow swap aktif user itu (bukan first-match — witness
-      // bisa berisi banyak party). Didahulukan atas lookup DB karena
-      // pengirim escrow/eksternal tidak punya baris TRANSFER_OUT di DB.
-      // Fallback = lookup lama bila hint null.
+      // Pengirim dari metadata ledger (splice.../sender) — bukan lookup DB.
+      // Escrow/validator tak punya baris DB; ledger-lah yang tahu siapa
+      // pengirimnya. Ambigu → null (jujur), bukan tebakan.
       for (const [ownerPartyId, totalAmount] of ccByOwner) {
-        const ownerUser = await this.resolveUserByParty(ownerPartyId);
-        const hint = ownerUser
-          ? await this.deriveSenderHint(ev, ownerUser.userId)
-          : null;
         await this.applyCcIncrement(
           ownerPartyId,
           totalAmount,
           ev.updateId,
-          hint,
+          intent,
           ev.exercised,
         );
       }
@@ -297,8 +312,7 @@ export class BalanceEventHandlerService
           : null;
       if (!skipReceiverRow) {
         for (const tk of tokenByOwnerKey.values()) {
-          const hint = await this.deriveSenderHint(ev, tk.userId);
-          await this.applyTokenIncrement(tk, ev.updateId, hint, offerCid);
+          await this.applyTokenIncrement(tk, ev.updateId, intent, offerCid);
         }
       }
 
@@ -317,74 +331,11 @@ export class BalanceEventHandlerService
   }
 
   /**
-   * Turunkan petunjuk pengirim dari exercised event update yang SAMA.
-   *
-   * Pengirim escrow/eksternal (Cantex, DSO, wallet luar) tidak punya baris
-   * TRANSFER_OUT di DB sehingga lookup DB selalu null untuk delivery mereka.
-   * Tapi party mereka ADA di raw event: actingParties (actor exercise) dan
-   * witnessParties.
-   *
-   * BUKAN first-match: kandidat dicocokkan dengan escrow swap AKTIF user
-   * (dari baris SWAP_OUT ber-referenceId party ≤15 menit — fakta DB, bukan
-   * tebakan). Kandidat yang ada di daftar escrow = sender. Tidak cocok =
-   * null (jujur miss, caller fallback ke lookup DB lama). Kasus nyata:
-   * witness berisi auth0 + escrow + interchain-rep — first-match kena auth0
-   * yang salah, pencocokan ini kena escrow yang benar.
+   * Catatan: `deriveSenderHint` DIHAPUS. Pengirim sekarang dibaca dari
+   * metadata ledger (`splice.lfdecentralizedtrust.org/sender`) pada event
+   * update itu sendiri — lihat ledger-event-intent.readLedgerIntent(). Tidak
+   * ada lagi pencocokan escrow lewat jendela waktu 15 menit / baris DB.
    */
-  private async deriveSenderHint(
-    ev: CantonUpdateEvent,
-    userId?: string,
-  ): Promise<string | null> {
-    const receivers = new Set<string>();
-    for (const c of ev.created) {
-      const args = c.createArgument ?? {};
-      const owner =
-        typeof args.owner === 'string'
-          ? args.owner
-          : typeof args.receiver === 'string'
-            ? args.receiver
-            : null;
-      if (owner) receivers.add(owner);
-    }
-    const candidates: string[] = [];
-    for (const ex of ev.exercised) {
-      for (const p of [...(ex.actingParties ?? []), ...(ex.witnessParties ?? [])]) {
-        if (!p || receivers.has(p) || this.isSystemParty(p)) continue;
-        if (!candidates.includes(p)) candidates.push(p);
-      }
-    }
-    if (candidates.length === 0) return null;
-    // Tanpa userId (tanpa daftar escrow): tunggal → langsung, ambigu → null.
-    if (!userId) return candidates.length === 1 ? candidates[0] : null;
-    // Dengan daftar escrow: harus cocok — tunggal maupun ambigu. Tidak cocok
-    // = null (jujur miss). Kasus nyata 1220a4ff: auth0 tunggal-tapi-salah
-    // harus null, bukan dipakai.
-    try {
-      const since = new Date(Date.now() - 15 * 60_000);
-      const [ccOuts, tokOuts] = await Promise.all([
-        this.prisma.ccTransaction.findMany({
-          where: { userId, type: 'SWAP_OUT', createdAt: { gte: since } },
-          select: { referenceId: true },
-        }),
-        this.prisma.tokenTransaction.findMany({
-          where: { userId, type: 'SWAP_OUT', createdAt: { gte: since } },
-          select: { referenceId: true },
-        }),
-      ]);
-      const escrows = new Set(
-        [...ccOuts, ...tokOuts]
-          .map((r) => r.referenceId?.trim() || '')
-          .filter((r) => r.includes('::')),
-      );
-      if (escrows.size === 0) return candidates.length === 1 ? candidates[0] : null;
-      for (const c of candidates) {
-        if (escrows.has(c)) return c;
-      }
-    } catch {
-      /* non-fatal: jatuh ke null */
-    }
-    return null;
-  }
 
   /**
    * Apply aggregated CC increment untuk 1 owner di 1 transaksi.
@@ -401,7 +352,8 @@ export class BalanceEventHandlerService
     ownerPartyId: string,
     totalAmount: number,
     updateId: string,
-    senderHint?: string | null,
+    /** Intent ledger update ini (tx-kind/reason/sender) — pengganti matcher DB. */
+    intent: LedgerEventIntent,
     /** Exercised events update yang SAMA — untuk deteksi change output
      *  sendiri (Fase C). Bila null, deteksi C dilewati (label generik). */
     exercised?: Array<{
@@ -491,38 +443,16 @@ export class BalanceEventHandlerService
     // STEP 3: Insert history row (kalau controller belum catat).
     // Idempotent via @@unique([userId, ledgerTxId]).
     try {
-      // FIX (2026-09-03): cari PENGIRIM dari baris TRANSFER_OUT yang cocok
-      // (same cantonUpdateId, user berbeda) — BUKAN referenceId = diri sendiri.
-      // Salah isi = baris ter-filter isSelfReferenceWssRow → received tidak
-      // pernah tampil di Activity/badge (bug yang sama dengan recordReceiverAccept).
-      // L60-A1: senderHint dari raw exercised event didahulukan — pengirim
-      // escrow/eksternal tidak punya baris TRANSFER_OUT di DB. Fallback =
-      // lookup lama bila hint null.
-      const senderRow = senderHint
-        ? null
-        : await this.prisma.ccTransaction.findFirst({
-            where: {
-              cantonUpdateId: updateId,
-              type: 'TRANSFER_OUT',
-              userId: { not: user.userId },
-            },
-            select: { userId: true },
-          });
-      const senderUser = senderRow
-        ? await this.users.findById(senderRow.userId)
-        : null;
-      // L60-A1: hint raw didahulukan; lookup DB hanya bila hint null.
-      const senderPartyId = senderHint ?? senderUser?.cantonPartyId ?? null;
+      // PENGIRIM dari metadata ledger (splice.../sender) pada event update ini
+      // — TANPA lookup DB, TANPA jendela waktu. Pengirim escrow/eksternal tidak
+      // punya baris TRANSFER_OUT di DB; hanya ledger yang tahu siapa mereka.
+      const senderPartyId = intent.sender ?? null;
 
-      // KLASIFIKASI SWAP CC (R2, forensik 2026-09-09): kaki pulang swap
-      // (delivery CC dari escrow) lahir sebagai SWAP_IN hanya bila matcher
-      // kuat membuktikan (jumlah buyAmount + korelasi escrow). Miss → TRANSFER.
-      const swapMatch = await this.findMatchingSwapLegCc(
-        user.userId,
-        totalAmount,
-        senderPartyId,
-      );
-      const isSwapIn = swapMatch !== null;
+      // KLASIFIKASI SWAP CC dari metadata ledger (penanda swap pada reason,
+      // ditulis ke ledger saat submit CanQuest). Kaki pulang swap (delivery CC
+      // dari escrow) lahir sebagai SWAP_IN bila penandanya ADA. Tanpa penanda
+      // → TRANSFER. Tidak ada matcher DB — tidak ditebak dari jumlah/jendela.
+      const isSwapIn = hasSwapMarker(intent.reasons);
       // REFUND = gate dana, bukan tebakan bisnis. Ditentukan di
       // SwapService.finalizeSwapInBackground (terminal resmi OneSwap
       // `refunded` + jumlah + pengirim escrow) yang menempel label ke baris
@@ -557,8 +487,8 @@ export class BalanceEventHandlerService
         // tanpa prefix `wss:` — sama seperti controller-side (signing-relay).
         // 1 updateId = 1 ledgerTxId → race controller-vs-handler ditendang oleh
         // @@unique([userId, ledgerTxId]) (P2002 di-swallow di bawah).
-        // Kaki swap: ref = escrow depositParty bila ketemu.
-        referenceId: swapMatch?.depositParty ?? senderPartyId,
+        // Kaki swap: ref = sender ledger (escrow) bila teridentifikasi.
+        referenceId: senderPartyId,
         ledgerTxId: updateId,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
@@ -586,53 +516,11 @@ export class BalanceEventHandlerService
   }
 
   /**
-   * Cari escrow swap TOKEN_TO_CC yang terbukti sebagai kaki pulang delivery
-   * CC ini (R2, forensik 2026-09-09). Syarat KETAT: swap arah TOKEN_TO_CC
-   * ≤15 menit + JUMLAH cocok buyAmount (1e-6) + sender event = escrow party
-   * (dari row TOKEN_TRANSFER_OUT controller). Miss → null = TRANSFER biasa.
+   * Catatan: `findMatchingSwapLegCc` DIHAPUS. Klasifikasi kaki pulang swap
+   * CC sekarang dibaca dari metadata ledger (penanda swap pada reason) —
+   * lihat ledger-event-intent.hasSwapMarker(). Tidak ada lagi jendela waktu
+   * 15 menit / toleransi jumlah / korelasi escrow lewat baris DB.
    */
-  private async findMatchingSwapLegCc(
-    userId: string,
-    amountCc: number,
-    senderPartyId: string | null,
-  ): Promise<{ depositParty: string | null } | null> {
-    try {
-      const since = new Date(Date.now() - 15 * 60_000);
-      const swap = await this.prisma.swapTransaction.findFirst({
-        where: {
-          userId,
-          direction: 'TOKEN_TO_CC',
-          createdAt: { gte: since },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { buyAmount: true },
-      });
-      if (!swap || swap.buyAmount == null) return null;
-      if (Math.abs(Number(swap.buyAmount) - amountCc) > 1e-6) return null;
-      // Escrow dibaca dari baris SWAP_OUT tabel token (kaki jual swap arah
-      // ini) — BUKAN TOKEN_TRANSFER_OUT: deposit swap dikirim via transfer
-      // langsung tanpa baris TRANSFER_OUT, sedangkan settleSwapOutcome menulis
-      // SWAP_OUT token dengan referenceId = party escrow (fix b518ceb).
-      // Simetris dengan arah sebaliknya yang baca SWAP_OUT tabel CC.
-      const outRow = await this.prisma.tokenTransaction.findFirst({
-        where: {
-          userId,
-          type: 'SWAP_OUT',
-          createdAt: { gte: since },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { referenceId: true },
-      });
-      const ref = outRow?.referenceId?.trim() || null;
-      const escrow = ref && ref.includes('::') ? ref : null;
-      if (!escrow) return null;
-      if (!senderPartyId) return null;
-      if (senderPartyId !== escrow) return null;
-      return { depositParty: escrow };
-    } catch {
-      return null;
-    }
-  }
 
   /**
    * DIHAPUS (aturan updateId: tanpa bukti jangan label refund — kasus nyata
@@ -657,7 +545,8 @@ export class BalanceEventHandlerService
       contractIds: string[];
     },
     updateId: string,
-    senderHint?: string | null,
+    /** Intent ledger update ini (tx-kind/reason/sender) — pengganti matcher DB. */
+    intent: LedgerEventIntent,
     /** Contract id offer yang dibuat di update yang SAMA (bila ada). Bila
      *  terisi → holding ini masih di-escrow offer yang belum di-accept:
      *  tulis baris PENDING + transferInstructionCid (lifecycle B1), bukan
@@ -771,38 +660,16 @@ export class BalanceEventHandlerService
     // wallet eksternal (bukan lewat API kami) — tanpa ini USDCx masuk tidak
     // pernah muncul di Activity/badge. Idempotent via @@unique([userId, ledgerTxId]).
     try {
-      // Cari pengirim dari row TOKEN_TRANSFER_OUT dengan cantonUpdateId sama
-      // (sudah di-stamp markTransferInstructionSettled di tahap exercised).
-      // L60-A1: senderHint raw didahulukan (escrow Cantex tak punya baris DB);
-      // lookup lama hanya bila hint null.
-      const senderRow = senderHint
-        ? null
-        : await this.prisma.tokenTransaction.findFirst({
-            where: {
-              cantonUpdateId: updateId,
-              type: 'TOKEN_TRANSFER_OUT',
-              userId: { not: tk.userId },
-            },
-            select: { userId: true },
-          });
-      const senderUser = senderRow
-        ? await this.users.findById(senderRow.userId)
-        : null;
-      const senderPartyId = senderHint ?? senderUser?.cantonPartyId ?? null;
+      // Pengirim dari metadata ledger (splice.../sender) pada event ini —
+      // TANPA lookup DB, TANPA jendela waktu.
+      const senderPartyId = intent.sender ?? null;
 
-      // KLASIFIKASI SWAP (forensik 2026-09-09, R1+R2): holding MASUK tidak
-      // pernah boleh lahir sebagai SWAP_OUT (debit). Hanya SWAP_IN bila
-      // matcher kuat membuktikan kaki pulang (jumlah + korelasi escrow).
-      // Miss → TRANSFER biasa (false negative OK, false positive TIDAK).
+      // KLASIFIKASI SWAP (R1): holding MASUK tidak pernah boleh lahir sebagai
+      // SWAP_OUT (debit). Hanya SWAP_IN bila penanda swap ledger ADA. Miss →
+      // TRANSFER biasa (false negative OK, false positive TIDAK).
       // TANPA refund-matcher: tanpa bukti, tulis RECEIVED biasa (updateId ada,
       // tebakan tidak ada).
-      const swapLegIn = await this.findMatchingSwapLeg(
-        tk.userId,
-        tk.instrumentId,
-        tk.amount,
-        senderPartyId,
-      );
-      const isSwapIn = swapLegIn !== null;
+      const isSwapIn = hasSwapMarker(intent.reasons);
 
       await this.users.recordTokenTransaction({
         userId: tk.userId,
@@ -821,12 +688,12 @@ export class BalanceEventHandlerService
         // @@unique([userId, ledgerTxId]) tidak menolak gerakan legit kedua;
         // cantonUpdateId TETAP updateId asli (link explorer + dedup lintas
         // instrumen tetap benar via scope dedupKey).
-        // Kaki swap: ref = escrow depositParty (oneswap-wallet) bila ketemu.
+        // Kaki swap: ref = sender ledger (escrow) bila teridentifikasi.
         // ACCEPT-1-HISTORY: status SELALU COMPLETED (baris ini hanya ditulis
         // saat accept/delivery — tidak ada lagi PENDING receiver).
         // transferInstructionCid = penanda rantai audit (offer mana), bukan
         // status lifecycle.
-        referenceId: swapLegIn?.depositParty ?? senderPartyId,
+        referenceId: senderPartyId,
         ledgerTxId: `${updateId}:${tk.instrumentId.toLowerCase()}`,
         cantonUpdateId: updateId,
         transferInstructionCid: offerCid ?? null,
@@ -1517,63 +1384,11 @@ export class BalanceEventHandlerService
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Cari escrow swap CC_TO_TOKEN yang terbukti sebagai kaki pulang delivery
-   * token ini (R2, forensik 2026-09-09).
-   *
-   * Syarat KETAT (semua harus lolos, miss → null = TRANSFER biasa):
-   *  1. Swap user ini arah CC_TO_TOKEN, buyInstrument cocok (insensitive),
-   *     dibuat ≤15 menit lalu. Ambil yang terbaru.
-   *  2. JUMLAH cocok buyAmount escrow (toleransi 1e-6, konvensi refund-checker).
-   *     Tanpa jumlah yang cocok (mis. transfer 1.0610689885 vs swap sell 1.06)
-   *     → TOLAK. Ini kunci R2.
-   *  3. KORELASI escrow: senderPartyId (sudah di-resolve caller dari row
-   *     TRANSFER_OUT se-updateId) harus = escrow depositParty — dicari dari
-   *     row SWAP_OUT controller (ref = depositParty) di jendela yang sama.
-   *     Tanpa korelasi → TOLAK (false negative OK, false positive TIDAK).
+   * Catatan: `findMatchingSwapLeg` DIHAPUS. Klasifikasi kaki pulang swap
+   * token sekarang dibaca dari metadata ledger (penanda swap pada reason) —
+   * lihat ledger-event-intent.hasSwapMarker(). Tidak ada lagi SwapTransaction
+   * jendela 15 menit / toleransi jumlah / korelasi escrow lewat baris DB.
    */
-  private async findMatchingSwapLeg(
-    userId: string,
-    instrumentId: string,
-    amount: number,
-    senderPartyId: string | null,
-  ): Promise<{ depositParty: string | null } | null> {
-    try {
-      const since = new Date(Date.now() - 15 * 60_000);
-      const swap = await this.prisma.swapTransaction.findFirst({
-        where: {
-          userId,
-          direction: 'CC_TO_TOKEN',
-          buyInstrumentId: { equals: instrumentId, mode: 'insensitive' },
-          createdAt: { gte: since },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { buyAmount: true },
-      });
-      if (!swap || swap.buyAmount == null) return null;
-      // (2) jumlah harus cocok.
-      if (Math.abs(Number(swap.buyAmount) - amount) > 1e-6) return null;
-      // (3) korelasi escrow: row SWAP_OUT controller di jendela yang sama.
-      const outRow = await this.prisma.ccTransaction.findFirst({
-        where: {
-          userId,
-          type: 'SWAP_OUT',
-          createdAt: { gte: since },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { referenceId: true },
-      });
-      const ref = outRow?.referenceId?.trim() || null;
-      const escrow = ref && ref.includes('::') ? ref : null;
-      if (!escrow) return null;
-      // Sender event harus escrow itu (atau tidak diketahui → tetap tolak bila
-      // sender diketahui tapi beda; null = eksternal tak terkorelasi → tolak).
-      if (!senderPartyId) return null;
-      if (senderPartyId !== escrow) return null;
-      return { depositParty: escrow };
-    } catch {
-      return null; // non-fatal — gagal cek = tulis TRANSFER biasa
-    }
-  }
 
   /**
    * DIHAPUS (R1, forensik 2026-09-09): kaki berangkat token TIDAK boleh

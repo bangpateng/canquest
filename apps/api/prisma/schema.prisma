@@ -496,6 +496,9 @@ model LedgerEvent {
   @@index([contractId])
   @@index([offset])
   @@index([templateId])
+  /// Feed history personal: WHERE witnessParties @> {party} ORDER BY offset.
+  /// GIN mempercepat kontainmen array; btree (offset) sudah ada di atas.
+  @@index([witnessParties], type: Gin)
 }
 
 /// Identitas instrumen token — NEVER key pada bare id (siapa pun bisa mint

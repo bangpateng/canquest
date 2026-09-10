@@ -7,12 +7,14 @@
  * (idempoten via PK updateId+eventIndex).
  */
 import { LedgerRawIngestService } from './ledger-raw-ingest.service';
+import { resolveRawOffset } from './ledger-raw-ingest.service';
 import type { CantonUpdateEvent } from './canton-updates.service';
 import { buildUpdateFormatCumulative } from './canton-updates.service';
 
 function baseEvent(over: Partial<CantonUpdateEvent> = {}): CantonUpdateEvent {
   return {
     offset: 1325354,
+    offsetKnown: true,
     updateId: '1220abc',
     commandId: 'tf-001',
     effectiveAt: '2026-07-18T07:43:29.599964Z',
@@ -175,6 +177,50 @@ describe('ledger raw ingest (L60)', () => {
     expect(rd[0].contractId).toBe('cid-deposit-out');
     expect(rl[0].contractId).toBe('cid-delivery-out');
     expect(deposit.updateId).not.toBe(delivery.updateId);
+  });
+
+  it('R8: offset wire dipertahankan — update + semua event baris bernilai sama', () => {
+    const rows = LedgerRawIngestService.toEventRows(
+      baseEvent({
+        offset: 424242,
+        offsetKnown: true,
+        created: [
+          { contractId: 'c1', templateId: 'hash:Splice.Amulet:Amulet', createArgument: {} },
+        ],
+        exercised: [
+          {
+            contractId: 'c2',
+            templateId: 'hash:Splice.Amulet:Amulet',
+            choice: 'Archive',
+            choiceArgument: {},
+          },
+        ],
+      }),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.offset)).toEqual([424242n, 424242n]);
+  });
+
+  it('R9: offset fallback (offsetKnown false) TIDAK ditulis — null, bukan 999', () => {
+    // Event nyata yang wire-nya tidak membawa offset: dispatcher mengisi
+    // offset fallback (lastOffset in-memory) + offsetKnown=false.
+    const rows = LedgerRawIngestService.toEventRows(
+      baseEvent({
+        offset: 999,
+        offsetKnown: false,
+        created: [
+          { contractId: 'c1', templateId: 'hash:Splice.Amulet:Amulet', createArgument: {} },
+        ],
+      }),
+    );
+    expect(rows[0].offset).toBeNull();
+    expect(resolveRawOffset(baseEvent({ offset: 999, offsetKnown: undefined }))).toBeNull();
+  });
+
+  it('R10: resolveRawOffset — wire valid → BigInt; non-finite/negatif → null', () => {
+    expect(resolveRawOffset(baseEvent({ offset: 819747, offsetKnown: true }))).toBe(819747n);
+    expect(resolveRawOffset(baseEvent({ offset: NaN, offsetKnown: true }))).toBeNull();
+    expect(resolveRawOffset(baseEvent({ offset: -1, offsetKnown: true }))).toBeNull();
   });
 
   it('R7: filter produksi = 7 InterfaceFilter views + wildcard, verbose, LEDGER_EFFECTS', () => {

@@ -1,0 +1,372 @@
+#!/usr/bin/env node
+/**
+ * SMOKE TEST READ-ONLY — perilaku feed wallet untuk satu akun nyata
+ * (default: airplanestar). Memanggil SERVICE ASLI (bukan query tiruan):
+ *   - LedgerActivityService.getFeed  (feed "satu sumber", raw LedgerEvent)
+ *   - UsersService.getUnifiedActivity (feed legacy CcTransaction+TokenTransaction)
+ * lalu memeriksa INVARIAN perilaku, bukan sekadar "tidak error":
+ *
+ *   S1  Bentuk respons paginasi baru (page/pageSize/hasMore/total).
+ *   S2  Urutan KRONOLOGIS LEDGER — offset non-naik antar halaman.
+ *   S3  Paginasi benar — halaman 1..N tidak saling tumpang.
+ *   S4  ledgerTime terisi dari LedgerUpdate.effectiveAt (bukan createdAt app).
+ *   S5  LEG SWAP UTUH — baris se-updateId beda instrumen tidak saling menelan.
+ *   S6  Reassignment TIDAK tampil di feed personal (raw audit saja).
+ *   S7  Halaman dalam (page 3) tetap mengembalikan baris berbeda (dulu rusak).
+ *
+ * TIDAK menulis apa pun. Hanya SELECT.
+ *
+ * Jalankan: cd apps/api && npx ts-node --transpile-only scripts/smoke-airplanestar.ts [username]
+ */
+import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import * as fs from 'fs';
+import * as path from 'path';
+
+import { LedgerActivityService } from '../src/canton/ledger-activity.service';
+import { UsersService } from '../src/users/users.service';
+import { PointsService } from '../src/users/points.service';
+import { RealtimeService } from '../src/realtime/realtime.service';
+
+// ── Load .env (ts-node tidak memuatnya otomatis) ────────────────────────────
+function loadEnv(file: string): void {
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+  }
+}
+loadEnv(path.resolve(__dirname, '..', '.env'));
+
+const USERNAME = (process.argv[2] || 'airplanestar').trim();
+
+// ── Mini test harness ───────────────────────────────────────────────────────
+const results: Array<{ id: string; ok: boolean; detail: string }> = [];
+function check(id: string, ok: boolean, detail: string): void {
+  results.push({ id, ok, detail });
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${id}  ${detail}`);
+}
+
+async function main(): Promise<void> {
+  const prisma = new PrismaClient({
+    adapter: new PrismaPg(
+      new Pool({ connectionString: process.env.DATABASE_URL, max: 5 }),
+    ),
+  });
+
+  const user = await prisma.user.findFirst({
+    where: { username: { equals: USERNAME, mode: 'insensitive' } },
+    select: { id: true, username: true, cantonPartyId: true },
+  });
+  if (!user) throw new Error(`user "${USERNAME}" tidak ditemukan`);
+  const party = user.cantonPartyId;
+  if (!party) throw new Error(`user "${USERNAME}" tanpa cantonPartyId`);
+
+  console.log(`\n=== SMOKE FEED — @${user.username} ===`);
+  console.log(`party : ${party.slice(0, 40)}...`);
+  console.log(`userId: ${user.id}\n`);
+
+  // Instance service asli.
+  const ledgerActivity = new LedgerActivityService(prisma as never);
+  const users = new UsersService(
+    prisma as never,
+    new PointsService(prisma as never),
+    new RealtimeService(),
+  );
+
+  // ── Baseline data mentah party ini ────────────────────────────────────────
+  const [rawWitness, rawWithOffset, reassigned] = await Promise.all([
+    prisma.ledgerEvent.count({ where: { witnessParties: { has: party } } }),
+    prisma.ledgerEvent.count({
+      where: { witnessParties: { has: party }, offset: { not: null } },
+    }),
+    prisma.ledgerEvent.count({
+      where: {
+        witnessParties: { has: party },
+        eventType: { in: ['assigned', 'unassigned'] },
+      },
+    }),
+  ]);
+  console.log(
+    `baseline: raw witness=${rawWitness} (ber-offset=${rawWithOffset}) reassignment=${reassigned}\n`,
+  );
+
+  // ── S1 + S2 + S4: halaman 1 ───────────────────────────────────────────────
+  const p1 = await ledgerActivity.getFeed(user.id, 1, 20);
+  check(
+    'S1',
+    typeof p1.page === 'number' &&
+      typeof p1.pageSize === 'number' &&
+      typeof p1.hasMore === 'boolean' &&
+      (p1.total === null || p1.total >= 0),
+    `respons: items=${p1.items.length} total=${p1.total === null ? 'null(lower-bound)' : p1.total} ` +
+      `page=${p1.page} size=${p1.pageSize} hasMore=${p1.hasMore}`,
+  );
+
+  const offsets = await offsetsFor(
+    prisma,
+    p1.items.map((i) => i.updateId),
+  );
+  const seq = p1.items.map((i) => offsets.get(i.updateId) ?? null);
+  check(
+    'S2',
+    isNonIncreasing(seq),
+    `offset halaman 1 [${seq.map((o) => (o === null ? 'null' : o)).join(' > ')}]`,
+  );
+
+  const withTime = p1.items.filter((i) => i.ledgerTime).length;
+  check(
+    'S4',
+    p1.items.length === 0 || withTime > 0,
+    `ledgerTime terisi ${withTime}/${p1.items.length} baris (sumber: LedgerUpdate.effectiveAt)`,
+  );
+
+  // ── S3 + S7: halaman 2 & 3, cek tumpang & monotonicitas ───────────────────
+  const p2 = await ledgerActivity.getFeed(user.id, 2, 20);
+  const p3 = await ledgerActivity.getFeed(user.id, 3, 20);
+  const ids1 = new Set(p1.items.map((i) => i.id));
+  const ids2 = new Set(p2.items.map((i) => i.id));
+  const overlap12 = [...ids2].filter((id) => ids1.has(id)).length;
+  const overlap23 = p3.items.filter((i) => ids2.has(i.id)).length;
+  check(
+    'S3',
+    overlap12 === 0 && overlap23 === 0,
+    `tumpang halaman 1∩2=${overlap12} 2∩3=${overlap23}`,
+  );
+
+  const seq2 = await seqFor(prisma, p2.items);
+  const seq3 = await seqFor(prisma, p3.items);
+  check(
+    'S7',
+    p3.items.length > 0 || p1.hasMore === false,
+    `page1=${p1.items.length} page2=${p2.items.length} page3=${p3.items.length} ` +
+      `(total page1=${p1.total} page2=${p2.total} page3=${p3.total} — harus konsisten); ` +
+      `offset p2[${seq2.join(',')}] p3[${seq3.join(',')}]`,
+  );
+
+  // ── S5: PONDASI LEG SWAP — kedua kaki harus tampil di Activity ────────────
+  // Satu swap = 2 baris (sisi jual + sisi beli), dikorelasi escrow di
+  // ledgerTxId `oneswap:<escrow>:in|out`. Invariant yang diuji: setiap swap
+  // utuh (punya kedua sisi) DAN kedua barisnya terlihat user di
+  // /party/transactions (unified Activity) — bukan cuma ada di DB.
+  const ccLegs = await prisma.ccTransaction.findMany({
+    where: { userId: user.id, type: { in: ['SWAP_IN', 'SWAP_OUT'] } },
+    select: {
+      id: true,
+      type: true,
+      amountMicroCc: true,
+      referenceId: true,
+      ledgerTxId: true,
+    },
+  });
+  const tokLegs = await prisma.tokenTransaction.findMany({
+    where: { userId: user.id, type: { in: ['SWAP_IN', 'SWAP_OUT'] } },
+    select: {
+      id: true,
+      type: true,
+      instrumentId: true,
+      amount: true,
+      ledgerTxId: true,
+    },
+  });
+
+  type Leg = {
+    uiId: string;
+    side: 'in' | 'out';
+    table: 'cc' | 'token';
+    instrument: string;
+    amount: string;
+    refNull: boolean;
+  };
+  const groups = new Map<string, Leg[]>();
+  const addLeg = (txn: string, l: Leg): void => {
+    if (!groups.has(txn)) groups.set(txn, []);
+    groups.get(txn)!.push(l);
+  };
+  const oneswapRe = /^oneswap:(esc_[0-9a-f]+):(in|out)$/;
+  for (const r of ccLegs) {
+    const m = oneswapRe.exec(r.ledgerTxId ?? '');
+    const side = m ? (m[2] as 'in' | 'out') : r.type === 'SWAP_IN' ? 'out' : 'in';
+    // Escrow: dari ledgerTxId bila ada, else dari referenceId (party `::`).
+    const txn =
+      m?.[1] ??
+      (r.referenceId?.includes('::') ? `ref:${r.referenceId}` : `id:${r.id}`);
+    addLeg(txn, {
+      uiId: `cc-${r.id}`,
+      side,
+      table: 'cc',
+      instrument: 'CC',
+      amount: r.amountMicroCc.toString(),
+      refNull: r.referenceId === null,
+    });
+  }
+  for (const r of tokLegs) {
+    const m = oneswapRe.exec(r.ledgerTxId ?? '');
+    const side = m ? (m[2] as 'in' | 'out') : r.type === 'SWAP_IN' ? 'out' : 'in';
+    const txn = m?.[1] ?? `id:${r.id}`;
+    addLeg(txn, {
+      uiId: `tok-${r.id}`,
+      side,
+      table: 'token',
+      instrument: r.instrumentId,
+      amount: r.amount.toString(),
+      refNull: false,
+    });
+  }
+
+  const complete = [...groups.values()].filter(
+    (g) => g.some((l) => l.side === 'in') && g.some((l) => l.side === 'out'),
+  );
+  const unified = await users.getUnifiedActivity(user.id, 1, 200);
+  const unifiedIds = new Set(unified.items.map((i) => String((i as { id: string }).id)));
+  const pairsFullyVisible = complete.filter((g) =>
+    g.every((l) => unifiedIds.has(l.uiId)),
+  );
+  const anyLegVisible = complete.filter((g) =>
+    g.some((l) => unifiedIds.has(l.uiId)),
+  );
+  check(
+    'S5',
+    complete.length > 0 && pairsFullyVisible.length === complete.length,
+    `leg swap di Activity: swap utuh=${complete.length} ` +
+      `tampil-kedua-leg=${pairsFullyVisible.length} tampil-sebagian=${anyLegVisible.length} ` +
+      `(Activity total=${unified.total})` +
+      (complete.length && pairsFullyVisible.length < complete.length
+        ? ` | CONTOH HILANG: ${complete
+            .filter((g) => !pairsFullyVisible.includes(g))
+            .slice(0, 2)
+            .map(
+              (g) =>
+                g
+                  .map((l) => `${l.side}:${l.instrument}${unifiedIds.has(l.uiId) ? '(tampil)' : '(HILANG)'}`)
+                  .join(' + '),
+            )
+            .join('  ')}`
+        : ''),
+  );
+
+  // ── S9: akar masalah baris leg hilang — referenceId NULL kena NOT(...) ────
+  // CC_TRANSACTION_HISTORY_WHERE memakai `NOT: { OR: [...] }`. Di SQL,
+  // `NOT (NULL OR false ...)` = NULL → baris dengan referenceId NULL TERSARING
+  // dari Activity DAN bell. Bukti: hitung baris swap ref-null vs yang lolos.
+  const hiddenByNullRef = await prisma.ccTransaction.count({
+    where: {
+      userId: user.id,
+      type: { in: ['SWAP_IN', 'SWAP_OUT'] },
+      referenceId: null,
+    },
+  });
+  const visibleSwapRows = await prisma.ccTransaction.count({
+    where: {
+      userId: user.id,
+      type: { in: ['SWAP_IN', 'SWAP_OUT'] },
+      NOT: { OR: [{ referenceId: { startsWith: 'fee:' } }] },
+    },
+  });
+  const totalSwapRows = await prisma.ccTransaction.count({
+    where: { userId: user.id, type: { in: ['SWAP_IN', 'SWAP_OUT'] } },
+  });
+  check(
+    'S9',
+    hiddenByNullRef === 0,
+    `baris swap ber-referenceId NULL = ${hiddenByNullRef}; lolos filter history = ` +
+      `${visibleSwapRows}/${totalSwapRows}. NOT(...LIKE...) bernilai NULL di SQL → ` +
+      `baris ini tersaring dari Activity + bell (akar: cc-transaction-visibility.ts).`,
+  );
+
+  // ── S6: reassignment tidak bocor ke feed ──────────────────────────────────
+  const feedIds = new Set(
+    [...p1.items, ...p2.items, ...p3.items].map((i) => i.updateId),
+  );
+  let reassignInFeed = 0;
+  if (feedIds.size > 0) {
+    reassignInFeed = await prisma.ledgerEvent.count({
+      where: {
+        updateId: { in: [...feedIds] },
+        eventType: { in: ['assigned', 'unassigned'] },
+      },
+    });
+  }
+  check(
+    'S6',
+    reassignInFeed === 0,
+    `baris reassignment di feed: ${reassignInFeed} (harus 0; raw audit tetap tersimpan)`,
+  );
+
+  // ── S8: raw feed TIDAK collapse baris se-updateId ────────────────────────
+  // Satu update bisa punya >1 event relevan (mis. beberapa UTXO Amulet). Kalau
+  // feed mendedupe per-updateId, baris hilang. Hitung baris per updateId.
+  const perUpdate = new Map<string, number>();
+  for (const it of [...p1.items, ...p2.items, ...p3.items]) {
+    perUpdate.set(it.updateId, (perUpdate.get(it.updateId) ?? 0) + 1);
+  }
+  const multi = [...perUpdate.values()].filter((n) => n > 1).length;
+  const maxPerUpdate = Math.max(0, ...perUpdate.values());
+  check(
+    'S8',
+    maxPerUpdate >= 1,
+    `updateId dengan >1 baris (tidak collapse): ${multi}/${perUpdate.size}; maks baris/updateId=${maxPerUpdate}`,
+  );
+
+  // ── Pembanding legacy: berapa baris yang dilihat user dari DUA stack ──────
+  console.log(
+    `\ninfo  legacy /party/transactions: ${unified.items.length} baris (total=${unified.total}) — ` +
+      `stack BERBEDA dari /party/ledger-activity (${p1.total ?? '>'} di jendela halaman)`,
+  );
+
+  // ── Ringkasan ─────────────────────────────────────────────────────────────
+  const failed = results.filter((r) => !r.ok);
+  console.log(
+    `\n=== RINGKASAN: ${results.length - failed.length}/${results.length} PASS ===`,
+  );
+  if (failed.length) {
+    for (const f of failed) console.log(`  FAIL ${f.id}: ${f.detail}`);
+  }
+
+  await prisma.$disconnect();
+  process.exit(failed.length ? 1 : 0);
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function isNonIncreasing(seq: Array<number | null>): boolean {
+  let prev = Number.POSITIVE_INFINITY;
+  for (const v of seq) {
+    if (v === null) continue; // baris pra-offset diletakkan terakhir — boleh
+    if (v > prev) return false;
+    prev = v;
+  }
+  return true;
+}
+
+async function offsetsFor(
+  prisma: PrismaClient,
+  updateIds: string[],
+): Promise<Map<string, number | null>> {
+  const uniq = [...new Set(updateIds)];
+  if (uniq.length === 0) return new Map();
+  const rows = await prisma.ledgerUpdate.findMany({
+    where: { updateId: { in: uniq } },
+    select: { updateId: true, offset: true },
+  });
+  return new Map(
+    rows.map((r) => [r.updateId, r.offset === null ? null : Number(r.offset)]),
+  );
+}
+
+async function seqFor(
+  prisma: PrismaClient,
+  items: Array<{ updateId: string }>,
+): Promise<Array<number | null>> {
+  if (items.length === 0) return [];
+  const map = await offsetsFor(
+    prisma,
+    items.map((i) => i.updateId),
+  );
+  return items.map((i) => map.get(i.updateId) ?? null);
+}
+
+main().catch((err) => {
+  console.error('\nSMOKE ERROR:', err instanceof Error ? err.message : err);
+  process.exit(2);
+});

@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import type { CantonUpdateEvent } from './canton-updates.service';
+import type {
+  CantonReassignment,
+  CantonUpdateEvent,
+} from './canton-updates.service';
 
 /**
  * LedgerRawIngestService — RAW LEDGER PROJECTION BOUNDARY (canonical history).
@@ -22,10 +25,14 @@ import type { CantonUpdateEvent } from './canton-updates.service';
  *     (bukti audit #5) — JANGAN digabung ke created.
  *   - payload/envelope = JSON mentah lengkap (interfaceViews, choiceArgument,
  *     actingParties, dsb bila dibawa wire) — sumber forensik.
- *   - offset/recordTime TIDAK difake: Transaction.value LEDGER_EFFECTS tidak
- *     membawa top-level offset / recordTime / synchronizerId (audit #4/#5).
- *     Kolom DB nullable — diisi null bila wire tidak membawa. effectiveAt
- *     (jam ledger) disimpan di kolomnya sendiri, BUKAN sebagai recordTime.
+ *   - offset = offset ledger asli, ditulis HANYA bila wire membawanya
+ *     (CantonUpdateEvent.offsetKnown true) — nilai sama untuk LedgerUpdate
+ *     dan seluruh LedgerEvent-nya, sehingga feed bisa diurutkan kronologis
+ *     dan direkonsiliasi per-rentang. Bila wire tidak membawa (LEDGER_EFFECTS
+ *     kadang tanpa offset top-level), kolom nullable → null. Tidak pernah
+ *     difake dari effectiveAt/recordTime/nodeId/index/offset fallback
+ *     in-memory (audit #4/#5). recordTime tetap null (tidak dibawa wire);
+ *     effectiveAt (jam ledger) disimpan di kolomnya sendiri — bukan recordTime.
  *
  * Idempotency: upsert per PK — replay WSS / reconnect / backfill aman.
  * Tidak menyentuh checkpoint/replay (milik CantonUpdatesService).
@@ -58,6 +65,10 @@ export class LedgerRawIngestService {
       } as unknown as Prisma.InputJsonValue;
 
       const events = buildEventRows(ev);
+      // Offset ledger asli — HANYA bila wire membawanya (offsetKnown). Bila
+      // absen, null (jujur): kolom nullable, dan offset fallback in-memory
+      // BUKAN posisi ledger. Sumber tunggal, dipakai update + tiap event.
+      const offset = resolveRawOffset(ev);
 
       // Satu transaksi DB: update + N events atomik. upsert per PK → replay aman.
       await this.prisma.$transaction(async (tx) => {
@@ -65,7 +76,7 @@ export class LedgerRawIngestService {
           where: { updateId },
           create: {
             updateId,
-            offset: null,
+            offset,
             recordTime: null,
             effectiveAt,
             commandId: ev.commandId ?? null,
@@ -77,6 +88,9 @@ export class LedgerRawIngestService {
             // lebih lengkap (mis. filter berubah); identitas tak tersentuh.
             effectiveAt: effectiveAt ?? undefined,
             commandId: ev.commandId ?? undefined,
+            // Hanya isi offset bila sekarang diketahui — redelivery tanpa
+            // offset tidak boleh meng-null-kan nilai yang sudah tersimpan.
+            offset: offset ?? undefined,
             envelope,
           },
         });
@@ -91,7 +105,7 @@ export class LedgerRawIngestService {
             create: {
               updateId,
               eventIndex: row.eventIndex,
-              offset: null,
+              offset,
               recordTime: null,
               eventType: row.eventType,
               templateId: row.templateId,
@@ -107,6 +121,9 @@ export class LedgerRawIngestService {
               contractId: row.contractId,
               witnessParties: row.witnessParties,
               payload: row.payload,
+              // Sama seperti LedgerUpdate: isi bila diketahui, jangan null-kan
+              // kembali nilai yang sudah ada (heal baris lama ber-offset null).
+              offset: offset ?? undefined,
             },
           });
         }
@@ -114,6 +131,91 @@ export class LedgerRawIngestService {
     } catch (err) {
       this.logger.warn(
         `LedgerRawIngest: ingest failed updateId=${updateId.slice(0, 16)}… events=${ev.created.length + ev.archived.length + ev.exercised.length}: ${String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Preservasi satu update Reassignment (kontrak pindah synchronizer).
+   *
+   * RAW AUDIT SAJA — tidak ada proyeksi semantik. Sisi `assigned` membawa
+   * CreatedEvent lengkap, tapi kontrak itu sudah ada sebelum reassignment:
+   * menganggapnya create baru akan double-count saldo. Feed personal juga
+   * tidak menampilkannya (projectRow hanya mengenal created/exercised).
+   *
+   * Yang disimpan: update (PK updateId) + satu baris per event dengan
+   * eventType 'assigned' | 'unassigned'. recordTime DIISI (reassignment
+   * membawanya di wire, beda dari Transaction LEDGER_EFFECTS). Idempoten
+   * upsert per PK — replay/reconnect aman.
+   */
+  async ingestReassignment(ev: CantonReassignment): Promise<void> {
+    const updateId = ev.updateId;
+    if (!updateId) return; // tanpa identitas — bukan update yang bisa di-resume.
+
+    try {
+      const offset = resolveReassignmentOffset(ev);
+      const envelope = {
+        updateId,
+        kind: 'reassignment',
+        commandId: ev.commandId ?? null,
+        workflowId: ev.workflowId ?? null,
+        recordTime: ev.recordTime ?? null,
+        synchronizerId: ev.synchronizerId ?? null,
+        parties: ev.parties,
+        events: ev.events,
+      } as unknown as Prisma.InputJsonValue;
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.ledgerUpdate.upsert({
+          where: { updateId },
+          create: {
+            updateId,
+            offset,
+            recordTime: parseEffectiveAt(ev.recordTime),
+            effectiveAt: null,
+            commandId: ev.commandId ?? null,
+            synchronizerId: ev.synchronizerId ?? null,
+            envelope,
+          },
+          update: {
+            commandId: ev.commandId ?? undefined,
+            offset: offset ?? undefined,
+            recordTime: parseEffectiveAt(ev.recordTime) ?? undefined,
+            synchronizerId: ev.synchronizerId ?? undefined,
+            envelope,
+          },
+        });
+        for (const row of ev.events) {
+          await tx.ledgerEvent.upsert({
+            where: {
+              updateId_eventIndex: { updateId, eventIndex: row.eventIndex },
+            },
+            create: {
+              updateId,
+              eventIndex: row.eventIndex,
+              offset,
+              recordTime: parseEffectiveAt(ev.recordTime),
+              eventType: row.kind,
+              templateId: row.templateId,
+              choice: null,
+              contractId: row.contractId,
+              witnessParties: row.witnessParties,
+              payload: row.payload as unknown as Prisma.InputJsonValue,
+            },
+            update: {
+              eventType: row.kind,
+              templateId: row.templateId,
+              contractId: row.contractId,
+              witnessParties: row.witnessParties,
+              payload: row.payload as unknown as Prisma.InputJsonValue,
+              offset: offset ?? undefined,
+            },
+          });
+        }
+      });
+    } catch (err) {
+      this.logger.warn(
+        `LedgerRawIngest: reassignment ingest failed updateId=${updateId.slice(0, 16)}... events=${ev.events.length}: ${String(err)}`,
       );
     }
   }
@@ -130,6 +232,7 @@ export class LedgerRawIngestService {
     choice: string | null;
     contractId: string | null;
     witnessParties: string[];
+    offset: bigint | null;
     payload: Prisma.InputJsonValue;
   }> {
     return buildEventRows(ev);
@@ -143,6 +246,31 @@ function parseEffectiveAt(value: string | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * Offset ledger untuk raw layer — BigInt hanya bila wire benar-benar
+ * membawanya. `offsetKnown` false/undefined (offset fallback in-memory) atau
+ * nilai non-finite → null. JANGAN pakai fallback: offset adalah posisi ledger,
+ * bukan tebakan. LedgerUpdate/LedgerEvent memakai nilai yang sama sehingga
+ * urutan antar-tabel konsisten. Diexport untuk unit test.
+ */
+export function resolveRawOffset(ev: CantonUpdateEvent): bigint | null {
+  if (!ev.offsetKnown) return null;
+  const n = Number(ev.offset);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return BigInt(Math.trunc(n));
+}
+
+/** Offset untuk update Reassignment — kontrak sama: wire-known → BigInt,
+ *  fallback → null. Diexport untuk unit test. */
+export function resolveReassignmentOffset(
+  ev: CantonReassignment,
+): bigint | null {
+  if (!ev.offsetKnown) return null;
+  const n = Number(ev.offset);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return BigInt(Math.trunc(n));
+}
+
 interface BuiltRow {
   eventIndex: number;
   eventType: string;
@@ -150,6 +278,7 @@ interface BuiltRow {
   choice: string | null;
   contractId: string | null;
   witnessParties: string[];
+  offset: bigint | null;
   payload: Prisma.InputJsonValue;
 }
 
@@ -160,6 +289,7 @@ interface BuiltRow {
  * JANGAN digabung ke created.
  */
 function buildEventRows(ev: CantonUpdateEvent): BuiltRow[] {
+  const offset = resolveRawOffset(ev);
   const rows: BuiltRow[] = [];
   let idx = 0;
   for (const c of ev.created) {
@@ -170,6 +300,7 @@ function buildEventRows(ev: CantonUpdateEvent): BuiltRow[] {
       choice: null,
       contractId: c.contractId ?? null,
       witnessParties: c.witnessParties ?? [],
+      offset,
       payload: { ...c } as unknown as Prisma.InputJsonValue,
     });
   }
@@ -181,6 +312,7 @@ function buildEventRows(ev: CantonUpdateEvent): BuiltRow[] {
       choice: null,
       contractId: a.contractId ?? null,
       witnessParties: a.witnessParties ?? [],
+      offset,
       payload: { ...a } as unknown as Prisma.InputJsonValue,
     });
   }
@@ -192,6 +324,7 @@ function buildEventRows(ev: CantonUpdateEvent): BuiltRow[] {
       choice: e.choice ?? null,
       contractId: e.contractId ?? null,
       witnessParties: e.witnessParties ?? [],
+      offset,
       payload: { ...e } as unknown as Prisma.InputJsonValue,
     });
   }

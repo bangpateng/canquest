@@ -117,6 +117,27 @@ describe('ledger activity projection (satu sumber)', () => {
     ).toBeNull();
   });
 
+  it('reassignment (assigned/unassigned) TIDAK tampil di feed personal', () => {
+    // Kontrak pindah synchronizer sudah ada sebelum reassignment; tampil di
+    // feed = baris duplikat palsu. Raw tetap tersimpan untuk audit.
+    for (const eventType of ['assigned', 'unassigned']) {
+      expect(
+        svc().projectRow(
+          row({
+            eventType,
+            templateId: 'hash:Splice.Amulet:Amulet',
+            payload: {
+              contractId: 'cid-holding',
+              createArgument: { owner: USER, amount: { initialAmount: '5' } },
+              witnessParties: [USER],
+            },
+          }),
+          USER,
+        ),
+      ).toBeNull();
+    }
+  });
+
   it('exercised orang lain tapi user witness → tampil sebagai kejadian', () => {
     const item = svc().projectRow(
       row({

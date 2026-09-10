@@ -239,8 +239,17 @@ interface ExercisedEventShape {
 /** Event dispatch: satu unit kerja untuk handler konsumen. */
 export interface CantonUpdateEvent {
   /** Ledger offset (number) — untuk checkpoint & resume.
-   *  Tipe number: AsyncAPI spec /v2/updates menolak string beginExclusive. */
+   *  Tipe number: AsyncAPI spec /v2/updates menolak string beginExclusive.
+   *
+   *  Bila `offsetKnown` false, nilai ini adalah FALLBACK (lastOffset
+   *  in-memory), BUKAN offset wire. Handler yang mempersist offset ke DB
+   *  (raw ingest) WAJIB cek `offsetKnown` — menulis fallback sebagai offset
+   *  ledger = memalsukan posisi. */
   offset: number;
+  /** True bila `offset` berasal dari wire (resolveUpdateOffset finite).
+   *  False/undefined → `offset` fallback; JANGAN dipersist sebagai offset
+   *  ledger (kolom DB nullable). */
+  offsetKnown?: boolean;
   updateId?: string;
   commandId?: string;
   /** Ledger effective time (Transaction.value.effectiveAt) — jam ledger, BUKAN
@@ -255,6 +264,147 @@ export interface CantonUpdateEvent {
   archived: ArchivedEventShape[];
   /** ExercisedEvent (choice exercises) — WAVE 6: untuk deteksi TransferInstruction_Accept dll. */
   exercised: ExercisedEventShape[];
+}
+
+/** Satu event reassignment (assigned | unassigned) — bentuk wire, subset. */
+export interface CantonReassignmentEvent {
+  eventIndex: number;
+  kind: 'assigned' | 'unassigned';
+  contractId: string | null;
+  templateId: string | null;
+  witnessParties: string[];
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Update Reassignment dari /v2/updates — kontrak berpindah synchronizer.
+ *
+ * SENGAJA dipisah dari CantonUpdateEvent: sisi `assigned` membawa
+ * CreatedEvent lengkap, tapi kontrak itu SUDAH ada (bukan create baru).
+ * Kalau di-dispatch ke BalanceEventHandler, saldo user ter-double-count.
+ * Karena itu reassignment dirawat sebagai RAW AUDIT saja (offset + envelope),
+ * tanpa proyeksi semantik — dan tanpa menyentuh leg swap.
+ */
+export interface CantonReassignment {
+  updateId: string;
+  offset: number;
+  /** True bila offset dibawa wire (bukan fallback) — kontrak sama dgn
+   *  CantonUpdateEvent.offsetKnown. */
+  offsetKnown: boolean;
+  recordTime?: string;
+  synchronizerId?: string;
+  commandId?: string;
+  workflowId?: string;
+  parties: string[];
+  events: CantonReassignmentEvent[];
+}
+
+/**
+ * Parse frame Reassignment dari /v2/updates. Murni (tanpa state/DB).
+ * Bentuk wire (terverifikasi dari OpenAPI JsReassignment + codec JsSchema):
+ *   { update: { Reassignment: { value: {
+ *       updateId, offset, recordTime, synchronizerId, commandId?, workflowId?,
+ *       events: [ { JsAssignmentEvent: {...} }
+ *               | { JsUnassignedEvent: { value: {...} } } ] } } } }
+ *
+ * Assigned: contractId/templateId/witnessParties ada di dalam
+ * `createdEvent` (payload create lengkap). Unassigned: field itu langsung di
+ * event (tanpa createArgument — payload tidak dikirim ulang saat unassign).
+ *
+ * Return null bila bukan reassignment / tanpa event yang dikenali.
+ */
+export function parseReassignment(
+  raw: Record<string, unknown>,
+): CantonReassignment | null {
+  const wrapper = raw?.update as Record<string, unknown> | undefined;
+  const value = (
+    wrapper?.Reassignment as { value?: Record<string, unknown> } | undefined
+  )?.value;
+  if (!value || typeof value !== 'object') return null;
+
+  const rawEvents = Array.isArray((value as { events?: unknown }).events)
+    ? ((value as { events: unknown[] }).events ?? [])
+    : [];
+
+  const parties = new Set<string>();
+  const events: CantonReassignmentEvent[] = [];
+  let idx = 0;
+  for (const e of rawEvents) {
+    const node = (e ?? {}) as Record<string, unknown>;
+    const assigned = node.JsAssignmentEvent as
+      | Record<string, unknown>
+      | undefined;
+    const unassigned = (
+      node.JsUnassignedEvent as { value?: Record<string, unknown> } | undefined
+    )?.value;
+
+    let kind: 'assigned' | 'unassigned';
+    let body: Record<string, unknown>;
+    if (assigned && typeof assigned === 'object') {
+      kind = 'assigned';
+      body = assigned;
+    } else if (unassigned && typeof unassigned === 'object') {
+      kind = 'unassigned';
+      body = unassigned;
+    } else {
+      continue;
+    }
+
+    // Assigned → identitas + witness ada di dalam createdEvent.
+    const created =
+      kind === 'assigned'
+        ? (body.createdEvent as Record<string, unknown> | undefined)
+        : undefined;
+    const contractId = strOrNull(created?.contractId ?? body.contractId);
+    const templateId = strOrNull(created?.templateId ?? body.templateId);
+    const witnessParties = strArray(
+      created?.witnessParties ?? body.witnessParties,
+    );
+    for (const p of witnessParties) parties.add(p);
+
+    events.push({
+      eventIndex: idx++,
+      kind,
+      contractId,
+      templateId,
+      witnessParties,
+      payload: { ...body },
+    });
+  }
+
+  if (events.length === 0) return null;
+
+  const offRaw = (value as { offset?: unknown }).offset;
+  const off = Number(
+    typeof offRaw === 'object' && offRaw !== null
+      ? (offRaw as { absolute?: unknown }).absolute
+      : offRaw,
+  );
+  const offsetKnown = Number.isFinite(off) && off >= 0;
+
+  return {
+    updateId: typeof (value as { updateId?: unknown }).updateId === 'string'
+      ? ((value as { updateId: string }).updateId)
+      : '',
+    offset: offsetKnown ? off : 0,
+    offsetKnown,
+    recordTime: strOrUndef((value as { recordTime?: unknown }).recordTime),
+    synchronizerId: strOrUndef((value as { synchronizerId?: unknown }).synchronizerId),
+    commandId: strOrUndef((value as { commandId?: unknown }).commandId),
+    workflowId: strOrUndef((value as { workflowId?: unknown }).workflowId),
+    parties: [...parties],
+    events,
+  };
+}
+
+function strOrNull(v: unknown): string | null {
+  return typeof v === 'string' && v ? v : null;
+}
+function strOrUndef(v: unknown): string | undefined {
+  return typeof v === 'string' ? v : undefined;
+}
+function strArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 }
 
 const RECONNECT_BASE_DELAY_MS = 1_000;
@@ -962,6 +1112,22 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     // events berisi { ExercisedEvent: {...} } → parser lama tidak extract apa2.
     const update = this.unwrapUpdateEnvelope(raw as Record<string, unknown>);
     if (!update) {
+      // Reassignment (varian `update` ke-4: Transaction | Reassignment |
+      // OffsetCheckpoint | TopologyTransaction). SENGAJA tidak di-dispatch ke
+      // handler balance/leg: sisi `assigned` membawa CreatedEvent lengkap,
+      // tapi kontrak itu SUDAH ada sebelum pindah synchronizer — memproyeksi
+      // ulang = double-count saldo. Yang dibutuhkan di sini: simpan raw
+      // (audit) + MAJUKAN offset supaya update ini tidak di-replay terus
+      // setelah restart. Return awal agar tidak jatuh ke jalur OffsetCheckpoint.
+      const reassignment = parseReassignment(raw as Record<string, unknown>);
+      if (reassignment) {
+        void this.rawIngest.ingestReassignment(reassignment);
+        this.advanceOffset(
+          reassignment.offsetKnown ? reassignment.offset : null,
+        );
+        return;
+      }
+
       // OffsetCheckpoint heartbeat — L2b: majukan HEAD untuk pengukuran lag
       // (head − last). TIDAK pernah menyentuh lastOffset/resume (lihat catatan
       // skip-window di unwrapUpdateEnvelope).
@@ -1091,6 +1257,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
     this.updates$.next({
       offset: hasOffset ? offsetNum : (this.lastOffset ?? 0),
+      // Raw ingest memakai penanda ini: offset fallback TIDAK boleh ditulis
+      // sebagai offset ledger (kolom nullable — null lebih jujur).
+      offsetKnown: hasOffset,
       updateId: update.updateId,
       commandId: update.commandId,
       effectiveAt: update.effectiveAt,

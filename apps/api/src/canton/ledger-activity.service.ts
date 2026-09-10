@@ -15,6 +15,11 @@ import { PrismaService } from '../prisma/prisma.service';
  *
  * Setiap baris membawa updateId asli → link explorer SELALU valid.
  * Tanpa matcher, tanpa synthetic, tanpa controller rows.
+ *
+ * URUTAN: kronologis ledger (offset ASC dari ledger, disajikan desc) — offset
+ * ledger monotonic per participant. Bukan hash updateId (bukan waktu). Baris
+ * tanpa offset (raw pra-perbaikan) diletakkan paling akhir. Waktu tampil =
+ * LedgerUpdate.effectiveAt (jam ledger), bukan createdAt app.
  */
 export interface LedgerActivityItem {
   id: string;
@@ -29,7 +34,28 @@ export interface LedgerActivityItem {
   instrumentId: string | null;
   amount: string | null;
   label: string;
+  /** Jam ledger (LedgerUpdate.effectiveAt) — waktu transaksi sebenarnya.
+   *  Diambil dari update terkait saat getFeed; null bila update belum ada. */
+  ledgerTime?: string | null;
 }
+
+/** Hasil halaman feed.
+ *  - `total` = jumlah baris lolos-proyeksi yang BERHASIL dipindai. `null`
+ *    berarti pemindaian menyentuh `CANDIDATE_CAP` (lebih banyak di luar
+ *    jendela; nilai eksak butuh scan penuh). Stabil antar halaman.
+ *  - `hasMore` = masih ada baris setelah halaman ini (eksak). */
+export interface LedgerActivityPage {
+  items: LedgerActivityItem[];
+  total: number | null;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+/** Batas baris raw yang dipindai per request (pagination tanpa scan penuh). */
+const CANDIDATE_CAP = 1000;
+/** Faktor over-fetch batch: banyak witness tidak lolos filter peran (owner/actor). */
+const CANDIDATE_OVERFETCH = 5;
 
 @Injectable()
 export class LedgerActivityService {
@@ -39,35 +65,99 @@ export class LedgerActivityService {
     userId: string,
     page = 1,
     pageSize = 20,
-  ): Promise<{ items: LedgerActivityItem[]; total: number }> {
+  ): Promise<LedgerActivityPage> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { cantonPartyId: true },
     });
     const party = user?.cantonPartyId ?? null;
-    if (!party) return { items: [], total: 0 };
-
     const take = Math.min(200, Math.max(1, pageSize));
-    const skip = (Math.max(1, page) - 1) * take;
+    const p = Math.max(1, page);
+    const skip = (p - 1) * take;
+    if (!party) {
+      return { items: [], total: 0, page: p, pageSize: take, hasMore: false };
+    }
 
     // Kandidat: event di mana party user terlibat (witness array mengandung).
-    // Filter peran (owner/actor) dilakukan di proyeksi di bawah — witness
-    // saja tidak cukup (DSO ikut witness di mana-mana).
-    const rows = await this.prisma.ledgerEvent.findMany({
-      where: { witnessParties: { has: party } },
-      orderBy: [{ updateId: 'desc' }, { eventIndex: 'desc' }],
-      take: take * 5, // over-fetch: banyak witness tidak lolos filter peran
-      skip: 0,
-    });
+    // Filter peran (owner/actor) dilakukan di proyeksi — witness saja tidak
+    // cukup (DSO ikut witness di mana-mana).
+    //
+    // URUTAN: kronologis LEDGER, bukan hash updateId. Offset ledger monotonic
+    // per participant (docs Canton) → urutan sebenarnya. Baris lama yang
+    // belum ber-offset (raw ingest pra-perbaikan) diletakkan paling akhir
+    // (nulls last) supaya tidak mengacak baris baru. Tie-break updateId
+    // (hash) + eventIndex untuk offset yang sama — satu update = satu offset.
+    //
+    // PAGINATION: pindai raw dalam batch ber-over-fetch sampai `skip+take`
+    // baris lolos-proyeksi terkumpul (atau baris habis / cap tercapai). Jadi
+    // page > 1 benar (dulu selalu skip:0 → halaman lanjut salah/kosong) dan
+    // `total` stabil antar halaman (dihitung dari pemindaian yang sama).
+    const batchSize = Math.min(
+      500,
+      Math.max(50, take * CANDIDATE_OVERFETCH),
+    );
+    const need = skip + take;
+    const projected: LedgerActivityItem[] = [];
+    let rawSkip = 0;
+    let scanned = 0;
+    let exhausted = false;
 
-    const items: LedgerActivityItem[] = [];
-    for (const r of rows) {
-      const item = this.projectRow(r, party);
-      if (item) items.push(item);
-      if (items.length >= skip + take) break;
+    while (projected.length < need && scanned < CANDIDATE_CAP) {
+      const batch = Math.min(batchSize, CANDIDATE_CAP - scanned);
+      const rows = await this.prisma.ledgerEvent.findMany({
+        where: { witnessParties: { has: party } },
+        orderBy: [
+          { offset: { sort: 'desc', nulls: 'last' } },
+          { updateId: 'desc' },
+          { eventIndex: 'desc' },
+        ],
+        skip: rawSkip,
+        take: batch,
+      });
+      if (rows.length === 0) {
+        exhausted = true;
+        break;
+      }
+      for (const r of rows) {
+        const item = this.projectRow(r, party);
+        if (item) projected.push(item);
+      }
+      scanned += rows.length;
+      rawSkip += rows.length;
+      if (rows.length < batch) {
+        exhausted = true;
+        break;
+      }
     }
-    const page_items = items.slice(skip, skip + take);
-    return { items: page_items, total: -1 }; // total eksak butuh scan penuh
+
+    const pageItems = projected.slice(skip, skip + take);
+    // hasMore: masih ada baris lolos-proyeksi setelah halaman ini, ATAU
+    // pemindaian terhenti karena cap (kemungkinan masih ada lanjutan).
+    const hasMore =
+      projected.length > skip + take ||
+      (!exhausted && scanned >= CANDIDATE_CAP);
+
+    // Waktu ledger per baris (batch 1 query untuk halaman ini saja).
+    if (pageItems.length > 0) {
+      const updateIds = [...new Set(pageItems.map((i) => i.updateId))];
+      const updates = await this.prisma.ledgerUpdate.findMany({
+        where: { updateId: { in: updateIds } },
+        select: { updateId: true, effectiveAt: true },
+      });
+      const timeById = new Map(updates.map((u) => [u.updateId, u.effectiveAt]));
+      for (const item of pageItems) {
+        item.ledgerTime = timeById.get(item.updateId)?.toISOString() ?? null;
+      }
+    }
+
+    return {
+      items: pageItems,
+      // Eksak bila pemindaian tuntas sebelum cap; null = lower bound.
+      total: exhausted ? projected.length : null,
+      page: p,
+      pageSize: take,
+      hasMore,
+    };
   }
 
   /**
