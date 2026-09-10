@@ -40,6 +40,7 @@ import type { ExecuteSwapParams, SwapExecResult } from './oneswap.types';
 import { OpenSwapExistsError } from '@oneswap/sdk';
 import type { Token } from '@oneswap/sdk';
 import { SigningRelayService } from '../canton/signing-relay.service';
+import { Decimal } from '@prisma/client/runtime/library';
 
 /** CC instrument id (Amulet) — symbol 'CC' memetakan ke instrument id 'Amulet'. */
 const CC_SYMBOL = 'CC';
@@ -741,16 +742,76 @@ export class SwapService {
           outputAmount: String(done.amountOut ?? 0),
         };
       }
-      case 'refunded':
+      case 'refunded': {
         this.logger.warn(
           `OneSwap ${done.id} refunded — input returned to user ${userId}`,
         );
+        // Gate dana: input kembali ke deposan (SDK: "the input was returned
+        // to the depositing party"). Baris RECEIVED-nya SUDAH ditulis WSS
+        // handler dari event ledger (fakta dana masuk). Di sini hanya tempel
+        // label refund ke baris itu — tiga syarat kumulatif, semuanya fakta:
+        //   1. terminal resmi `refunded` (done.status ini),
+        //   2. jumlah == amountIn (params.amount),
+        //   3. pengirim == escrow swap ini (getSwap depositParty).
+        // Tanpa ketiganya → baris tetap RECEIVED (jujur).
+        try {
+          const live = await this.oneswap.getSwap(done.id).catch(() => null);
+          const escrow =
+            live?.depositParty && live.depositParty.includes('::')
+              ? live.depositParty
+              : null;
+          if (escrow) {
+            const isTokenRefund = params.from.toUpperCase() !== CC_SYMBOL;
+            if (isTokenRefund) {
+              const tok = await this.resolveToken(params.from).catch(
+                () => null,
+              );
+              await this.prisma.tokenTransaction.updateMany({
+                where: {
+                  userId,
+                  status: 'COMPLETED',
+                  instrumentId: {
+                    equals: tok?.id ?? params.from,
+                    mode: 'insensitive',
+                  },
+                  amount: new Decimal(params.amount),
+                  referenceId: escrow,
+                  createdAt: {
+                    gte: new Date(Date.now() - 60 * 60_000),
+                  },
+                },
+                data: {
+                  description: `Swap refunded ${params.amount} ${params.from} (OneSwap)`,
+                },
+              });
+            } else {
+              const micro = BigInt(Math.round(params.amount * 1_000_000));
+              await this.prisma.ccTransaction.updateMany({
+                where: {
+                  userId,
+                  status: 'COMPLETED',
+                  amountMicroCc: micro,
+                  referenceId: escrow,
+                  createdAt: {
+                    gte: new Date(Date.now() - 60 * 60_000),
+                  },
+                },
+                data: {
+                  description: `Swap refunded ${params.amount} CC (OneSwap)`,
+                },
+              });
+            }
+          }
+        } catch (e) {
+          this.logger.warn(`swap refund label failed: ${String(e)}`);
+        }
         return {
           success: false,
           direction: '',
           message:
             'Swap refunded — the amount was outside tolerance or below minimum output. Input returned to you.',
         };
+      }
       case 'expired':
         return {
           success: false,

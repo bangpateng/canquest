@@ -102,8 +102,17 @@ export class LedgerActivityService {
           : typeof args.receiver === 'string'
             ? args.receiver
             : null;
-      if (owner !== party) return null;
+      // Semua created yang melibatkan user tampil — disebut persis jenisnya:
+      // Holding/Amulet milik user = kredit; kontrak offer/sistem yang
+      // menyebut user (receiver/witness dengan peran) = kejadian offer.
+      // Tanpa tebakan bisnis: label = jenis kontrak + fakta.
+      const involvesUser =
+        owner === party || (r.witnessParties ?? []).includes(party);
+      if (!involvesUser) return null;
       const { instrumentId, amount } = extractHoldingFacts(args, p, tpl);
+      const isHolding =
+        tpl.includes(':Splice.Amulet:Amulet') ||
+        tpl.includes('Holding:Holding');
       return {
         id: `${r.updateId}:${r.eventIndex}`,
         updateId: r.updateId,
@@ -111,12 +120,12 @@ export class LedgerActivityService {
         template: moduleTpl || shortTpl,
         choice: null,
         contractId: r.contractId,
-        direction: 'in',
+        direction: owner === party && isHolding ? 'in' : null,
         party,
-        counterparty: extractSender(p, party),
+        counterparty: owner !== party ? owner : extractSender(p, party),
         instrumentId,
         amount,
-        label: labelForHolding(moduleTpl, instrumentId, amount),
+        label: labelForHolding(moduleTpl, instrumentId, amount, owner === party),
       };
     }
 
@@ -124,7 +133,12 @@ export class LedgerActivityService {
       const actors = Array.isArray(p.actingParties)
         ? (p.actingParties as string[])
         : [];
-      if (!actors.includes(party)) return null;
+      const witnesses = r.witnessParties ?? [];
+      // Semua exercise yang melibatkan user tampil, disebut persis choice-nya.
+      // Archive = consume internal (efeknya tercermin di created) → skip.
+      // Bukan cuma actor: counterparty yang disebut di choiceArgument juga
+      // ditampilkan (mis. sender/receiver transfer).
+      if (!actors.includes(party) && !witnesses.includes(party)) return null;
       if (r.choice === 'Archive') return null; // consume internal, bukan aksi
       return {
         id: `${r.updateId}:${r.eventIndex}`,
@@ -133,9 +147,9 @@ export class LedgerActivityService {
         template: moduleTpl || shortTpl,
         choice: r.choice,
         contractId: r.contractId,
-        direction: 'action',
+        direction: actors.includes(party) ? 'action' : null,
         party,
-        counterparty: null,
+        counterparty: extractTransferCounterparty(p, party),
         instrumentId: null,
         amount: extractTransferAmount(p),
         label: labelForChoice(r.choice, moduleTpl),
@@ -201,6 +215,21 @@ function extractSender(
   return typeof s === 'string' && s !== self ? s : null;
 }
 
+/** Counterparty transfer dari choiceArgument (sender atau receiver, selain diri). */
+function extractTransferCounterparty(
+  p: Record<string, unknown>,
+  self: string,
+): string | null {
+  const ca = p.choiceArgument as Record<string, unknown> | undefined;
+  const t = ca?.transfer as Record<string, unknown> | undefined;
+  if (!t || typeof t !== 'object') return null;
+  for (const k of ['sender', 'receiver']) {
+    const v = t[k];
+    if (typeof v === 'string' && v !== self) return v;
+  }
+  return null;
+}
+
 /** Amount dari choiceArgument transfer (bila ada). */
 function extractTransferAmount(p: Record<string, unknown>): string | null {
   const ca = p.choiceArgument as Record<string, unknown> | undefined;
@@ -212,9 +241,11 @@ function labelForHolding(
   moduleTpl: string,
   instrumentId: string | null,
   amount: string | null,
+  isOwner: boolean,
 ): string {
   const unit = instrumentId ?? 'token';
   const amt = amount ?? '?';
+  if (!isOwner) return `${moduleTpl} ${amt} ${unit}`.trim();
   if (moduleTpl.includes('TransferOffer') || moduleTpl.includes('TransferInstruction')) {
     return `Offer ${amt} ${unit}`;
   }

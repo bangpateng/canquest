@@ -470,15 +470,17 @@ export class BalanceEventHandlerService
       // KLASIFIKASI SWAP CC (R2, forensik 2026-09-09): kaki pulang swap
       // (delivery CC dari escrow) lahir sebagai SWAP_IN hanya bila matcher
       // kuat membuktikan (jumlah buyAmount + korelasi escrow). Miss → TRANSFER.
-      // TIDAK ADA refund-matcher: label "deposit returned" dari swap PENDING
-      // adalah tebakan (kasus nyata: deposit sendiri dilabel refund). History
-      // butuh updateId + bukti — tanpa bukti, tulis RECEIVED biasa.
       const swapMatch = await this.findMatchingSwapLegCc(
         user.userId,
         totalAmount,
         senderPartyId,
       );
       const isSwapIn = swapMatch !== null;
+      // REFUND = gate dana, bukan tebakan bisnis. Ditentukan di
+      // SwapService.finalizeSwapInBackground (terminal resmi OneSwap
+      // `refunded` + jumlah + pengirim escrow) yang menempel label ke baris
+      // RECEIVED yang sudah ada. Handler WSS di sini TIDAK menilai refund:
+      // dana masuk = RECEIVED, titik.
       // L60-C: change output sendiri — sender lookup miss (diri sendiri
       // di-exclude) DAN update yang sama memuat exercise transfer yang
       // di-actor-kan party receiver sendiri. Label jujur, tipe + identitas

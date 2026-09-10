@@ -70,19 +70,19 @@ describe('ledger activity projection (satu sumber)', () => {
     });
   });
 
-  it('created milik orang lain (sekadar witness) → null', () => {
-    expect(
-      svc().projectRow(
-        row({
-          templateId: 'hash:Splice.Amulet:Amulet',
-          payload: {
-            createArgument: { owner: ESCROW, amount: { initialAmount: '5' } },
-            witnessParties: [USER, ESCROW],
-          },
-        }),
-        USER,
-      ),
-    ).toBeNull();
+  it('created milik orang lain tapi user witness → tampil sebagai kejadian', () => {
+    const item = svc().projectRow(
+      row({
+        templateId: 'hash:Splice.Amulet:Amulet',
+        payload: {
+          createArgument: { owner: ESCROW, amount: { initialAmount: '5' } },
+          witnessParties: [USER, ESCROW],
+        },
+      }),
+      USER,
+    );
+    expect(item).not.toBeNull();
+    expect(item).toMatchObject({ direction: null, counterparty: ESCROW });
   });
 
   it('exercised Accept oleh user → baris action + link', () => {
@@ -117,17 +117,21 @@ describe('ledger activity projection (satu sumber)', () => {
     ).toBeNull();
   });
 
-  it('exercised orang lain → null', () => {
-    expect(
-      svc().projectRow(
-        row({
-          eventType: 'exercised',
-          templateId: 'pkg:X:Y',
-          choice: 'TransferFactory_Transfer',
-          payload: { actingParties: [ESCROW], witnessParties: [USER, ESCROW] },
-        }),
-        USER,
-      ),
-    ).toBeNull();
+  it('exercised orang lain tapi user witness → tampil sebagai kejadian', () => {
+    const item = svc().projectRow(
+      row({
+        eventType: 'exercised',
+        templateId: 'pkg:X:Y',
+        choice: 'TransferFactory_Transfer',
+        payload: {
+          actingParties: [ESCROW],
+          witnessParties: [USER, ESCROW],
+          choiceArgument: { transfer: { sender: ESCROW, receiver: USER } },
+        },
+      }),
+      USER,
+    );
+    expect(item).not.toBeNull();
+    expect(item).toMatchObject({ direction: null, counterparty: ESCROW });
   });
 });
