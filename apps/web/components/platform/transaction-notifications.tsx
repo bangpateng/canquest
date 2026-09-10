@@ -9,7 +9,6 @@ import {
   Ban,
   Bell,
   Coins,
-  Gift,
   Lock,
   LockOpen,
   ShieldCheck,
@@ -281,7 +280,7 @@ function NotificationRow({ item }: { item: NotificationItem }) {
           ) : tx.type === "PREAPPROVAL_DISABLED" ? (
             <ShieldOff className="h-4 w-4" aria-hidden />
           ) : (
-            <Gift className="h-4 w-4" aria-hidden />
+            <ArrowDownLeft className="h-4 w-4" aria-hidden />
           )}
         </span>
         <span className="min-w-0 flex-1">
@@ -424,7 +423,7 @@ export function TransactionNotifications() {
       case "SWAP_OUT":
         return <ArrowLeftRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />;
       default:
-        return <Gift className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
+        return <ArrowDownLeft className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
     }
   }
 
@@ -436,6 +435,11 @@ export function TransactionNotifications() {
       return t("transactions.swapOut");
     }
     if (toast.kind === "draw" || toast.kind === "code") {
+      return toast.description;
+    }
+    // Offer masuk: deskripsi sudah lengkap dari dispatcher
+    // ("Check your offer — ..."), tampilkan apa adanya.
+    if (toast.txType === "TOKEN_OFFER_PENDING") {
       return toast.description;
     }
     const amount = toast.amountCc.toLocaleString(undefined, {

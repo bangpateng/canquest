@@ -25,7 +25,9 @@ export type NotificationTx = {
     | "TOKEN_TRANSFER_IN"
     | "TOKEN_TRANSFER_OUT"
     | "TOKEN_OFFER_REJECTED"
-    | "TOKEN_OFFER_WITHDRAWN";
+    | "TOKEN_OFFER_WITHDRAWN"
+    // Offer masuk (toast "check your offer" — ikon panah, bukan kado).
+    | "TOKEN_OFFER_PENDING";
   description: string;
   amountMicroCc: string;
   referenceId: string | null;
@@ -213,6 +215,33 @@ export function useTransactionNotifications(
     };
     window.addEventListener("cq:swap-toast", onSwapToast);
     return () => window.removeEventListener("cq:swap-toast", onSwapToast);
+  }, []);
+
+  // Offer masuk → toast panah (bukan kado): "check your offer, X perlu
+  // di-accept". Event di-dispatch use-realtime setelah list offers refetch
+  // sehingga amount/instrument tersedia. Murni UI — arsitek tak berubah.
+  useEffect(() => {
+    const onOfferToast = (e: Event) => {
+      const detail = (e as CustomEvent<{ amount?: string; instrumentId?: string }>).detail;
+      const amount = (detail?.amount ?? "").trim();
+      const unit = (detail?.instrumentId ?? "CC").trim() || "CC";
+      setToasts((prev) =>
+        [
+          {
+            id: `offer-${Date.now()}`,
+            kind: "transaction" as const,
+            txType: "TOKEN_OFFER_PENDING" as const,
+            amountCc: 0,
+            description: amount
+              ? `Check your offer — there's ${amount} ${unit} need to accept`
+              : "Check your offer — there's something need to accept",
+          },
+          ...prev,
+        ].slice(0, 3),
+      );
+    };
+    window.addEventListener("cq:offer-toast", onOfferToast);
+    return () => window.removeEventListener("cq:offer-toast", onOfferToast);
   }, []);
 
   const markSeen = useCallback(async () => {

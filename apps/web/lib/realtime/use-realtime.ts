@@ -151,7 +151,9 @@ export function useRealtime(): void {
       // Offer baru masuk (incoming) atau status offer berubah (external
       // accept/reject). Invalidate kedua list offers supaya UI segar tanpa
       // polling. Emitted by CantonUpdatesService saat CreatedEvent ledger
-      // (stream Canton /v2/updates via WebSocket).
+      // (stream Canton /v2/updates via WebSocket). Sekaligus dispatch toast
+      // "check your offer" (ikon panah, bukan kado): ambil offer terbaru
+      // dari list yang baru di-refetch supaya toast bawa amount.
       es.addEventListener("offer:new", () => {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.party.offers,
@@ -159,6 +161,38 @@ export function useRealtime(): void {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.party.sentOffers,
         });
+        void (async () => {
+          try {
+            await queryClient.refetchQueries({
+              queryKey: queryKeys.party.offers,
+            });
+            const latest = queryClient.getQueryData<{
+              items?: Array<{
+                amount?: string;
+                amountCc?: number;
+                instrumentId?: string;
+              }>;
+            }>(queryKeys.party.offers);
+            const first = latest?.items?.[0];
+            if (!first) return;
+            const amount =
+              first.amount && first.amount !== "0"
+                ? first.amount
+                : typeof first.amountCc === "number" && first.amountCc > 0
+                  ? String(first.amountCc)
+                  : "";
+            window.dispatchEvent(
+              new CustomEvent("cq:offer-toast", {
+                detail: {
+                  amount,
+                  instrumentId: first.instrumentId ?? "CC",
+                },
+              }),
+            );
+          } catch {
+            /* non-fatal: toast offer dilewati, list tetap segar */
+          }
+        })();
       });
 
       es.addEventListener("quest:progress", () => {
