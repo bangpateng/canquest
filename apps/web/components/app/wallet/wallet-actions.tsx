@@ -476,7 +476,7 @@ export function WalletActions({
         <button
           type="button"
           onClick={() => setSheet("offers")}
-          title={`Incoming offers${offersCount > 0 ? `, ${offersCount} aria-label={`Incoming offers${offersCount > 0 ? `, ${offersCount} pending` : ""}`}
+          aria-label={`Incoming offers${offersCount > 0 ? `, ${offersCount} pending` : ""}`}
           className={cn(
             buttonVariants({ variant: "secondary", size: "sm" }),
             "relative w-full justify-center gap-2",
@@ -510,7 +510,7 @@ export function WalletActions({
         <button
           type="button"
           onClick={() => onLockClick?.()}
-          title={lockedCc > 0 ? `Lock — ${lockedCc} aria-label={lockedCc > 0 ? `Lock — ${lockedCc} CC locked` : "Lock"}
+          aria-label={lockedCc > 0 ? `Lock — ${lockedCc} CC locked` : "Lock"}
           className={cn(
             buttonVariants({ variant: "secondary", size: "sm" }),
             "relative w-full justify-center gap-2",

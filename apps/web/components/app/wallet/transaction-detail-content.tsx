@@ -73,7 +73,7 @@ function InlineCopyButton({ value, label = "Copy" }: { value: string; label?: st
       type="button"
       onClick={copy}
       className={iconButtonClass("h-7 w-7 shrink-0 text-[var(--foreground)]")}
-      title={label} aria-label={label}
+      aria-label={label}
     >
       {copied ? (
         <Check className="h-4 w-4 shrink-0 text-green-600" />
@@ -439,7 +439,6 @@ export function TransactionDetailContent({
                       rel="noopener noreferrer"
                       className={iconButtonClass("h-7 w-7 shrink-0 text-canton")}
                       title="View on CantonScan" aria-label="View on CantonScan"
-                      title="View on CantonScan"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </a>

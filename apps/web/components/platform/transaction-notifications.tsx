@@ -489,7 +489,7 @@ export function TransactionNotifications() {
           type="button"
           onClick={() => setOpen((o) => !o)}
           className={cn(iconButtonClass("relative h-9 w-9"))}
-          title={t("notifications.aria")} aria-label={t("notifications.aria")}
+          aria-label={t("notifications.aria")}
           aria-expanded={open}
           aria-haspopup="dialog"
         >
