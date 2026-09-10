@@ -672,76 +672,13 @@ export class SwapService {
 
     switch (done.status) {
       case 'returned': {
-        const swapRow =
-          args.swapTxId != null
-            ? await this.prisma.swapTransaction
-                .findUnique({
-                  where: { id: args.swapTxId },
-                  select: { ccLedgerTxId: true },
-                })
-                .catch(() => null)
-            : null;
-        const depositUpdateId = swapRow?.ccLedgerTxId ?? null;
-        // L60-A2: referenceId WAJIB party escrow (format "…::1220…") — matcher
-        // WSS (findMatchingSwapLeg*) gate `includes('::')`. Hex deposit
-        // updateId TIDAK boleh di referenceId (regresi L60 awal) — ia tetap
-        // di ccLedgerTxId + deskripsi untuk audit.
-        const liveSwap = await this.oneswap.getSwap(done.id).catch(() => null);
-        const escrowParty =
-          liveSwap?.depositParty && liveSwap.depositParty.includes('::')
-            ? liveSwap.depositParty
-            : null;
-        // Kaki JUAL ditulis ke tabel yang sesuai arah (fix swap 07:47:
-        // TOKEN_TO_CC menulis angka USDCx ke tabel CC sebagai "−1.76 CC").
-        // CC_TO_TOKEN → CcTransaction SWAP_OUT (CC). TOKEN_TO_CC →
-        // TokenTransaction SWAP_OUT (USDCx, debit via TOKEN_TX_DEBIT_TYPES).
-        // cantonUpdateId = deposit updateId (ledger asli kaki ini) → baris
-        // SWAP_OUT selalu punya link explorer. Tanpa deposit updateId, link
-        // kosong (jujur) — bukan synthetic tanpa identitas.
-        // Kaki TERIMA TIDAK ditulis di sini: WSS handler mencatatnya dari
-        // event ledger (updateId delivery asli + link). Satu kaki = satu
-        // baris = satu updateId. Notif "uang sampai" datang dari baris WSS
-        // (transaction:new) + swap:completed di bawah — tidak perlu baris
-        // synthetic kedua.
-        const isTokenSell = direction === 'TOKEN_TO_CC';
-        if (isTokenSell) {
-          const sellToken = await this.resolveToken(params.from).catch(
-            () => null,
-          );
-          await this.users.recordTokenTransaction({
-            userId,
-            amount: params.amount,
-            instrumentId: sellToken?.id ?? params.from,
-            instrumentAdmin: sellToken?.admin ?? '',
-            type: 'SWAP_OUT',
-            description:
-              `Swap ${params.amount} ${params.from} → ${done.amountOut} ${params.to} (OneSwap fee incl.)` +
-              (depositUpdateId
-                ? ` [deposit ${depositUpdateId.slice(0, 16)}…]`
-                : ' [deposit updateId not recorded]'),
-            ledgerTxId: `oneswap:${done.id}:in`,
-            referenceId: escrowParty,
-            cantonUpdateId: depositUpdateId ?? undefined,
-            status: 'COMPLETED',
-            silent: true,
-          });
-        } else {
-          await this.users.recordTransaction({
-            userId,
-            amountCc: params.amount,
-            type: 'SWAP_OUT',
-            description:
-              `Swap ${params.amount} ${params.from} → ${done.amountOut} ${params.to} (OneSwap fee incl.)` +
-              (depositUpdateId
-                ? ` [deposit ${depositUpdateId.slice(0, 16)}…]`
-                : ' [deposit updateId not recorded]'),
-            ledgerTxId: `oneswap:${done.id}:in`,
-            referenceId: escrowParty,
-            cantonUpdateId: depositUpdateId ?? undefined,
-            status: 'COMPLETED',
-            silent: true,
-          });
-        }
+        // Kaki JUAL TIDAK lagi ditulis di sini. Sumber history swap on-chain =
+        // event WSS: BalanceEventHandler.writeSwapOutLegs() menulis SWAP_OUT
+        // dari `choiceArgument.transfer` pada update deposit (sender/receiver/
+        // amount + penanda swap persis seperti di ledger), dengan cantonUpdateId
+        // = updateId asli. Dulu controller menulis baris sintetis
+        // `oneswap:<id>:in` di sini — itu membuat satu swap punya >2 baris dan
+        // identitasnya bukan ledger. Satu swap = dua kaki, WSS yang menulis.
         void this.inboundSync.alignBalanceFromChain(userId, args.user.username);
         void this.realtime.push(userId, 'swap:completed', {
           direction,

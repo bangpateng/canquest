@@ -54,6 +54,7 @@ import {
   readLedgerIntent,
   hasSwapMarker,
   transientContractIds,
+  readSwapOutLeg,
   type LedgerEventIntent,
 } from './ledger-event-intent';
 
@@ -178,6 +179,14 @@ export class BalanceEventHandlerService
       // == amountIn + jendela), stamp updateId-nya sebagai deposit leg.
       // Fakta dua sisi ledger yang sama — bukan tebakan.
       await this.stampSwapDepositLeg(ev);
+
+      // ── 0c. Kaki KELUAR swap ditulis WSS (bukan controller) ──────────────
+      // Sumber history swap on-chain = event WSS. Ledger membawa transfer
+      // user → escrow lengkap dengan penanda swap pada reason-nya; dari situ
+      // kaki keluar lahir sebagai SWAP_OUT. Controller TIDAK lagi menulis
+      // baris ini (dihapus dari settleSwapOutcome) supaya satu swap = tepat
+      // dua kaki, sama seperti yang dilihat di explorer Canton.
+      await this.writeSwapOutLegs(ev);
 
       // Intent ledger untuk update ini — dibaca SEKALI dari metadata event
       // (tx-kind/reason/sender). Ini pengganti matcher DB: klasifikasi swap &
@@ -327,6 +336,78 @@ export class BalanceEventHandlerService
       this.logger.warn(
         `BalanceEventHandler: processEvent failed for updateId=${ev.updateId.slice(0, 16)}…: ${String(err)}`,
       );
+    }
+  }
+
+  /**
+   * Tulis KAKI KELUAR swap langsung dari event WSS — pengganti baris sintetis
+   * controller (`oneswap:*:in` yang ditulis settleSwapOutcome).
+   *
+   * Sumber: `choiceArgument.transfer` pada exercised event yang membawa
+   * penanda swap (reason) — sender/receiver/amount persis seperti di ledger.
+   * Identitas baris = updateId ledger asli (`<updateId>:out`), jadi
+   * idempoten via @@unique([userId, ledgerTxId]) dan replay/reconnect aman.
+   *
+   * CC → tabel CcTransaction; token non-CC → TokenTransaction (butuh
+   * instrumentAdmin dari transfer; tanpa itu dilewati dan dicatat — jujur,
+   * bukan ditebak).
+   */
+  private async writeSwapOutLegs(ev: CantonUpdateEvent): Promise<void> {
+    const updateId = ev.updateId;
+    if (!updateId) return;
+    const leg = readSwapOutLeg(ev);
+    if (!leg) return;
+
+    const user = await this.resolveUserByParty(leg.sender);
+    if (!user) return; // pengirim bukan user Canquest (escrow/DSO lain).
+
+    const isCc = (leg.instrument ?? 'CC').toUpperCase() === 'CC';
+    try {
+      if (isCc) {
+        await this.users.recordTransaction({
+          userId: user.userId,
+          amountCc: Number(leg.amount),
+          type: 'SWAP_OUT',
+          description: `Swap sent ${leg.amount} ${leg.instrument ?? 'CC'} (OneSwap${leg.escrowId ? ` ${leg.escrowId}` : ''})`,
+          referenceId: leg.receiver,
+          ledgerTxId: `${ev.updateId}:out`,
+          cantonUpdateId: ev.updateId,
+          status: 'COMPLETED',
+          silent: true,
+        });
+      } else if (leg.instrument && leg.instrumentAdmin) {
+        await this.users.recordTokenTransaction({
+          userId: user.userId,
+          amount: leg.amount,
+          instrumentId: leg.instrument,
+          instrumentAdmin: leg.instrumentAdmin,
+          type: 'SWAP_OUT',
+          description: `Swap sent ${leg.amount} ${leg.instrument} (OneSwap${leg.escrowId ? ` ${leg.escrowId}` : ''})`,
+          referenceId: leg.receiver,
+          ledgerTxId: `${ev.updateId}:out:${leg.instrument.toLowerCase()}`,
+          cantonUpdateId: ev.updateId,
+          status: 'COMPLETED',
+          silent: true,
+        });
+      } else {
+        // Token tanpa instrumentAdmin di wire — jangan ditebak.
+        this.logger.warn(
+          `BalanceEventHandler: swap out leg ${leg.amount} ${leg.instrument ?? '?'} tanpa instrumentAdmin (updateId=${updateId.slice(0, 16)}…) — baris tidak ditulis`,
+        );
+        return;
+      }
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: SWAP_OUT ${leg.amount} ${leg.instrument ?? 'CC'} → @${user.username ?? user.userId.slice(0, 8)} (updateId=${updateId.slice(0, 16)}…)`,
+        );
+      }
+    } catch (err) {
+      const errMsg = String(err);
+      if (!errMsg.includes('P2002') && !errMsg.includes('Unique constraint')) {
+        this.logger.warn(
+          `BalanceEventHandler: swap OUT leg write failed: ${errMsg}`,
+        );
+      }
     }
   }
 

@@ -169,6 +169,78 @@ export function escrowIdFromReasons(reasons: readonly string[]): string | null {
   return null;
 }
 
+/** Kaki keluar swap yang terbaca dari event ledger itu sendiri. */
+export interface SwapOutLeg {
+  /** Party pengirim (pemilik swap). */
+  sender: string;
+  /** Jumlah yang dijual (desimal string, satuan instrumen). */
+  amount: string;
+  /** Party penerima (escrow). */
+  receiver: string | null;
+  /** Instrumen yang dijual: dari marker, fallback ke instrumentId transfer. */
+  instrument: string | null;
+  /** Admin party instrumen (token non-CC); null untuk CC. */
+  instrumentAdmin: string | null;
+  escrowId: string | null;
+}
+
+/**
+ * Baca KAKI KELUAR swap dari exercised event yang membawa `transfer` lengkap
+ * (sender/receiver/amount) + penanda swap pada reason-nya.
+ *
+ * Ini leg OUT persis seperti yang dilihat explorer: transfer user → escrow.
+ * Syarat ketat (semua harus lolos, miss → null):
+ *   1. Ada `choiceArgument.transfer` (bukan sekadar Accept — Accept tidak
+ *      membawa transfer args).
+ *   2. `transfer.sender` terisi.
+ *   3. Reason-nya membawa penanda swap CanQuest.
+ *
+ * Tanpa fallback: tanpa ketiganya, bukan kaki keluar swap.
+ */
+export function readSwapOutLeg(
+  ev: Pick<CantonUpdateEvent, 'exercised'>,
+): SwapOutLeg | null {
+  for (const ex of (ev.exercised ?? []) as ExercisedLike[]) {
+    const ca = ex.choiceArgument as Record<string, unknown> | undefined;
+    const t = ca?.transfer as Record<string, unknown> | undefined;
+    if (!t || typeof t !== 'object') continue;
+
+    const sender = typeof t.sender === 'string' ? t.sender : null;
+    if (!sender) continue;
+
+    const meta =
+      t.meta && typeof t.meta === 'object'
+        ? ((t.meta as { values?: Record<string, unknown> }).values ?? {})
+        : {};
+    const marker = readSwapMarker(
+      typeof meta[LEDGER_META.reason] === 'string'
+        ? (meta[LEDGER_META.reason] as string)
+        : null,
+    );
+    if (!marker.isSwap) continue;
+
+    const amount = typeof t.amount === 'string' ? t.amount : null;
+    if (!amount) continue;
+
+    const receiver = typeof t.receiver === 'string' ? t.receiver : null;
+    const instObj = t.instrumentId as { admin?: unknown; id?: unknown } | null;
+    const instId =
+      instObj && typeof instObj.id === 'string' ? instObj.id : null;
+    const instAdmin =
+      instObj && typeof instObj.admin === 'string' ? instObj.admin : null;
+
+    return {
+      sender,
+      amount,
+      receiver,
+      instrument: marker.sellInstrument ?? instId,
+      instrumentAdmin: instAdmin,
+      escrowId: marker.escrowId,
+    };
+  }
+  return null;
+}
+
 /**
  * tx-kind yang TIDAK memindahkan nilai antar-party secara neto:
  *   - `unlock`      : locked → unlocked (re-materialisasi holding yang sama)

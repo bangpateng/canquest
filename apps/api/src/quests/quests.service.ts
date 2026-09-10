@@ -5636,10 +5636,12 @@ export class QuestsService {
    *   - CC → token: the SWAP_OUT row (deposit, ledger-linked).
    *   - token → CC: the SWAP_IN row (delivery, ledger-linked).
    *
-   * Bukti swap = baris oneswap:* (ditulis settleSwapOutcome HANYA saat
-   * OneSwap terminal `returned` — fakta bisnis) + jumlah dari kolom
-   * amountMicroCc (satuan pasti). Cek ke DB, bukan parsing deskripsi —
-   * deskripsi itu teks bebas ("−1.76 CC" pernah berisi USDCx).
+   * Bukti swap = baris ber-identitas ledger. Sumber penulis history swap
+   * sekarang WSS (BalanceEventHandler): SWAP_OUT membawa cantonUpdateId =
+   * updateId ledger asli. Baris `oneswap:*` lama (pra-migrasi) tetap
+   * diterima supaya swap yang sudah lewat tidak hilang dari hitungan.
+   * Cek ke DB, bukan parsing deskripsi — deskripsi itu teks bebas
+   * ("−1.76 CC" pernah berisi USDCx).
    */
   private async countRecentUserSwaps(
     userId: string,
@@ -5654,7 +5656,16 @@ export class QuestsService {
         createdAt: { gte: since },
         // Kaki jual negatif: pakai OR karena Prisma where tidak punya ABS.
         OR: [{ amountMicroCc: { gte: min } }, { amountMicroCc: { lte: -min } }],
-        ledgerTxId: { startsWith: 'oneswap:' },
+        AND: [
+          {
+            OR: [
+              // Baris baru: ditulis WSS, identitas = updateId ledger asli.
+              { cantonUpdateId: { not: null } },
+              // Baris legacy pra-migrasi (marker sintetis controller).
+              { ledgerTxId: { startsWith: 'oneswap:' } },
+            ],
+          },
+        ],
       },
       select: { id: true },
     });

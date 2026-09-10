@@ -10,6 +10,7 @@ import {
   escrowIdFromReasons,
   isNonValueKind,
   transientContractIds,
+  readSwapOutLeg,
   LEDGER_META,
 } from './ledger-event-intent';
 import type { CantonUpdateEvent } from './canton-updates.service';
@@ -219,5 +220,87 @@ describe('transientContractIds', () => {
     );
     expect(t.has('0047a040df0a17b0')).toBe(true);
     expect(t.has('000a636f44b59eef')).toBe(false);
+  });
+});
+
+describe('readSwapOutLeg (kaki keluar dari event WSS)', () => {
+  // Bentuk wire produksi: update deposit swap CC_TO_TOKEN (122053795599…)
+  function depositUpdate(
+    transfer: Record<string, unknown>,
+    choice = 'TransferFactory_Transfer',
+  ): CantonUpdateEvent {
+    return ev({
+      exercised: [
+        {
+          contractId: 'cid-rules',
+          templateId: 'pkg:Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules',
+          choice,
+          choiceArgument: { transfer },
+        },
+      ] as never,
+    });
+  }
+
+  const SWAP_TRANSFER = {
+    amount: '10.4200000000',
+    sender: USER,
+    receiver: ESCROW,
+    meta: {
+      values: {
+        [LEDGER_META.reason]:
+          'Swap 10.42 CC → USDCx (OneSwap esc_692334d2ba682e43a62ba613)',
+      },
+    },
+  };
+
+  it('O1: transfer + marker + sender → leg OUT lengkap', () => {
+    const leg = readSwapOutLeg(depositUpdate(SWAP_TRANSFER));
+    expect(leg).not.toBeNull();
+    expect(leg).toMatchObject({
+      sender: USER,
+      amount: '10.4200000000',
+      receiver: ESCROW,
+      instrument: 'CC',
+      escrowId: 'esc_692334d2ba682e43a62ba613',
+    });
+  });
+
+  it('O2: tanpa penanda swap → null (bukan kaki keluar swap)', () => {
+    const leg = readSwapOutLeg(
+      depositUpdate({ ...SWAP_TRANSFER, meta: { values: {} } }),
+    );
+    expect(leg).toBeNull();
+  });
+
+  it('O3: Accept tanpa transfer args → null (bukan kaki keluar)', () => {
+    const leg = readSwapOutLeg(
+      depositUpdate({}, 'TransferInstruction_Accept'),
+    );
+    expect(leg).toBeNull();
+  });
+
+  it('O4: sender dipertahankan apa adanya — pemfilteran user ada di handler', () => {
+    // readSwapOutLeg netral: ia melaporkan siapa pengirimnya. Handler lalu
+    // resolveUserByParty(sender) → escrow bukan user Canquest → dilewati.
+    const leg = readSwapOutLeg(
+      depositUpdate({ ...SWAP_TRANSFER, sender: ESCROW }),
+    );
+    expect(leg).not.toBeNull();
+    expect(leg!.sender).toBe(ESCROW);
+  });
+
+  it('O5: marker tanpa escrow id → isSwap tetap, escrowId null', () => {
+    const leg = readSwapOutLeg(
+      depositUpdate({
+        ...SWAP_TRANSFER,
+        meta: { values: { [LEDGER_META.reason]: 'Swap 5 CC → USDCx (OneSwap)' } },
+      }),
+    );
+    expect(leg).not.toBeNull();
+    expect(leg!.escrowId).toBeNull();
+  });
+
+  it('O6: update tanpa exercised → null', () => {
+    expect(readSwapOutLeg(ev())).toBeNull();
   });
 });
