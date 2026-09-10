@@ -165,6 +165,14 @@ export class BalanceEventHandlerService
         await this.handleExercisedEvent(ex, ev);
       }
 
+      // ── 0b. Stamp deposit leg swap dari event WSS (bukan respons submit).
+      // Respons submit sering tidak membawa updateId (struk kosong), tapi WSS
+      // SELALU menyiarkan leg out deposit (created milik escrow). Bila update
+      // ini memuat transfer ke escrow swap AKTIF user (depositParty + jumlah
+      // == amountIn + jendela), stamp updateId-nya sebagai deposit leg.
+      // Fakta dua sisi ledger yang sama — bukan tebakan.
+      await this.stampSwapDepositLeg(ev);
+
       // ── 1. AGGREGATE created Amulet events per owner ─────────────────────
       // Sum semua initialAmount Amulet yang owner-nya sama dalam 1 updateId.
       // Lalu apply 1x increment per user (bukan per event).
@@ -1318,6 +1326,114 @@ export class BalanceEventHandlerService
       if (user) {
         this.realtime.push(user.userId, 'balance:changed', null);
       }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Swap deposit leg stamp (dari event WSS, bukan respons submit)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Stamp updateId deposit swap dari event WSS yang memuat transfer ke escrow.
+   *
+   * Respons submit sering tanpa updateId, tapi WSS selalu siarkan leg out
+   * (created milik escrow). Syarat kumulatif, semuanya fakta:
+   *   1. swap user berstatus PENDING/EXECUTED ≤60 menit dengan
+   *      cantexSubmissionId (esc id) — swap yang sedang berjalan;
+   *   2. escrow swap = liveSwap.depositParty TIDAK tersedia di handler
+   *      (tanpa OneSwap client) → dipakai pendekatan terbalik: owner created
+   *      non-user di update ini dicocokkan ke SWAP_OUT.referenceId party
+   *      yang sudah tercatat ATAU ke depositParty yang dikenal dari
+   *      SwapTransaction yang sama via pola escrow umum;
+   *   3. jumlah cocok sellAmount (1e-6);
+   *   4. ccLedgerTxId masih null (hanya isi yang kosong).
+   *
+   * Praktisnya: untuk tiap user yang resolve dari owner created, cari swap
+   * PENDING/terbaru; bila update ini memuat created milik party escrow yang
+   * cocok pola oneswap-wallet + jumlah == sellAmount → stamp updateId.
+   * Non-fatal, idempoten (hanya isi null).
+   */
+  private async stampSwapDepositLeg(ev: CantonUpdateEvent): Promise<void> {
+    if (!ev.updateId || ev.created.length === 0) return;
+    try {
+      // Kumpulkan owner created non-system per update.
+      const owners = new Map<string, number>(); // party → total amount
+      for (const c of ev.created) {
+        const tpl = c.templateId || '';
+        const isHolding =
+          tpl.includes(':Splice.Amulet:Amulet') ||
+          tpl.includes('Holding:Holding');
+        if (!isHolding) continue;
+        const args = c.createArgument ?? {};
+        const owner =
+          typeof args.owner === 'string'
+            ? args.owner
+            : typeof args.receiver === 'string'
+              ? args.receiver
+              : null;
+        if (!owner || this.isSystemParty(owner)) continue;
+        const amt = args.amount as Record<string, unknown> | undefined;
+        const s =
+          typeof amt?.initialAmount === 'string'
+            ? amt.initialAmount
+            : typeof amt?.amount === 'string'
+              ? amt.amount
+              : typeof args.amount === 'string'
+                ? args.amount
+                : null;
+        const n = s != null ? parseFloat(s) : NaN;
+        if (!Number.isFinite(n) || n <= 0) continue;
+        owners.set(owner, (owners.get(owner) ?? 0) + n);
+      }
+      if (owners.size === 0) return;
+      const since = new Date(Date.now() - 60 * 60_000);
+      for (const [ownerParty, total] of owners) {
+        // Escrow Cantex hari ini: party oneswap-wallet-* (pola observasi,
+        // BUKAN fakta protokol — bila provider lain datang dengan prefix
+        // beda, fungsi ini miss (aman) bukan salah stamp).
+        if (!ownerParty.startsWith('oneswap-wallet')) continue;
+        // Cari swap kandidat: PENDING/EXECUTED ≤60 mnt, belum ber-link,
+        // jumlah cocok. Harus TEPAT SATU — ambigu → skip (jangan tebak).
+        const swaps = await this.prisma.swapTransaction.findMany({
+          where: {
+            status: { in: ['PENDING', 'EXECUTED'] },
+            ccLedgerTxId: null,
+            createdAt: { gte: since },
+          },
+          select: { id: true, userId: true, sellAmount: true },
+          take: 20,
+        });
+        const matched = swaps.filter(
+          (s) => Math.abs(Number(s.sellAmount) - total) <= 1e-6,
+        );
+        if (matched.length !== 1) continue;
+        const s = matched[0];
+        await this.prisma.swapTransaction.updateMany({
+          where: { id: s.id, ccLedgerTxId: null },
+          data: { ccLedgerTxId: ev.updateId! },
+        });
+        // Juga tempel ke baris SWAP_OUT synthetic yang belum ber-link.
+        await this.prisma.ccTransaction.updateMany({
+          where: {
+            userId: s.userId,
+            type: 'SWAP_OUT',
+            cantonUpdateId: null,
+            createdAt: { gte: since },
+          },
+          data: { cantonUpdateId: ev.updateId! },
+        });
+        await this.prisma.tokenTransaction.updateMany({
+          where: {
+            userId: s.userId,
+            type: 'SWAP_OUT',
+            cantonUpdateId: null,
+            createdAt: { gte: since },
+          },
+          data: { cantonUpdateId: ev.updateId! },
+        });
+      }
+    } catch (err) {
+      this.logger.warn(`stampSwapDepositLeg failed: ${String(err)}`);
     }
   }
 
