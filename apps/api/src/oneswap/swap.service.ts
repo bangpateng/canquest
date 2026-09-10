@@ -544,6 +544,13 @@ export class SwapService {
       // supaya kedua leg bisa diaudit tanpa ditebak matcher. JANGAN tulis
       // baris Cc/TokenTransaction di sini — delivery/kredit dicatat WSS
       // handler dari event ledger (ledgerTxId = updateId asli).
+      // OBSERVASI permanen (level log): tiga swap 10/09 ccLedgerTxId null —
+      // log ini memastikan penyebabnya terlihat di swap berikutnya.
+      this.logger.log(
+        `swap depositPersist swap=${swap.id} swapTxId=${opts?.swapTxId ?? 'null'} ` +
+          `updateId=${transfer.updateId ? transfer.updateId.slice(0, 16) + '…' : 'null'} ` +
+          `kind=${transfer.transferKind ?? 'null'}`,
+      );
       if (transfer.updateId && opts?.swapTxId) {
         await this.prisma.swapTransaction
           .update({
@@ -553,6 +560,10 @@ export class SwapService {
           .catch((e) =>
             this.logger.warn(`swap deposit updateId persist fail: ${String(e)}`),
           );
+      } else {
+        this.logger.warn(
+          `swap depositPersist SKIP swap=${swap.id} (updateId atau swapTxId null — rantai audit deposit putus)`,
+        );
       }
     }
 
