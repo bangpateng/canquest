@@ -46,9 +46,12 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body
-        className={`${inter.variable} ${space.variable} min-h-screen antialiased overflow-x-hidden`}
-        style={{ overflowX: 'hidden', maxWidth: '100vw' }}
+        className={`${inter.variable} ${space.variable} min-h-screen antialiased`}
+        style={{ maxWidth: '100vw' }}
       >
+        {/* CATATAN: body TANPA overflow-x gunting — overflow-x-hidden di sini
+            memotong hover-card rail (z-[9999]). Anti-scroll horizontal tetap
+            dijaga overflow-x-hidden di kolom konten + main + inner div. */}
         <Providers>{children}</Providers>
       </body>
     </html>
