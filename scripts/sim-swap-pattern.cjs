@@ -1,85 +1,57 @@
 #!/usr/bin/env node
 /**
- * Simulasi pola data: ambil field mentah per-event dari LedgerEvent DB
- * (payload persis seperti dilihat handler live), susun CantonUpdateEvent
- * dengan pola yang SAMA (urutan parse WSS: created/exercised top-level),
- * lalu jalankan keputusan murni kode sekarang:
- *   deriveSenderHint / offerCid detect / hasAccept / matcher-input
- * Balasan = simulasi value: baris apa yang akan ditulis handler.
- * READ-ONLY total: hanya SELECT, tanpa tulis, tanpa panggil handler.
+ * Simulasi pola transaksi dgn ATURAN BARU (escrow-matched hint):
+ * kandidat dari payload LedgerEvent DB dicocokkan daftar escrow aktif user.
+ * READ-ONLY (SELECT saja).
  */
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const USER = 'cmt44cizn000tkh333wq42dwp';
 
-const SYSTEM = ['dso', 'cantex', 'bridge-operator', 'validator-app', 'canquest-validator'];
-function isSystem(p) {
-  if (!p) return true;
-  if (p.startsWith('canquest:')) return true;
-  return SYSTEM.some((s) => p.toLowerCase().startsWith(s));
+async function escrows() {
+  const since = new Date(Date.now() - 6 * 60 * 60_000); // jendela lebar utk sim
+  const [cc, tok] = await Promise.all([
+    prisma.ccTransaction.findMany({ where: { userId: USER, type: 'SWAP_OUT', createdAt: { gte: since } }, select: { referenceId: true } }),
+    prisma.tokenTransaction.findMany({ where: { userId: USER, type: 'SWAP_OUT', createdAt: { gte: since } }, select: { referenceId: true } }),
+  ]);
+  return new Set([...cc, ...tok].map((r) => (r.referenceId || '').trim()).filter((r) => r.includes('::')));
 }
 
-async function loadUpdate(updateId) {
-  const rows = await prisma.ledgerEvent.findMany({
-    where: { updateId }, orderBy: { eventIndex: 'asc' },
-  });
-  const created = [], exercised = [];
+async function sim(updateId, escSet) {
+  const rows = await prisma.ledgerEvent.findMany({ where: { updateId }, orderBy: { eventIndex: 'asc' } });
+  const receivers = new Set(), cands = [];
   for (const r of rows) {
-    // Bentuk persis seperti parser WSS serahkan ke handler: inner object
-    // (CreatedEventShape / ExercisedEventShape) — BUKAN wrapper.
     const p = r.payload || {};
-    if (r.eventType === 'created') created.push({
-      contractId: p.contractId, templateId: p.templateId,
-      createArgument: p.createArgument || {},
-      signatories: p.signatories, witnessParties: p.witnessParties,
-      interfaceViews: p.interfaceViews,
-    });
-    else if (r.eventType === 'exercised') exercised.push({
-      contractId: p.contractId, templateId: p.templateId, choice: p.choice,
-      choiceArgument: p.choiceArgument || {}, actingParties: p.actingParties,
-      witnessParties: p.witnessParties,
-    });
-  }
-  return { created, exercised };
-}
-
-function senderHint(created, exercised) {
-  const receivers = new Set();
-  for (const c of created) {
-    const a = c.createArgument || {};
-    if (typeof a.owner === 'string') receivers.add(a.owner);
-    else if (typeof a.receiver === 'string') receivers.add(a.receiver);
-  }
-  for (const ex of exercised) {
-    for (const p of [...(ex.actingParties || []), ...(ex.witnessParties || [])]) {
-      if (!p || receivers.has(p) || isSystem(p)) continue;
-      return p;
+    if (r.eventType === 'created') {
+      const a = p.createArgument || {};
+      if (typeof a.owner === 'string') receivers.add(a.owner);
+      else if (typeof a.receiver === 'string') receivers.add(a.receiver);
+    } else if (r.eventType === 'exercised') {
+      for (const x of [...(p.actingParties || []), ...(p.witnessParties || [])]) {
+        if (!x || receivers.has(x)) continue;
+        const l = x.toLowerCase();
+        if (x.startsWith('canquest:') || l.startsWith('dso') || l.startsWith('cantex') || l.startsWith('bridge-operator') || l.startsWith('validator-app') || l.startsWith('canquest-validator')) continue;
+        if (!cands.includes(x)) cands.push(x);
+      }
     }
   }
-  return null;
+  let hint = null;
+  if (cands.length && escSet.size) { for (const c of cands) if (escSet.has(c)) { hint = c; break; } }
+  else if (cands.length === 1) hint = cands[0];
+  const hasAccept = rows.some((r) => r.eventType === 'exercised' && (r.payload || {}).choice === 'TransferInstruction_Accept');
+  const offer = rows.some((r) => r.eventType === 'created' && ((r.templateId || '').includes(':TransferOffer') || (r.templateId || '').includes(':TransferInstruction')));
+  console.log(JSON.stringify({
+    update: updateId.slice(0, 16),
+    kandidat: cands.map((c) => c.split('::')[0]),
+    hint: hint ? hint.split('::')[0] : null,
+    SIMULASI: offer && !hasAccept ? 'TANPA BARIS (offer)' : `1 BARIS (sender=${hint ? hint.split('::')[0] : 'null'})`,
+  }));
 }
 
 async function main() {
-  const ids = process.argv.slice(2);
-  for (const id of ids) {
-    const { created, exercised } = await loadUpdate(id);
-    const offerCids = created
-      .filter((c) => (c.templateId || '').includes(':TransferOffer') || (c.templateId || '').includes(':TransferInstruction'))
-      .map((c) => String(c.contractId).slice(0, 12));
-    const hasAccept = exercised.some((e) => e.choice === 'TransferInstruction_Accept');
-    const hint = senderHint(created, exercised);
-    // Simulasi value: baris apa yang ditulis handler sekarang.
-    let row;
-    if (offerCids.length && !hasAccept) row = 'TANPA BARIS (offer, bukan history)';
-    else if (hasAccept) {
-      const cid = exercised.find((e) => e.choice === 'TransferInstruction_Accept')?.contractId;
-      row = `1 BARIS accept (cid ${String(cid).slice(0, 12)}…, sender=${hint ? hint.split('::')[0] : 'null'})`;
-    } else row = `1 BARIS delivery langsung (sender=${hint ? hint.split('::')[0] : 'null'})`;
-    console.log(JSON.stringify({
-      update: id.slice(0, 16), created: created.length,
-      exercised: exercised.map((e) => e.choice), hint: hint ? hint.split('::')[0] : null,
-      offerCids, hasAccept, SIMULASI: row,
-    }));
-  }
+  const esc = await escrows();
+  console.log('escrow aktif:', [...esc].map((e) => e.split('::')[0]));
+  for (const id of process.argv.slice(2)) await sim(id, esc);
   await prisma.$disconnect();
 }
 main().catch((e) => { console.error('FATAL', String(e).slice(0, 200)); process.exit(1); });

@@ -5636,23 +5636,25 @@ export class QuestsService {
    *   - CC → token: the SWAP_OUT row (deposit, ledger-linked).
    *   - token → CC: the SWAP_IN row (delivery, ledger-linked).
    *
-   * Syarat ledger (bukan teks): cantonUpdateId TERISI = fakta onchain.
-   * Baris synthetic tanpa updateId (oneswap:* lama) tidak dihitung.
-   * Satuan dijamin skema (amountMicroCc), BUKAN parsing deskripsi —
+   * Bukti swap = baris oneswap:* (ditulis settleSwapOutcome HANYA saat
+   * OneSwap terminal `returned` — fakta bisnis) + jumlah dari kolom
+   * amountMicroCc (satuan pasti). Cek ke DB, bukan parsing deskripsi —
    * deskripsi itu teks bebas ("−1.76 CC" pernah berisi USDCx).
    */
   private async countRecentUserSwaps(
     userId: string,
     since: Date,
   ): Promise<number> {
+    const min = QuestsService.MIN_TASK_ACTION_MICRO_CC;
     const rows = await this.prisma.ccTransaction.findMany({
       where: {
         userId,
         type: { in: ['SWAP_OUT', 'SWAP_IN'] },
         status: 'COMPLETED',
         createdAt: { gte: since },
-        amountMicroCc: { gte: QuestsService.MIN_TASK_ACTION_MICRO_CC },
-        cantonUpdateId: { not: null },
+        // Kaki jual negatif: pakai OR karena Prisma where tidak punya ABS.
+        OR: [{ amountMicroCc: { gte: min } }, { amountMicroCc: { lte: -min } }],
+        ledgerTxId: { startsWith: 'oneswap:' },
       },
       select: { id: true },
     });
