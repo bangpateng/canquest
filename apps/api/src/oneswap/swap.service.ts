@@ -679,20 +679,50 @@ export class SwapService {
           liveSwap?.depositParty && liveSwap.depositParty.includes('::')
             ? liveSwap.depositParty
             : null;
-        await this.users.recordTransaction({
-          userId,
-          amountCc: params.amount,
-          type: 'SWAP_OUT',
-          description:
-            `Swap ${params.amount} ${params.from} → ${done.amountOut} ${params.to} (OneSwap fee incl.)` +
-            (depositUpdateId
-              ? ` [deposit ${depositUpdateId.slice(0, 16)}…]`
-              : ' [deposit updateId not recorded]'),
-          ledgerTxId: `oneswap:${done.id}:in`,
-          referenceId: escrowParty,
-          status: 'COMPLETED',
-          silent: true,
-        });
+        // Kaki JUAL ditulis ke tabel yang sesuai arah (fix swap 07:47:
+        // TOKEN_TO_CC menulis angka USDCx ke tabel CC sebagai "−1.76 CC").
+        // CC_TO_TOKEN → CcTransaction SWAP_OUT (CC). TOKEN_TO_CC →
+        // TokenTransaction SWAP_OUT (USDCx, debit via TOKEN_TX_DEBIT_TYPES).
+        // Kaki TERIMA selalu dicatat WSS handler dari event ledger; baris
+        // oneswap:*:out di bawah hanya proyeksi bisnis (notif), bukan fakta.
+        const isTokenSell = direction === 'TOKEN_TO_CC';
+        if (isTokenSell) {
+          const sellToken = await this.resolveToken(params.from).catch(
+            () => null,
+          );
+          await this.users.recordTokenTransaction({
+            userId,
+            amount: params.amount,
+            instrumentId: sellToken?.id ?? params.from,
+            instrumentAdmin: sellToken?.admin ?? '',
+            type: 'SWAP_OUT',
+            description:
+              `Swap ${params.amount} ${params.from} → ${done.amountOut} ${params.to} (OneSwap fee incl.)` +
+              (depositUpdateId
+                ? ` [deposit ${depositUpdateId.slice(0, 16)}…]`
+                : ' [deposit updateId not recorded]'),
+            ledgerTxId: `oneswap:${done.id}:in`,
+            referenceId: escrowParty,
+            status: 'COMPLETED',
+            silent: true,
+          });
+        } else {
+          await this.users.recordTransaction({
+            userId,
+            amountCc: params.amount,
+            type: 'SWAP_OUT',
+            description:
+              `Swap ${params.amount} ${params.from} → ${done.amountOut} ${params.to} (OneSwap fee incl.)` +
+              (depositUpdateId
+                ? ` [deposit ${depositUpdateId.slice(0, 16)}…]`
+                : ' [deposit updateId not recorded]'),
+            ledgerTxId: `oneswap:${done.id}:in`,
+            referenceId: escrowParty,
+            cantonUpdateId: depositUpdateId ?? undefined,
+            status: 'COMPLETED',
+            silent: true,
+          });
+        }
         await this.users.recordTransaction({
           userId,
           amountCc: done.amountOut ?? 0,

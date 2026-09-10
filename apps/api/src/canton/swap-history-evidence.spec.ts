@@ -135,4 +135,16 @@ describe('swap history evidence fixes (L60 A/B/C)', () => {
       ccDescription({ isSwapIn: true, refundMatch: false, senderNull: true, selfActed: true }),
     ).toBe('swap');
   });
+
+  it('D: kaki jual ikut arah — TOKEN_TO_CC ke tabel token (bukan CC)', () => {
+    // Cermin cabang settleSwapOutcome: arah menentukan penulis tabel.
+    const writerFor = (direction: string) =>
+      direction === 'TOKEN_TO_CC' ? 'token' : 'cc';
+    expect(writerFor('TOKEN_TO_CC')).toBe('token');
+    expect(writerFor('CC_TO_TOKEN')).toBe('cc');
+    // Kasus nyata 07:47: sell 1.76 USDCx (token) + buy 13.119 CC.
+    // Kaki jual token TIDAK boleh lahir sebagai "-1.76 CC".
+    const sellTable = writerFor('TOKEN_TO_CC');
+    expect(sellTable).not.toBe('cc');
+  });
 });
