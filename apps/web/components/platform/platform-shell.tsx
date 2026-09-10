@@ -141,7 +141,11 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="relative flex min-h-screen w-full max-w-full isolate items-stretch overflow-x-hidden bg-[var(--background)] font-sans">
+    <div className="relative flex min-h-screen w-full max-w-full items-stretch bg-[var(--background)] font-sans">
+      {/* CATATAN: root TANPA isolate & TANPA overflow-x-hidden — keduanya
+          memotong hover-card rail (z-[9999]) yang melayang keluar rail.
+          Anti-scroll horizontal tetap terjaga oleh overflow-x-hidden di
+          kolom konten + main + inner div. */}
       {/* Ambient tint — fixed, very subtle radial wash (canton / cyan). */}
       <div
         aria-hidden
