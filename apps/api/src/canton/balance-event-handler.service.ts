@@ -235,26 +235,20 @@ export class BalanceEventHandlerService
         );
       }
 
-      // ── 2b. Accept-side flip (B2): untuk setiap Accept di update ini,
-      // cari baris PENDING sesama user yang transferInstructionCid-nya =
-      // offer cid yang di-accept → flip COMPLETED + stamp accept updateId.
-      // Ini yang mencegah double delivery (offer-created vs accept).
+      // ── 2b. Accept-side flip: untuk setiap Accept di update ini, flip
+      // baris PENDING SENDER (ditulis controller saat offer dibuat) jadi
+      // COMPLETED + stamp accept updateId. Satu accept = satu penyelesaian.
       const acceptCids = ev.exercised
         .filter((ex) => ex.choice === 'TransferInstruction_Accept')
         .map((ex) => ex.contractId)
         .filter((cid): cid is string => !!cid);
       for (const cid of acceptCids) {
         try {
-          await this.prisma.tokenTransaction.updateMany({
-            where: {
-              transferInstructionCid: cid,
-              status: 'PENDING',
-            },
-            data: {
-              status: 'COMPLETED',
-              cantonUpdateId: ev.updateId,
-            },
-          });
+          await this.users.markTransferInstructionSettled(
+            cid,
+            'COMPLETED',
+            ev.updateId,
+          );
         } catch (err) {
           this.logger.warn(
             `BalanceEventHandler: accept flip failed cid=${cid.slice(0, 16)}…: ${String(err)}`,
@@ -263,10 +257,12 @@ export class BalanceEventHandlerService
       }
 
       // ── 3. Apply token increment per owner+instrument ────────────────────
-      // offerCid per tk: offer contract yang dibuat di update yang SAMA
-      // (cari di ev.created, pola template sama seperti handleExercisedEvent
-      // :TransferOffer/:TransferInstruction — bukan tebakan baru). Bila ada
-      // DAN update ini tidak memuat Accept → B1: baris PENDING lifecycle.
+      // ATURAN ACCEPT-1-HISTORY: baris receiver ditulis HANYA bila update ini
+      // memuat Accept ATAU tidak ada offer-created (delivery langsung).
+      // Offer-created tanpa accept = JANJI, bukan history → tidak ada baris
+      // (saldo STEP 1 tetap naik — itu fakta dana, bukan klaim history).
+      // offerCid diteruskan hanya sebagai transferInstructionCid penanda
+      // (untuk rantai audit), status SELALU COMPLETED.
       const offerCidByContract = new Map<string, string>();
       for (const o of ev.created) {
         const ot = o.templateId || '';
@@ -280,12 +276,17 @@ export class BalanceEventHandlerService
       const hasAccept = ev.exercised.some(
         (ex) => ex.choice === 'TransferInstruction_Accept',
       );
+      const hasOfferCreated = offerCidByContract.size > 0;
+      // Lewati penulisan baris bila murni offer (tanpa accept di update ini).
+      const skipReceiverRow = hasOfferCreated && !hasAccept;
       const offerCid =
-        !hasAccept && offerCidByContract.size > 0
+        offerCidByContract.size > 0
           ? [...offerCidByContract.values()][0]
           : null;
-      for (const tk of tokenByOwnerKey.values()) {
-        await this.applyTokenIncrement(tk, ev.updateId, senderHint, offerCid);
+      if (!skipReceiverRow) {
+        for (const tk of tokenByOwnerKey.values()) {
+          await this.applyTokenIncrement(tk, ev.updateId, senderHint, offerCid);
+        }
       }
 
       // ── 4. Archived events: holding di-archive = balance TURUN ───────────
@@ -796,9 +797,7 @@ export class BalanceEventHandlerService
           ? `Swap received ${tk.amount} ${tk.instrumentId} (OneSwap)`
           : refundMatch
             ? `Swap deposit returned ${tk.amount} ${tk.instrumentId} (awaiting deposit)`
-            : offerCid
-              ? `Incoming ${tk.instrumentId} offer (awaiting accept)`
-              : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
+            : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
         // null bila pengirim eksternal — row tetap tampil (jangan self-reference).
         // IDENTITY (fix double-history 2026-09-07): basis = updateId ASLI
         // tanpa prefix `wss:` — parity dengan path CC + controller-side.
@@ -808,13 +807,15 @@ export class BalanceEventHandlerService
         // cantonUpdateId TETAP updateId asli (link explorer + dedup lintas
         // instrumen tetap benar via scope dedupKey).
         // Kaki swap: ref = escrow depositParty (oneswap-wallet) bila ketemu.
-        // L60-B1: offer-created (belum accept) → PENDING + cid offer supaya
-        // update accept nanti FLIP baris ini (B2), bukan insert baris kedua.
+        // ACCEPT-1-HISTORY: status SELALU COMPLETED (baris ini hanya ditulis
+        // saat accept/delivery — tidak ada lagi PENDING receiver).
+        // transferInstructionCid = penanda rantai audit (offer mana), bukan
+        // status lifecycle.
         referenceId: swapLegIn?.depositParty ?? senderPartyId,
         ledgerTxId: `${updateId}:${tk.instrumentId.toLowerCase()}`,
         cantonUpdateId: updateId,
         transferInstructionCid: offerCid ?? null,
-        status: offerCid ? 'PENDING' : 'COMPLETED',
+        status: 'COMPLETED',
       });
       if (DEBUG_LEDGER) {
         this.logger.debug(

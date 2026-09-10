@@ -92,7 +92,14 @@ describe('swap history evidence fixes (L60 A/B/C)', () => {
     expect(escrowFromRef(null)).toBeNull();
   });
 
-  it('B1: offer-created tanpa Accept → PENDING + cid', () => {
+  it('B1: offer-created tanpa Accept → TANPA baris (janji, bukan history)', () => {
+    // Cermin aturan accept-1-history: skipReceiverRow = hasOffer && !hasAccept.
+    const skipReceiverRow = (hasOffer: boolean, hasAccept: boolean) =>
+      hasOffer && !hasAccept;
+    expect(skipReceiverRow(true, false)).toBe(true);
+    expect(skipReceiverRow(true, true)).toBe(false);
+    expect(skipReceiverRow(false, false)).toBe(false);
+    // cid offer tetap terdeteksi sebagai penanda rantai audit.
     const cid = detectOfferCid(
       [
         { contractId: 'cid-hold', templateId: 'pkg:Utility.Registry.Holding.V0.Holding:Holding' },
