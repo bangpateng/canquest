@@ -562,10 +562,15 @@ export class BalanceEventHandlerService
       });
       if (!swap || swap.buyAmount == null) return null;
       if (Math.abs(Number(swap.buyAmount) - amountCc) > 1e-6) return null;
+      // Escrow dibaca dari baris SWAP_OUT tabel token (kaki jual swap arah
+      // ini) — BUKAN TOKEN_TRANSFER_OUT: deposit swap dikirim via transfer
+      // langsung tanpa baris TRANSFER_OUT, sedangkan settleSwapOutcome menulis
+      // SWAP_OUT token dengan referenceId = party escrow (fix b518ceb).
+      // Simetris dengan arah sebaliknya yang baca SWAP_OUT tabel CC.
       const outRow = await this.prisma.tokenTransaction.findFirst({
         where: {
           userId,
-          type: 'TOKEN_TRANSFER_OUT',
+          type: 'SWAP_OUT',
           createdAt: { gte: since },
         },
         orderBy: { createdAt: 'desc' },
