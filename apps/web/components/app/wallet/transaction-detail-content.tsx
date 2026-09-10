@@ -402,9 +402,14 @@ export function TransactionDetailContent({
             // termasuk USDCx/Utility Holding; ccview.io lama Amulet-only sehingga
             // tx USDCx tampil sebagai pergerakan CC). URL utama dari backend
             // (cantonScanUrl, env-driven CANTON_TX_EXPLORER_URL); fallback lokal
-            // pakai pola default CantonScan. Strip suffix :N kalau ada.
+            // pakai pola default CantonScan. Strip suffix :N kalau ada, plus
+            // suffix instrumen L60 ("<updateId>:usdcx" → updateId asli).
             const rawForUrl = detail.cantonUpdateId ?? txId;
-            const urlId = rawForUrl ? rawForUrl.replace(/:[0-9]+$/, "") : null;
+            const urlId = rawForUrl
+              ? rawForUrl
+                  .replace(/:[0-9]+$/, "")
+                  .replace(/^(1220[0-9a-f]+):[A-Za-z][A-Za-z0-9_-]*$/, "$1")
+              : null;
             const explorerUrl =
               urlId != null
                 ? (detail.cantonScanUrl ??

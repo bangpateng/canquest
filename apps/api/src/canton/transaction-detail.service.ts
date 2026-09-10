@@ -100,7 +100,13 @@ export class TransactionDetailService {
    */
   explorerUrl(eventId: string | null | undefined): string | null {
     if (!eventId?.trim()) return null;
-    const id = eventId.trim().replace(/:[0-9]+$/, '');
+    // Strip suffix turunan ledgerTxId: ":N" numerik (event_id) MAUPUN
+    // ":<instrument>" huruf (mis. "<updateId>:usdcx" dari baris token
+    // multi-instrumen L60 — updateId asli = bagian sebelum ":").
+    const id = eventId
+      .trim()
+      .replace(/:[0-9]+$/, '')
+      .replace(/^(1220[0-9a-f]+):[A-Za-z][A-Za-z0-9_-]*$/, '$1');
     const template =
       this.config.get<string>('CANTON_TX_EXPLORER_URL')?.trim() ||
       'https://www.cantonscan.com/update/{id}';
@@ -129,7 +135,12 @@ export class TransactionDetailService {
     const id = updateIdOrContractId?.trim();
     if (!id) return null;
     if (this.isInternalMarker(id)) return null;
-    if (id.startsWith('1220')) return id;
+    if (id.startsWith('1220')) {
+      // UpdateId ber-suffix instrumen L60 ("<updateId>:usdcx") → kembalikan
+      // updateId asli (bagian hex) supaya link explorer valid.
+      const m = id.match(/^(1220[0-9a-f]+):[A-Za-z][A-Za-z0-9_-]*$/);
+      return m ? m[1] : id;
+    }
     if (/:[0-9]+$/.test(id)) return id.replace(/:[0-9]+$/, '');
     // Contract id panjang → resolve creatingUpdate via Canton ledger langsung.
     if (id.length > 16 && partyId) {
