@@ -17,6 +17,7 @@ import {
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
+import { LedgerActivityService } from '../canton/ledger-activity.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { TransactionDetailService } from '../canton/transaction-detail.service';
 import { UsersService } from '../users/users.service';
@@ -32,6 +33,7 @@ export class PartyAccountController {
     private readonly splice: SpliceValidatorService,
     private readonly txDetail: TransactionDetailService,
     private readonly config: ConfigService,
+    private readonly ledgerActivity: LedgerActivityService,
   ) {}
 
   @SkipThrottle()
@@ -76,6 +78,25 @@ export class PartyAccountController {
   @Get('transactions/:id')
   async getTransactionById(@Req() req: AuthedReq, @Param('id') id: string) {
     return this.txDetail.getDetailForUser(req.user.userId, id.trim());
+  }
+
+  /**
+   * Feed history SATU SUMBER (cermin WSS): proyeksi langsung LedgerEvent.
+   * Berjalan paralel dengan /transactions lama — UI baru baca sini.
+   * Setiap baris punya updateId asli → link explorer selalu valid.
+   */
+  @SkipThrottle()
+  @Get('ledger-activity')
+  async getLedgerActivity(
+    @Req() req: AuthedReq,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) throw new BadRequestException('User not found.');
+    const p = Math.max(1, parseInt(page ?? '1', 10) || 1);
+    const ps = Math.min(200, Math.max(1, parseInt(pageSize ?? '20', 10) || 20));
+    return this.ledgerActivity.getFeed(user.id, p, ps);
   }
 
   @SkipThrottle()

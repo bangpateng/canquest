@@ -17,6 +17,7 @@ import { FeeAccepterService } from './fee-accepter.service';
 import { CantonUpdatesService } from './canton-updates.service';
 import { BalanceEventHandlerService } from './balance-event-handler.service';
 import { LedgerRawIngestService } from './ledger-raw-ingest.service';
+import { LedgerActivityService } from './ledger-activity.service';
 import { TokenInstrumentHelper } from './token-instrument.helper';
 import { ProxyCacheService } from './proxy-cache.service';
 import { CantonWalletSdkService } from './wallet-sdk.service';
@@ -54,6 +55,7 @@ import { V30JobsService } from './v30/v30-jobs.service';
     CantonUpdatesService,
     BalanceEventHandlerService,
     LedgerRawIngestService,
+    LedgerActivityService,
     TokenInstrumentHelper,
     ProxyCacheService,
     CantonWalletSdkService,
@@ -77,6 +79,7 @@ import { V30JobsService } from './v30/v30-jobs.service';
     CantonUpdatesService,
     BalanceEventHandlerService,
     LedgerRawIngestService,
+    LedgerActivityService,
     TokenInstrumentHelper,
     ProxyCacheService,
     ExternalWalletService,
