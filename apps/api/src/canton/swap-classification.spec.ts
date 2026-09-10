@@ -57,19 +57,37 @@ function matchSwapLegCc(
   return true;
 }
 
-/** Cermin dedupKey (users.service.ts): preferensi cantonUpdateId. */
+/** Cermin dedupKey (users.service.ts): scope kind+instrument + preferensi cantonUpdateId. */
+function dedupScope(row: {
+  kind?: string;
+  instrumentId?: string | null;
+}): string {
+  const kind = (row.kind ?? '').trim().toLowerCase();
+  const inst = (row.instrumentId ?? '').trim().toLowerCase();
+  if (!kind) return inst ? `tok:${inst}` : 'cc';
+  if (kind === 'tok' || kind === 'token') return `tok:${inst}`;
+  return kind;
+}
+function isLedgerUpdateId(value: string): boolean {
+  return /^[0-9a-f]{16,}$/i.test(value);
+}
 function dedupKey(row: {
   id: string;
   ledgerTxId?: string | null;
   cantonUpdateId?: string | null;
+  kind?: string;
+  instrumentId?: string | null;
 }): string {
   const updateId = row.cantonUpdateId?.trim();
-  if (updateId) return updateId;
   const ledgerId = row.ledgerTxId?.trim();
+  const scope = dedupScope(row);
+  if (updateId) return `${scope}|${updateId}`;
   if (!ledgerId) return `id:${row.id}`;
-  return ledgerId
+  const normalized = ledgerId
     .replace(/^(wss:|inbound-sync:)[^:]+:/, '')
     .replace(/^wss:/, '');
+  if (!isLedgerUpdateId(normalized)) return `${scope}|${ledgerId}`;
+  return `${scope}|${normalized}`;
 }
 
 const ESCROW =
@@ -260,5 +278,51 @@ describe('forensik swap classification (R1+R2+R3)', () => {
     const r1 = { id: 'a', ledgerTxId: '1220abc', cantonUpdateId: '1220abc' };
     const r2 = { id: 'b', ledgerTxId: '1220abc', cantonUpdateId: '1220abc' };
     expect(dedupKey(r1)).toBe(dedupKey(r2));
+  });
+
+  // Test 12 (L60-scope): CC vs token se-updateId = key BEDA (gerakan legit
+  // berbeda — tidak boleh collapse).
+  it('T12: CC vs token se-updateId → key beda, keduanya tampil', () => {
+    const cc = {
+      id: 'a',
+      kind: 'cc',
+      ledgerTxId: '1220abc',
+      cantonUpdateId: '1220abc',
+    };
+    const tok = {
+      id: 'b',
+      kind: 'tok',
+      instrumentId: 'USDCx',
+      ledgerTxId: '1220abc:usdcx',
+      cantonUpdateId: '1220abc',
+    };
+    expect(dedupKey(cc)).not.toBe(dedupKey(tok));
+  });
+
+  // Test 13 (L60-scope): dua instrumen token se-updateId = key BEDA.
+  it('T13: USDCx vs TokenX se-updateId → key beda', () => {
+    const u = {
+      id: 'a',
+      kind: 'tok',
+      instrumentId: 'USDCx',
+      ledgerTxId: '1220abc:usdcx',
+      cantonUpdateId: '1220abc',
+    };
+    const t = {
+      id: 'b',
+      kind: 'tok',
+      instrumentId: 'TokenX',
+      ledgerTxId: '1220abc:tokenx',
+      cantonUpdateId: '1220abc',
+    };
+    expect(dedupKey(u)).not.toBe(dedupKey(t));
+  });
+
+  // Test 14 (L60-scope): synthetic oneswap vs ledger delivery = key BEDA
+  // (tidak pernah disamakan — tampil jujur sebagai dua baris).
+  it('T14: synthetic oneswap vs ledger updateId → key beda', () => {
+    const syn = { id: 'a', ledgerTxId: 'oneswap:esc_x:out' };
+    const led = { id: 'b', ledgerTxId: '1220abc', cantonUpdateId: '1220abc' };
+    expect(dedupKey(syn)).not.toBe(dedupKey(led));
   });
 });

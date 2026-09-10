@@ -384,12 +384,12 @@ model TokenTransaction {
 /// KHUSUS pengukuran lag (headOffset − lastOffset), TIDAK untuk resume.
 /// Rentang yang diketahui hilang karena pruning dicatat di LedgerStreamGap.
 model LedgerStreamCheckpoint {
-  streamKey      String   @id // mis. "canton-updates"
-  lastOffset     BigInt
+  streamKey     String    @id // mis. "canton-updates"
+  lastOffset    BigInt
   /// HEAD ledger terakhir terlihat dari heartbeat (lag = head − last). Nullable: sebelum heartbeat pertama.
-  headOffset     BigInt?
-  headUpdatedAt  DateTime?
-  updatedAt      DateTime @updatedAt
+  headOffset    BigInt?
+  headUpdatedAt DateTime?
+  updatedAt     DateTime  @updatedAt
 }
 
 /// L2b — rentang offset stream yang DIKETAHUI hilang permanen karena pruning
@@ -398,15 +398,15 @@ model LedgerStreamCheckpoint {
 /// saat ada yang bertanya kenapa riwayatnya bolong. Log pm2 terputar habis;
 /// baris ini tidak.
 model LedgerStreamGap {
-  id          String   @id @default(cuid())
-  streamKey   String
+  id         String   @id @default(cuid())
+  streamKey  String
   /// Offset pertama yang hilang (inklusif) = checkpoint + 1.
-  fromOffset  BigInt
+  fromOffset BigInt
   /// Offset terakhir yang hilang (inklusif) = prunedUpToInclusive.
-  toOffset    BigInt
+  toOffset   BigInt
   /// Sementara satu-satunya penyebab yang diketahui.
-  reason      String   @default("checkpoint-behind-pruning")
-  detectedAt  DateTime @default(now())
+  reason     String   @default("checkpoint-behind-pruning")
+  detectedAt DateTime @default(now())
 
   @@index([streamKey, detectedAt])
 }
@@ -439,31 +439,48 @@ model WssBalanceApplied {
 /// stream /v2/updates (LEDGER_EFFECTS). LedgerEvent (event ternormalisasi)
 /// bisa dibangun ulang dari sini kapan pun; dua-duanya disimpan karena
 /// ukurannya trivial (≤75 MB untuk 3 bulan) dan query L6 jadi murah.
+///
+/// NULLABILITY (canonical-history fix): Transaction.value di LEDGER_EFFECTS
+/// TIDAK membawa recordTime / synchronizerId / top-level offset (audit #4/#5:
+/// recordTime+synchronizerId hanya ada di heartbeat OffsetCheckpoint,
+/// offset hanya per-event di ExercisedEvent). Kolom offset/recordTime karena
+/// itu NULLABLE — JANGAN diisi dari effectiveAt / heartbeat / event offset
+/// (ketiganya nilai semantik berbeda). effectiveAt = jam ledger per transaksi.
 model LedgerUpdate {
-  updateId       String   @id
-  /// Offset transaksi. Kolom "offset_" — OFFSET adalah keyword SQL.
-  offset         BigInt   @map("offset_")
-  recordTime     DateTime
+  updateId       String    @id
+  /// Offset transaksi bila tersedia di envelope (null = tidak dibawa wire).
+  /// Kolom "offset_" — OFFSET adalah keyword SQL.
+  offset         BigInt?   @map("offset_")
+  /// Synchronizer record time bila tersedia (null di LEDGER_EFFECTS).
+  recordTime     DateTime?
+  /// Ledger effective time (Transaction.value.effectiveAt) — jam ledger.
+  effectiveAt    DateTime?
   commandId      String?
   synchronizerId String?
   /// JSON envelope lengkap apa adanya (update.Transaction.value).
   envelope       Json
-  ingestedAt     DateTime @default(now())
+  ingestedAt     DateTime  @default(now())
 
   @@index([offset])
   @@index([recordTime])
+  @@index([effectiveAt])
 }
 
 /// Event ternormalisasi dari satu update — SATU BARIS PER EVENT, bukan per
 /// party. witnessParties disimpan sebagai array; atribusi ke user = query
 /// L6 via User.cantonPartyId (resolver ketat, L1) — TIDAK saat menulis raw.
+///
+/// eventIndex = posisi array events[] (0-based). Ini BUKAN Canton nodeId —
+/// nodeId (bila ada) tersimpan mentah di payload. Offset/recordTime nullable
+/// dengan alasan yang sama seperti LedgerUpdate (tidak dibawa wire).
 model LedgerEvent {
   updateId       String
   /// Index event dalam update (posisi di array events / eventsById).
   eventIndex     Int
-  offset         BigInt   @map("offset_")
-  recordTime     DateTime
-  /// created | archived | exercised
+  offset         BigInt?   @map("offset_")
+  recordTime     DateTime?
+  /// created | archived | exercised — diambil dari NAMA WRAPPER event
+  /// (CreatedEvent/exercised/dsb), bukan dari tebakan semantik.
   eventType      String
   templateId     String?
   /// Nama choice (hanya eventType=exercised).
@@ -473,7 +490,7 @@ model LedgerEvent {
   witnessParties String[]
   /// Event mentah (CreatedEvent | ArchivedEvent | ExercisedEvent object).
   payload        Json
-  ingestedAt     DateTime @default(now())
+  ingestedAt     DateTime  @default(now())
 
   @@id([updateId, eventIndex])
   @@index([contractId])
@@ -501,30 +518,30 @@ model Instrument {
 /// penulis; controller tidak menulis baris ledger-derived lagi). Digabung
 /// dengan app-activity lama (CcTransaction dkk.) hanya saat display.
 model Activity {
-  partyId          String
+  partyId         String
   /// TransferInstruction cid (dua-langkah) atau updateId (one-step) — stabil sepanjang lifecycle.
-  activityId       String
+  activityId      String
   /// transfer | reward | mint | burn
-  kind             String
+  kind            String
   /// in | out
-  direction        String?
-  instrumentAdmin  String
-  instrumentId     String
-  amount           Decimal  @db.Decimal(38, 10)
-  fee              Decimal? @db.Decimal(38, 10)
-  counterparty     String?
-  memo             String?
+  direction       String?
+  instrumentAdmin String
+  instrumentId    String
+  amount          Decimal   @db.Decimal(38, 10)
+  fee             Decimal?  @db.Decimal(38, 10)
+  counterparty    String?
+  memo            String?
   /// pending | completed | rejected | withdrawn | failed — TIDAK PERNAH "expired"
   /// (expired = derivasi display dari executeBefore, spec §7).
-  status           String
-  executeBefore    DateTime?
-  correlationId    String?
-  createdUpdateId  String
-  createdAt        DateTime
-  settledUpdateId  String?
-  settledAt        DateTime?
+  status          String
+  executeBefore   DateTime?
+  correlationId   String?
+  createdUpdateId String
+  createdAt       DateTime
+  settledUpdateId String?
+  settledAt       DateTime?
   /// Offset event terakhir yang mempengaruhi baris — guard monotonic status.
-  lastOffset       BigInt
+  lastOffset      BigInt
 
   @@id([partyId, activityId])
   @@index([partyId, createdAt(sort: Desc), activityId(sort: Desc)])
@@ -620,85 +637,85 @@ model CcLock {
 /// 20260722120000_earn_hub_singleton_unique). App-layer findFirst guard di
 /// admin.service tetap sebagai defense-in-depth.
 model Quest {
-  id                 String            @id @default(cuid())
-  title              String
+  id                      String               @id @default(cuid())
+  title                   String
   /// Short partner name for social task titles (Follow X, Join Discord, etc.). Falls back to title when empty.
-  projectName        String?
-  org                String
-  orgSlug            String
-  description        String
-  banner             String            @default("linear-gradient(135deg,#1e293b,#0f172a)")
+  projectName             String?
+  org                     String
+  orgSlug                 String
+  description             String
+  banner                  String               @default("linear-gradient(135deg,#1e293b,#0f172a)")
   /// Optional image URL (e.g. /quest-media/uuid.webp) shown as quest card/header banner; overrides gradient when set.
-  bannerImageUrl     String?
+  bannerImageUrl          String?
   /// Square project logo; falls back to org initials when absent.
-  logoUrl            String?
-  rewardCc           Float             @default(0)
+  logoUrl                 String?
+  rewardCc                Float                @default(0)
   /// Token reward campaign ini. "CC" = Amulet (default); "USDCx" = utility-registry.
   /// Fee claim tetap CC (lihat claimFeeCc). rewardToken hanya menentukan token REWARD-nya.
-  rewardToken        String            @default("CC")
-  rewardPool         String            @default("0 CC")
-  deadline           String?
+  rewardToken             String               @default("CC")
+  rewardPool              String               @default("0 CC")
+  deadline                String?
   /// Optional ISO timeline — quest hidden before startsAt / after endsAt when set.
-  startsAt           DateTime?
-  endsAt             DateTime?
-  status             QuestStatus       @default(ACTIVE)
-  tags               String            @default("[]")
+  startsAt                DateTime?
+  endsAt                  DateTime?
+  status                  QuestStatus          @default(ACTIVE)
+  tags                    String               @default("[]")
   /// JSON array of { platform, url } — shown under About on campaign detail (admin-configured).
-  socialLinks        String            @default("[]")
+  socialLinks             String               @default("[]")
   /// Reward category: waitlist email, random invite, FCFS invite, CC, or CC + invite
-  rewardType         RewardType        @default(CC_ONLY)
+  rewardType              RewardType           @default(CC_ONLY)
   /// Max number of winners (null = unlimited / all completers rewarded)
-  maxWinners         Int?
+  maxWinners              Int?
   /// CC_AND_CODE_RAFFLE: berapa pemenang yang dapat CODE (sisanya dapat CC). Null = semua pemenang dapat keduanya (perilaku lama).
-  codeWinnersQuota   Int?
+  codeWinnersQuota        Int?
   /// On-chain claim fee (CC) before user receives code/CC; null = use reward-type default (2 code / 3 token FCFS).
-  claimFeeCc         Float?
+  claimFeeCc              Float?
   /// Custom message shown to raffle/email winners (admin dashboard).
-  winnerMessage      String?
+  winnerMessage           String?
   /// Link register/landing proyek untuk redeem code (shown in "How to use your code" reveal).
-  redeemUrl          String?
+  redeemUrl               String?
   /// Instruksi custom redeem (multi-line). Kosong = pakai template 3-step default (Register → Use code → Done).
-  redeemInstructions String?
+  redeemInstructions      String?
   /// CAMPAIGN = partner campaigns (user menu Earn). EARN_HUB = CanQuest daily tasks (user menu Quest).
-  questKind          QuestKind         @default(CAMPAIGN)
+  questKind               QuestKind            @default(CAMPAIGN)
   /// DAML QuestCampaign contract ID on Canton ledger (set after admin creates quest).
   /// Used by claimFcfsSlot() / drawRaffleWinner() to reference the on-chain campaign.
   /// v29 dedupe (pengganti contract keys): unique — 1 quest ↔ 1 kontrak on-chain.
-  ledgerCampaignId   String?           @unique
+  ledgerCampaignId        String?              @unique
   /// Version-pinning (cutover v28→v29): nama paket DAML kontrak on-chain
   /// (mis. 'canquest-v29'). Null + ledgerCampaignId terisi = dibuat backend
   /// lama = 'canquest-v28' — claim path memilih template/payload per versi.
-  ledgerPackage      String?
+  ledgerPackage           String?
   /// v30: T1 (70% durasi) tercapai — pendaftaran ditutup otomatis oleh job;
   /// lock baru ditolak & lock peserta sudah diverifikasi ulang saat timestamp ini.
   v30RegistrationClosedAt DateTime?
   /// Mode gate akses Earn per-campaign (configurable dari dashboard admin).
   /// CC_OR_POINTS (default) = lock CC atau spend points (perilaku lama).
   /// CC_ONLY / POINTS_ONLY / NONE = admin pilih per-event.
-  entryGateMode      EntryGateMode     @default(CC_OR_POINTS)
+  entryGateMode           EntryGateMode        @default(CC_OR_POINTS)
   /// Override jumlah CC yang harus di-lock (jalur cc_lock). Null = pakai default global (LOCK_TIER_FULL, 30).
-  entryCcLock        Int?
+  entryCcLock             Int?
   /// Override biaya points (jalur points). Null = pakai default global (earn_entry_cost_points AppSetting / 200).
-  entryCostPoints    Int?
+  entryCostPoints         Int?
   /// v25 DAML eligibility type utk on-chain claim guard. Backend map dari entryGateMode:
   ///   CC_ONLY → "LOCK_CC", POINTS_ONLY → "POINTS", CC_OR_POINTS/NONE → "NONE".
   /// "NONE" = siapa saja bisa klaim (no on-chain eligibility check).
-  eligibilityType    String            @default("NONE")
+  eligibilityType         String               @default("NONE")
   /// v25 DAML min amount utk eligibility (CC locked utk LOCK_CC, points utk POINTS). 0 bila NONE.
   /// Backend isi dari entryCcLock (LOCK_CC) atau entryCostPoints (POINTS).
-  eligibilityAmount  Float             @default(0)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  tasks              QuestTask[]
-  completions        QuestCompletion[]
-  submissions        QuestSubmission[]
-  inviteCodes        InviteCodePool[]
-  winnerDraws        WinnerDraw[]
+  eligibilityAmount       Float                @default(0)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  tasks                   QuestTask[]
+  completions             QuestCompletion[]
+  submissions             QuestSubmission[]
+  inviteCodes             InviteCodePool[]
+  winnerDraws             WinnerDraw[]
   /// v30: lock proposal per-campaign (jalur eligibility lock CC).
-  lockProposals      LockProposalRecord[]
+  lockProposals           LockProposalRecord[]
   /// Optional ecosystem partner link — when set, org/logo/social are denormalized from Partner at admin save time.
-  partnerId          String?
-  partner            Partner?          @relation(fields: [partnerId], references: [id])
+  partnerId               String?
+  partner                 Partner?             @relation(fields: [partnerId], references: [id])
 
   @@index([partnerId])
 }
@@ -828,21 +845,21 @@ model WinnerDraw {
   /// [validator, rewardSender] saat draw / FCFS claim. Unique = 1 offer
   /// on-chain per winner (jaring anti double-offer; kontrak v30 tidak punya
   /// contract key — DB satu-satunya jaring, SECURITY.md §3.1).
-  offerContractId        String?   @unique
+  offerContractId         String?   @unique
   /// ClaimReceipt contract id (Main:ClaimReceipt) — lahir saat user Accept*.
-  receiptContractId      String?
+  receiptContractId       String?
   /// Mirror ClaimStatus on-chain: Settled | RewardPending | RewardExpired | Revealed.
   /// Sinkron dari transaction tree saat accept + job monitor RewardPending.
-  claimStatus            String?
+  claimStatus             String?
   /// ClaimOffer.validUntil = waktu UNDIAN + 48 jam (BUKAN waktu campaign) —
   /// AGENT.md: kalau undian mundur, offer lahir kedaluwarsa. UI "Claim before ...".
-  validUntil             DateTime?
+  validUntil              DateTime?
   /// RewardKind yang dikomit di offer: CODE_ONLY | TOKEN_ONLY | TOKEN_AND_CODE.
-  rewardKind             String?
+  rewardKind              String?
   /// Kode plaintext setelah RevealCode sukses (dipaparkan ke user di UI Revealed).
-  revealedCode           String?
+  revealedCode            String?
   /// Waktu status reward final (ConfirmRewardReceived / MarkRewardExpired) — audit.
-  rewardClosedAt         DateTime?
+  rewardClosedAt          DateTime?
   /// Reminder RewardPending terakhir terkirim (hari ke-3 / ke-8, UI-STATES.md).
   rewardPendingNotifiedAt DateTime?
 

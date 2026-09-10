@@ -583,9 +583,14 @@ export class BalanceEventHandlerService
     // Skip push transaction:new (anti duplikat badge notif) — controller sudah push.
     // Balance increment di STEP 1 tetap jalan (wajib).
     // Cek mencakup format LEGACY `wss:` agar row lama (pre-fix) tetap dikenali.
+    // L60 (scope instrumen): cek dibatasi instrumentId+instrumentAdmin yang
+    // SAMA (case-insensitive) — satu updateId multi-instrumen adalah gerakan
+    // legit berbeda dan masing-masing berhak atas barisnya sendiri.
     const existing = await this.prisma.tokenTransaction.findFirst({
       where: {
         userId: tk.userId,
+        instrumentId: { equals: tk.instrumentId, mode: 'insensitive' },
+        instrumentAdmin: { equals: tk.instrumentAdmin, mode: 'insensitive' },
         OR: [
           { ledgerTxId: updateId },
           { ledgerTxId: `wss:${updateId}` },
@@ -654,12 +659,16 @@ export class BalanceEventHandlerService
             ? `Swap deposit returned ${tk.amount} ${tk.instrumentId} (awaiting deposit)`
             : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
         // null bila pengirim eksternal — row tetap tampil (jangan self-reference).
-        // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
+        // IDENTITY (fix double-history 2026-09-07): basis = updateId ASLI
         // tanpa prefix `wss:` — parity dengan path CC + controller-side.
-        // 1 updateId = 1 ledgerTxId → anti-race via @@unique.
+        // L60 (satu updateId multi-instrumen): ledgerTxId disuffix per
+        // instrumen (`<updateId>:<instrumentId-lower>`) supaya
+        // @@unique([userId, ledgerTxId]) tidak menolak gerakan legit kedua;
+        // cantonUpdateId TETAP updateId asli (link explorer + dedup lintas
+        // instrumen tetap benar via scope dedupKey).
         // Kaki swap: ref = escrow depositParty (oneswap-wallet) bila ketemu.
         referenceId: swapLegIn?.depositParty ?? senderPartyId,
-        ledgerTxId: updateId,
+        ledgerTxId: `${updateId}:${tk.instrumentId.toLowerCase()}`,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
       });
@@ -730,6 +739,14 @@ export class BalanceEventHandlerService
       createArgument?: Record<string, unknown>;
       signatories?: string[];
       witnessParties?: string[];
+      interfaceViews?: Array<{
+        interfaceId?: string;
+        viewValue?: {
+          owner?: string;
+          amount?: string;
+          instrumentId?: { admin?: string; id?: string };
+        } & Record<string, unknown>;
+      }>;
     },
     ev: CantonUpdateEvent,
     tokenByOwnerKey: Map<
@@ -747,8 +764,17 @@ export class BalanceEventHandlerService
     const args = c.createArgument ?? {};
     const cid = c.contractId;
 
-    // ── Owner resolution (multi-source) ───────────────────────────────────
-    const ownerFromArgs = this.extractTokenOwnerParty(args);
+    // ── Canonical identity DULU: Holding interface view (bila ada) ─────────
+    // viewValue.{owner, amount, instrumentId:{admin,id}} adalah sumber kanonis
+    // token semantics (tidak perlu menebak 7 bentuk owner / 5 bentuk
+    // instrument). Fallback createArgument di bawah tetap dipertahankan untuk
+    // event tanpa views (filter lama / template non-view).
+    const view = this.readHoldingInterfaceView(c);
+
+    // ── Owner resolution (multi-source, urut dari paling akurat) ───────────
+    // view.owner didahulukan bila valid; sisanya fallback lama tak berubah.
+    const ownerFromArgs =
+      view?.owner ?? this.extractTokenOwnerParty(args);
     let resolvedUser: { userId: string; username: string | null } | null = null;
     let resolvedParty: string | null = ownerFromArgs;
 
@@ -789,8 +815,18 @@ export class BalanceEventHandlerService
       return;
     }
 
-    // ── Instrument resolution (mirror REST queryTokenHoldings field shapes) ──
-    const { instrumentId, instrumentAdmin } = this.extractTokenInstrument(args);
+    // ── Instrument resolution (view kanonis dulu, fallback lama) ──────────
+    // view.instrumentId/Admin dari Holding interface view didahulukan; mirror
+    // REST queryTokenHoldings shapes di bawah hanya untuk event tanpa views.
+    const viewInstrument =
+      view != null
+        ? {
+            instrumentId: view.instrumentId,
+            instrumentAdmin: view.instrumentAdmin,
+          }
+        : null;
+    const { instrumentId, instrumentAdmin } =
+      viewInstrument ?? this.extractTokenInstrument(args);
     if (!instrumentId || !instrumentAdmin) {
       this.logger.warn(
         `BalanceEventHandler: Holding created tapi instrument tidak ketemu. ` +
@@ -800,8 +836,8 @@ export class BalanceEventHandlerService
     }
     if (instrumentId.toLowerCase() === 'amulet') return; // CC, bukan token
 
-    // ── Amount resolution ─────────────────────────────────────────────────
-    const amountStr = this.extractTokenAmount(args);
+    // ── Amount resolution (view kanonis dulu, fallback lama) ──────────────
+    const amountStr = view?.amount ?? this.extractTokenAmount(args);
     if (!amountStr) {
       this.logger.warn(
         `BalanceEventHandler: Holding created tapi amount tidak ketemu. ` +
@@ -828,6 +864,55 @@ export class BalanceEventHandlerService
         contractIds: [cid],
       });
     }
+  }
+
+  /**
+   * Baca Holding interface view kanonis dari created event (bila subscription
+   * meminta includeInterfaceView:true — lihat buildUpdateFormatCumulative).
+   * View shape mengikuti @canton-network/core-token-standard Holding:
+   * viewValue.{owner, amount, instrumentId:{admin,id}}. Return null bila
+   * tidak ada view yang valid — caller WAJIB fallback ke parsing
+   * createArgument (extractToken*).
+   */
+  private readHoldingInterfaceView(c: {
+    interfaceViews?: Array<{
+      interfaceId?: string;
+      viewValue?: {
+        owner?: string;
+        amount?: string;
+        instrumentId?: { admin?: string; id?: string };
+      } & Record<string, unknown>;
+    }>;
+  }): {
+    owner: string;
+    amount: string;
+    instrumentId: string;
+    instrumentAdmin: string;
+  } | null {
+    for (const view of c.interfaceViews ?? []) {
+      const vv = view?.viewValue;
+      if (!vv || typeof vv !== 'object') continue;
+      const owner = typeof vv.owner === 'string' ? vv.owner : null;
+      const amount = typeof vv.amount === 'string' ? vv.amount : null;
+      const inst = vv.instrumentId;
+      const instId =
+        inst && typeof inst === 'object' && typeof inst.id === 'string'
+          ? inst.id
+          : null;
+      const instAdmin =
+        inst && typeof inst === 'object' && typeof inst.admin === 'string'
+          ? inst.admin
+          : null;
+      if (owner && amount && instId && instAdmin) {
+        return {
+          owner,
+          amount,
+          instrumentId: instId,
+          instrumentAdmin: instAdmin,
+        };
+      }
+    }
+    return null;
   }
 
   /**

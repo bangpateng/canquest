@@ -31,20 +31,60 @@ import type { Prisma } from '@prisma/client';
  *
  * Baris tanpa identitas on-chain (reward, lock, preapproval) → fallback ke id DB
  * sendiri (selalu unik, tidak di-collapse).
+ *
+ * SCOPE (canonical-history fix): key mencakup kind (cc/tok) + instrumentId
+ * (token) supaya SATU updateId dengan DUA gerakan legit (CC + token, atau dua
+ * instrumen token) TIDAK collapse jadi satu. Collapse hanya untuk baris yang
+ * benar-benar mewakili gerakan yang sama: kind + instrument + updateId sama.
+ * Synthetic rows (oneswap:*, inbound-sync:*, *-suffix turunan) TIDAK pernah
+ * collapse dengan ledger rows — tanpa identitas updateId yang sama, key
+ * berbeda (lihat isLedgerRowKey).
  */
 function dedupKey(row: {
   id: string;
   ledgerTxId?: string | null;
   cantonUpdateId?: string | null;
+  kind?: string;
+  instrumentId?: string | null;
 }): string {
   const updateId = row.cantonUpdateId?.trim();
-  if (updateId) return updateId;
   const ledgerId = row.ledgerTxId?.trim();
+  const scope = dedupScope(row);
+  if (updateId) return `${scope}|${updateId}`;
   if (!ledgerId) return `id:${row.id}`; // tidak punya identitas on-chain → unik
   // Strip prefix "wss:" / "inbound-sync:" supaya `wss:1234` == `1234`.
-  return ledgerId
+  const normalized = ledgerId
     .replace(/^(wss:|inbound-sync:)[^:]+:/, '')
     .replace(/^wss:/, '');
+  // Synthetic keys (oneswap:*, *-turunan tanpa updateId asli) tidak pernah
+  // disamakan dengan ledger updateId — pertahankan sebagai key sendiri.
+  if (!isLedgerUpdateId(normalized)) return `${scope}|${ledgerId}`;
+  return `${scope}|${normalized}`;
+}
+
+/**
+ * Scope partisipasi key dedup: kind (cc/tok/...) + instrument (token).
+ * Baris beda kind atau beda instrumen = gerakan berbeda, key beda.
+ */
+function dedupScope(row: {
+  kind?: string;
+  instrumentId?: string | null;
+}): string {
+  const kind = (row.kind ?? '').trim().toLowerCase();
+  const inst = (row.instrumentId ?? '').trim().toLowerCase();
+  // CC murni tidak punya instrument — scope 'cc'. Token tanpa instrument
+  // (data lama) scope 'tok' supaya tidak collapse dengan CC.
+  if (!kind) return inst ? `tok:${inst}` : 'cc';
+  if (kind === 'tok' || kind === 'token') return `tok:${inst}`;
+  return kind;
+}
+
+/**
+ * Apakah string ini identitas ledger updateId (hex 1220…), bukan synthetic
+ * key (oneswap:*, inbound-sync:*, *-suffix, id DB)?
+ */
+function isLedgerUpdateId(value: string): boolean {
+  return /^[0-9a-f]{16,}$/i.test(value);
 }
 
 /**
@@ -88,6 +128,8 @@ function dedupByKey<
     ledgerTxId?: string | null;
     cantonUpdateId?: string | null;
     referenceId?: string | null;
+    kind?: string;
+    instrumentId?: string | null;
   },
 >(rows: T[]): T[] {
   // Group by key, keep winner (quality tertinggi; tie → pertama = paling baru).

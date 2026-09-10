@@ -537,6 +537,22 @@ export class SwapService {
           `Failed to send ${params.amount} ${params.from} to swap: ${transfer.error ?? 'transfer rejected'}`,
         );
       }
+      // L60 (canonical history): deposit leg ADALAH transaksi ledger nyata
+      // dengan updateId sendiri (berbeda dari delivery updateId yang tiba
+      // belakangan via WSS). Simpan updateId deposit di SwapTransaction
+      // supaya kedua leg bisa diaudit tanpa ditebak matcher. JANGAN tulis
+      // baris Cc/TokenTransaction di sini — delivery/kredit dicatat WSS
+      // handler dari event ledger (ledgerTxId = updateId asli).
+      if (transfer.updateId && opts?.swapTxId) {
+        await this.prisma.swapTransaction
+          .update({
+            where: { id: opts.swapTxId },
+            data: { ccLedgerTxId: transfer.updateId },
+          })
+          .catch((e) =>
+            this.logger.warn(`swap deposit updateId persist fail: ${String(e)}`),
+          );
+      }
     }
 
     const direction =
@@ -584,6 +600,7 @@ export class SwapService {
         userId: args.userId,
         user: { id: args.userId, username: args.username },
         params: args.params,
+        swapTxId: args.swapTxId,
       });
       if (args.swapTxId) {
         await this.prisma.swapTransaction
@@ -613,12 +630,27 @@ export class SwapService {
     }
   }
 
-  /** Catat outcome terminal swap (transaksi, balance align, SSE). */
+  /** Catat outcome terminal swap (transaksi, balance align, SSE).
+   *
+   * L60 (canonical history): baris-baris di sini adalah PROYEKSI BISNIS
+   * OneSwap (APPLICATION_DERIVED), bukan fakta ledger — identitasnya
+   * oneswap:<id>:in/out, BUKAN Canton updateId. Fakta ledger dicatat WSS
+   * handler dari event ledger (ledgerTxId = updateId asli):
+   *   - kaki DEPOSIT (user → escrow): updateId-nya tersimpan di
+   *     SwapTransaction.ccLedgerTxId (ditulis saat transfer input sukses).
+   *   - kaki DELIVERY (escrow → user): WSS applyCcIncrement/applyTokenIncrement
+   *     menulis TRANSFER_IN/SWAP_IN dengan ledgerTxId = delivery updateId.
+   * Karena itu SWAP_OUT sintetis di bawah memakai amount negatif agar tidak
+   * double-count dengan debit ledger yang sebenarnya, dan SWAP_IN memakai
+   * referenceId escrow agar display dedup tidak menelannya sebagai duplikat
+   * delivery WSS (key synthetic ≠ key ledger — keduanya tampil jujur).
+   */
   private async settleSwapOutcome(args: {
     done: Awaited<ReturnType<OneSwapClient['waitForSwap']>>;
     userId: string;
     user: { id: string; username: string };
     params: ExecuteSwapParams;
+    swapTxId: string | null;
   }): Promise<SwapExecResult> {
     const done = args.done;
     const userId = args.userId;
@@ -628,12 +660,27 @@ export class SwapService {
 
     switch (done.status) {
       case 'returned': {
+        const swapRow =
+          args.swapTxId != null
+            ? await this.prisma.swapTransaction
+                .findUnique({
+                  where: { id: args.swapTxId },
+                  select: { ccLedgerTxId: true },
+                })
+                .catch(() => null)
+            : null;
+        const depositUpdateId = swapRow?.ccLedgerTxId ?? null;
         await this.users.recordTransaction({
           userId,
           amountCc: params.amount,
           type: 'SWAP_OUT',
-          description: `Swap ${params.amount} ${params.from} → ${done.amountOut} ${params.to} (OneSwap fee incl.)`,
+          description:
+            `Swap ${params.amount} ${params.from} → ${done.amountOut} ${params.to} (OneSwap fee incl.)` +
+            (depositUpdateId
+              ? ` [deposit ${depositUpdateId.slice(0, 16)}…]`
+              : ' [deposit updateId not recorded]'),
           ledgerTxId: `oneswap:${done.id}:in`,
+          referenceId: depositUpdateId,
           status: 'COMPLETED',
           silent: true,
         });

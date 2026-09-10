@@ -57,11 +57,25 @@ function decodeJwtExpMs(jwt) {
   }
 }
 
-/** Ekstraksi MEKANIS envelope → { updateRow, eventRows[] } — tanpa semantik. */
+/** Ekstraksi MEKANIS envelope → { updateRow, eventRows[] } — tanpa semantik.
+ *
+ * Kontrak kanonis L60 (sama dgn LedgerRawIngestService di API): offset /
+ * recordTime / synchronizerId TIDAK difake — Transaction.value LEDGER_EFFECTS
+ * tidak membawanya (hanya effectiveAt). Kolom DB nullable; effectiveAt
+ * disimpan di kolomnya sendiri, BUKAN sebagai recordTime.
+ */
 function extractRows(txValue) {
   const updateId = txValue.updateId;
-  const offset = Number(txValue.offset);
-  const recordTime = new Date(txValue.recordTime);
+  const rawOffset = Number(txValue.offset);
+  const offset = Number.isFinite(rawOffset) ? BigInt(rawOffset) : null;
+  const recordTime =
+    txValue.recordTime != null && !Number.isNaN(new Date(txValue.recordTime).getTime())
+      ? new Date(txValue.recordTime)
+      : null;
+  const rawEffective = new Date(txValue.effectiveAt);
+  const effectiveAt = txValue.effectiveAt != null && !Number.isNaN(rawEffective.getTime())
+    ? rawEffective
+    : null;
   const eventRows = [];
   const arr = txValue.events ?? [];
   arr.forEach((wrapper, idx) => {
@@ -87,8 +101,9 @@ function extractRows(txValue) {
   return {
     updateRow: {
       updateId,
-      offset: BigInt(offset),
+      offset,
       recordTime,
+      effectiveAt,
       commandId: txValue.commandId ?? null,
       synchronizerId: txValue.synchronizerId ?? null,
       envelope: txValue,
@@ -262,7 +277,19 @@ function extractRows(txValue) {
       try { j = JSON.parse(d.toString()); } catch { return; }
       const tx = j?.update?.Transaction?.value ?? (j?.updateId ? j : null);
       if (!tx || !tx.updateId) return; // OffsetCheckpoint / lainnya diabaikan
-      const off = Number(tx.offset);
+      // L60: offset top-level TIDAK wajib (LEDGER_EFFECTS tidak membawanya —
+      // hanya per-event di ExercisedEvent). Cursor tetap perlu angka monoton:
+      // pakai top-level bila ada, else max per-event offset, else tahan cursor.
+      const topOff = Number(tx.offset);
+      let off = Number.isFinite(topOff) ? topOff : NaN;
+      if (!Number.isFinite(off) && Array.isArray(tx.events)) {
+        for (const w of tx.events) {
+          const inner = w && typeof w === 'object' ? Object.values(w)[0] : null;
+          const n =
+            inner && typeof inner === 'object' ? Number(inner.offset) : NaN;
+          if (Number.isFinite(n) && (!Number.isFinite(off) || n > off)) off = n;
+        }
+      }
       if (!Number.isFinite(off)) return;
       const { updateRow, eventRows } = extractRows(tx);
       buffer.updates.push(updateRow);

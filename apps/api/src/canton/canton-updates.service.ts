@@ -91,6 +91,7 @@ import { CantonLedgerService } from './canton-ledger.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
 import { BalanceEventHandlerService } from './balance-event-handler.service';
+import { LedgerRawIngestService } from './ledger-raw-ingest.service';
 import { decideResume } from './resume-policy';
 
 /**
@@ -113,6 +114,10 @@ interface CantonUpdate {
   offset?: string | { absolute?: string };
   updateId?: string;
   commandId?: string;
+  /** Ledger effective time (Transaction.value.effectiveAt) — jam ledger. */
+  effectiveAt?: string;
+  /** Workflow id (Transaction.value.workflowId). Metadata saja. */
+  workflowId?: string;
   /** Top-level flat events (TRANSACTION_SHAPE_LEDGER_EFFECTS). */
   events?: Array<RawLedgerEvent>;
   /** Mapping nodeId → TreeEvent (CreatedTreeEvent | ArchivedTreeEvent | ExercisedTreeEvent)
@@ -145,6 +150,17 @@ type RawTreeEvent =
   | { ArchivedEvent: ArchivedEventShape }
   | { ExercisedEvent: ExercisedEventShape };
 
+interface HoldingInterfaceView {
+  interfaceId?: string;
+  viewValue?: {
+    owner?: string;
+    amount?: string;
+    instrumentId?: { admin?: string; id?: string };
+    lock?: unknown;
+    meta?: unknown;
+  } & Record<string, unknown>;
+}
+
 interface CreatedEventShape {
   eventType?: 'created';
   /** Node ID dalam transaction tree (untuk ExercisedEvent.childNodeIds traversal). */
@@ -157,6 +173,10 @@ interface CreatedEventShape {
   /** Parties yang visible event ini (pre-compute Canton). Prioritas utama
    *  untuk routing dispatch — fallback ke signatories/observers bila kosong. */
   witnessParties?: string[];
+  /** Token-standard interface views (HOLDING_INTERFACE_ID dkk). Hanya hadir
+   *  bila subscription meminta includeInterfaceView:true (lihat
+   *  buildUpdateFormatCumulative). RAW — diteruskan ke semantic projector. */
+  interfaceViews?: HoldingInterfaceView[];
 }
 
 interface ArchivedEventShape {
@@ -213,6 +233,12 @@ export interface CantonUpdateEvent {
   offset: number;
   updateId?: string;
   commandId?: string;
+  /** Ledger effective time (Transaction.value.effectiveAt) — jam ledger, BUKAN
+   *  synchronizer recordTime. Disimpan mentah untuk forensik; JANGAN dipakai
+   *  sebagai LedgerUpdate.recordTime (kolom itu nullable — lihat schema). */
+  effectiveAt?: string;
+  /** Workflow id bila ada (Transaction.value.workflowId). Metadata saja. */
+  workflowId?: string;
   /** Party yang visible event ini (readAs + actingParties + witnesses). */
   parties: string[];
   created: CreatedEventShape[];
@@ -223,6 +249,60 @@ export interface CantonUpdateEvent {
 
 const RECONNECT_BASE_DELAY_MS = 1_000;
 /**
+ * Token-standard interface IDs yang wajib diminta dengan includeInterfaceView
+ * di subscription /v2/updates produksi (LEDGER_EFFECTS).
+ *
+ * Daftar PERSIS sama dengan yang sudah terbukti di scripts/ledger-backfill.cjs
+ * dan scripts/l50-smoke.cjs (filter L5 — views hadir di jalur ini, verdict
+ * HIJAU). Tanpa entri ini, created Holding/token events tiba TANPA
+ * interfaceViews[] sehingga BalanceEventHandler terpaksa menebak owner /
+ * instrument dari 7 bentuk owner × 5 bentuk instrument (lihat
+ * extractTokenOwnerParty / extractTokenInstrument). Dengan entri ini, view
+ * kanonis tersedia: viewValue.owner, viewValue.amount,
+ * viewValue.instrumentId.{admin,id}.
+ *
+ * includeCreatedEventBlob SENGAJA false (sama seperti backfill): blob biner
+ * hanya dibutuhkan jalur disclosure (ProxyCacheService) — createArgument JSON
+ * tetap tiba tanpa blob (terbukti Audit #5).
+ */
+const TOKEN_VIEW_INTERFACE_IDS = [
+  '#splice-api-token-holding-v1:Splice.Api.Token.HoldingV1:Holding',
+  '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory',
+  '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferInstruction',
+  '#splice-api-token-allocation-instruction-v1:Splice.Api.Token.AllocationInstructionV1:AllocationFactory',
+  '#splice-api-token-allocation-instruction-v1:Splice.Api.Token.AllocationInstructionV1:AllocationInstruction',
+  '#splice-api-token-allocation-request-v1:Splice.Api.Token.AllocationRequestV1:AllocationRequest',
+  '#splice-api-token-allocation-v1:Splice.Api.Token.AllocationV1:Allocation',
+];
+
+/**
+ * Bangun cumulative filter subscription /v2/updates produksi.
+ *
+ * Bentuk PERSIS backfill (scripts/ledger-backfill.cjs:145-154): N
+ * InterfaceFilter (includeInterfaceView:true, includeCreatedEventBlob:false)
+ * + 1 WildcardFilter (includeCreatedEventBlob:false). Wildcard dipertahankan
+ * supaya template non-token-standard (Amulet, AmuletRules, dsb) tetap masuk.
+ */
+export function buildUpdateFormatCumulative(): Array<Record<string, unknown>> {
+  return [
+    ...TOKEN_VIEW_INTERFACE_IDS.map((interfaceId) => ({
+      identifierFilter: {
+        InterfaceFilter: {
+          value: {
+            interfaceId,
+            includeInterfaceView: true,
+            includeCreatedEventBlob: false,
+          },
+        },
+      },
+    })),
+    {
+      identifierFilter: {
+        WildcardFilter: { value: { includeCreatedEventBlob: false } },
+      },
+    },
+  ];
+}/**
  * Cap delay reconnect reaktif. Tidak ada "give up" — selama service enabled,
  * terus retry dengan delay ≤60s supaya stream self-heal setelah infra sembuh
  * (kasus nyata: reverse proxy 502 berjam-jam, WS mati permanen, saldo stale).
@@ -289,6 +369,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     private readonly inboundSync: CcInboundSyncService,
     private readonly offerReconciler: OfferReconcilerService,
     private readonly balanceHandler: BalanceEventHandlerService,
+    private readonly rawIngest: LedgerRawIngestService,
   ) {
     const ledgerUrl =
       config.get<string>('LEDGER_API_URL') ||
@@ -337,6 +418,20 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         ),
     });
     this.balanceHandler.attachSubscription(balanceSub);
+
+    // Canonical raw ingest: preservasi mentah SETIAP update ke LedgerUpdate /
+    // LedgerEvent (satu baris per event, tanpa agregasi/klasifikasi). Idempoten
+    // via upsert PK (updateId / updateId+eventIndex) — replay/reconnect aman.
+    // Fire-and-forget, non-fatal (ingest gagal ≠ dispatch gagal).
+    this.updates$.subscribe({
+      next: (ev) => {
+        void this.rawIngest.ingestUpdate(ev);
+      },
+      error: (err) =>
+        this.logger.error(
+          `CantonUpdates: raw ingest stream error: ${String(err)}`,
+        ),
+    });
 
     // Non-blocking: jangan block app startup kalau ledger lambat connect.
     void this.startStream();
@@ -660,15 +755,16 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       // Service-account wajib punya CanReadAsAnyParty (lihat header file).
       // Enum transactionShape: TRANSACTION_SHAPE_LEDGER_EFFECTS (terverifikasi via
       // wscat test — Canton error decode explicit daftar enum valid).
+      // Cumulative = 7 InterfaceFilter (includeInterfaceView:true, terbukti di
+      // ledger-backfill.cjs / l50-smoke.cjs) + 1 WildcardFilter supaya template
+      // non-token-standard tetap masuk. verbose tetap true.
       const requestBody = {
         beginExclusive,
         updateFormat: {
           includeTransactions: {
             eventFormat: {
               filtersForAnyParty: {
-                cumulative: [
-                  { identifierFilter: { WildcardFilter: { value: {} } } },
-                ],
+                cumulative: buildUpdateFormatCumulative(),
               },
               verbose: true,
             },
@@ -934,6 +1030,8 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       offset: hasOffset ? offsetNum : (this.lastOffset ?? 0),
       updateId: update.updateId,
       commandId: update.commandId,
+      effectiveAt: update.effectiveAt,
+      workflowId: update.workflowId,
       parties: [...parties],
       created,
       archived,
