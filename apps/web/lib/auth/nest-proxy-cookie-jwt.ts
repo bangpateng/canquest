@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import {
   CQ_ACCESS_COOKIE,
   CQ_REFRESH_COOKIE,
+  clearAuthCookies,
   setAuthCookies,
 } from '@/lib/auth/auth-cookies';
 import { internalApiBase } from '@/lib/api/internal-api-url';
@@ -72,7 +73,8 @@ export async function nestWithAccessCookie(
     let upstream = await fetchUpstream(token);
 
     // Access token expired (15 menit) → tukar cq_refresh ke Nest sekali, retry 1x.
-    // Melindungi SEMUA BFF route dari logout paksa — client tidak perlu tahu.
+    // Hanya refresh-token rejection yang mengakhiri sesi. Kegagalan upstream
+    // sementara tetap diteruskan sebagai 502/504 agar user tidak dipaksa login ulang.
     if (upstream.status === 401) {
       const refreshToken = req.cookies.get(CQ_REFRESH_COOKIE)?.value;
       // Body stream tidak bisa dikirim ulang; BFF routes selalu pass string body.
@@ -81,15 +83,36 @@ export async function nestWithAccessCookie(
         typeof init.body === 'string' ||
         init.body instanceof ArrayBuffer;
 
-      if (refreshToken && bodyRetriable) {
-        const refreshed = await refreshSingleFlight(refreshToken);
-        if (refreshed) {
-          upstream = await fetchUpstream(refreshed.accessToken);
+      if (!refreshToken) {
+        const out = sessionExpiredResponse();
+        clearAuthCookies(out);
+        return out;
+      }
+
+      if (bodyRetriable) {
+        const refreshResult = await refreshSingleFlight(refreshToken);
+        if (refreshResult.kind === 'success') {
+          upstream = await fetchUpstream(refreshResult.tokens.accessToken);
           const out = await upstreamToNext(upstream);
           // Rotasi cookie sesi (access 15m + refresh 30d) untuk request berikutnya.
-          setAuthCookies(out, refreshed.accessToken, refreshed.refreshToken);
+          setAuthCookies(
+            out,
+            refreshResult.tokens.accessToken,
+            refreshResult.tokens.refreshToken,
+          );
           return out;
         }
+
+        if (refreshResult.kind === 'rejected') {
+          const out = sessionExpiredResponse();
+          clearAuthCookies(out);
+          return out;
+        }
+
+        return NextResponse.json(
+          { ok: false, message: 'Authentication service temporarily unavailable' },
+          { status: 502 },
+        );
       }
     }
 
@@ -119,10 +142,22 @@ export async function nestWithAccessCookie(
 
 type RefreshedTokens = { accessToken: string; refreshToken: string };
 
-/** Single-flight: banyak 401 paralel → satu round-trip refresh saja. */
-let inflightRefresh: Promise<RefreshedTokens | null> | null = null;
+type RefreshResult =
+  | { kind: 'success'; tokens: RefreshedTokens }
+  | { kind: 'rejected' }
+  | { kind: 'temporary-failure' };
 
-function refreshSingleFlight(refreshToken: string): Promise<RefreshedTokens | null> {
+function sessionExpiredResponse(): NextResponse {
+  return NextResponse.json(
+    { ok: false, code: 'SESSION_EXPIRED', message: 'Session expired' },
+    { status: 401 },
+  );
+}
+
+/** Single-flight: banyak 401 paralel → satu round-trip refresh saja. */
+let inflightRefresh: Promise<RefreshResult> | null = null;
+
+function refreshSingleFlight(refreshToken: string): Promise<RefreshResult> {
   if (!inflightRefresh) {
     inflightRefresh = refreshSession(refreshToken).finally(() => {
       inflightRefresh = null;
@@ -131,7 +166,7 @@ function refreshSingleFlight(refreshToken: string): Promise<RefreshedTokens | nu
   return inflightRefresh;
 }
 
-async function refreshSession(refreshToken: string): Promise<RefreshedTokens | null> {
+async function refreshSession(refreshToken: string): Promise<RefreshResult> {
   try {
     const res = await fetch(`${internalApiBase()}/auth/refresh`, {
       method: 'POST',
@@ -140,7 +175,14 @@ async function refreshSession(refreshToken: string): Promise<RefreshedTokens | n
       cache: 'no-store',
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) return null;
+
+    if (res.status === 401 || res.status === 403) {
+      return { kind: 'rejected' };
+    }
+    if (!res.ok) {
+      return { kind: 'temporary-failure' };
+    }
+
     const data = (await res.json().catch(() => null)) as {
       accessToken?: unknown;
       refreshToken?: unknown;
@@ -150,10 +192,14 @@ async function refreshSession(refreshToken: string): Promise<RefreshedTokens | n
       typeof data.accessToken === 'string' &&
       typeof data.refreshToken === 'string'
     ) {
-      return { accessToken: data.accessToken, refreshToken: data.refreshToken };
+      return {
+        kind: 'success',
+        tokens: { accessToken: data.accessToken, refreshToken: data.refreshToken },
+      };
     }
-    return null;
+
+    return { kind: 'temporary-failure' };
   } catch {
-    return null;
+    return { kind: 'temporary-failure' };
   }
 }

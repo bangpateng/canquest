@@ -5,6 +5,10 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { realtimeStreamUrl } from "./realtime-origin";
 import { queryKeys } from "@/lib/queries/query-keys";
+import {
+  isSessionExpiredBody,
+  notifySessionExpired,
+} from "@/lib/services/api/client";
 
 /**
  * Hook: buka koneksi SSE ke API, terjemahkan event server → invalidate cache
@@ -44,13 +48,24 @@ export function useRealtime(): void {
           method: "POST",
           credentials: "include",
         });
+        const data = (await res.json().catch(() => null)) as {
+          token?: string;
+          code?: unknown;
+        } | null;
+
         if (!res.ok) {
-          // 401 = belum login. Diam — jangan loop retry (bakal spam BFF).
+          // Only the stable terminal marker expires the browser session. An
+          // ordinary 401 means there is no active login, while network/5xx
+          // failures continue through the existing reconnect backoff.
+          if (res.status === 401 && isSessionExpiredBody(data)) {
+            notifySessionExpired();
+            return;
+          }
           if (res.status === 401) return;
           throw new Error(`sse-token ${res.status}`);
         }
-        const data = (await res.json()) as { token?: string };
-        if (!data.token) return;
+
+        if (!data?.token) return;
         token = data.token;
       } catch {
         // Network error → backoff lalu coba lagi.

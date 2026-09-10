@@ -1,11 +1,14 @@
 /**
  * Shared API client untuk layer services (lib/services/api/*).
- * Menambahkan JSON helper, ApiError, dan sinyal maintenance 503.
+ * Menambahkan JSON helper, ApiError, sinyal maintenance, dan event session expiry.
  * Catatan: sebagian komponen lama masih memakai fetch() langsung.
  */
 
+export const SESSION_EXPIRED_CODE = 'SESSION_EXPIRED' as const;
+export const SESSION_EXPIRED_EVENT = 'cq:session-expired' as const;
+
 export type ApiFetchOptions = RequestInit & {
-  /** JSON body — sets Content-Type and stringifies */
+  /** JSON body: sets Content-Type and stringifies. */
   json?: unknown;
 };
 
@@ -18,6 +21,38 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+export function isSessionExpiredBody(body: unknown): boolean {
+  return (
+    body !== null &&
+    typeof body === 'object' &&
+    'code' in body &&
+    (body as { code?: unknown }).code === SESSION_EXPIRED_CODE
+  );
+}
+
+export function isSessionExpiredError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 401 &&
+    isSessionExpiredBody(error.body)
+  );
+}
+
+let sessionExpiredEventQueued = false;
+
+export function notifySessionExpired(): void {
+  if (typeof window === 'undefined' || sessionExpiredEventQueued) return;
+
+  sessionExpiredEventQueued = true;
+  queueMicrotask(() => {
+    try {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+    } finally {
+      sessionExpiredEventQueued = false;
+    }
+  });
 }
 
 export async function apiFetch<T = unknown>(
@@ -42,7 +77,6 @@ export async function apiFetch<T = unknown>(
   const data: unknown = await res.json().catch(() => null);
 
   if (!res.ok) {
-    // Maintenance 503 → sinyalkan overlay global tampil INSTAN (tanpa nunggu poll).
     if (
       res.status === 503 &&
       data &&
@@ -51,6 +85,10 @@ export async function apiFetch<T = unknown>(
       typeof window !== 'undefined'
     ) {
       window.dispatchEvent(new CustomEvent('cq:maintenance'));
+    }
+
+    if (res.status === 401 && isSessionExpiredBody(data)) {
+      notifySessionExpired();
     }
 
     const msg =

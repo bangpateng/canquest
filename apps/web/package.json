@@ -11,7 +11,8 @@
     "preview": "cross-env NEXT_TELEMETRY_DISABLED=1 next build && next start -p 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.5.2",
@@ -31,6 +32,9 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -38,8 +42,11 @@
     "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.18",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
     "postcss": "^8.5.14",
     "tailwindcss": "^3.4.19",
+    "ts-jest": "^29.4.9",
     "typescript": "^5"
   }
 }

@@ -5,6 +5,8 @@ import { useState } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { MaintenanceGate } from "@/components/providers/maintenance-gate";
+import { SessionBoundary } from "@/components/providers/session-boundary";
+import { shouldRetryQuery } from "@/lib/auth/session-expiry";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -22,7 +24,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             refetchOnWindowFocus: false,
             refetchOnReconnect: false,
             // 2x retry sudah cukup; 3x (default) terlalu lama untuk error server.
-            retry: 2,
+            retry: shouldRetryQuery,
           },
         },
       }),
@@ -36,9 +38,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const tree = (
     <ThemeProvider>
       <QueryClientProvider client={client}>
-        {children}
-        {/* Overlay maintenance global — no-op di /admin & saat OFF. */}
-        <MaintenanceGate />
+        <SessionBoundary>
+          {children}
+          {/* Overlay maintenance global — no-op di /admin & saat OFF. */}
+          <MaintenanceGate />
+        </SessionBoundary>
       </QueryClientProvider>
     </ThemeProvider>
   );
