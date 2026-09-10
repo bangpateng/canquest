@@ -38,10 +38,12 @@ const navItems: {
   { href: "/settings", key: "settings", icon: Settings },
 ];
 
-/** Label muncul di kanan ikon saat hover / keyboard-focus (desktop rail). */
+/** Label muncul di kanan ikon saat hover / keyboard-focus (desktop rail).
+ *  z-[9999]: background + caption harus paling depan — tidak boleh kepotong
+ *  card/konten di sebelahnya. pointer-events-none: tidak mengganggu klik. */
 function RailTooltip({ label }: { label: string }) {
   return (
-    <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-lg bg-[var(--foreground)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--background)] opacity-0 shadow-md transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
+    <span className="pointer-events-none absolute left-full top-1/2 z-[9999] ml-3 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-lg bg-[var(--foreground)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--background)] opacity-0 shadow-md transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
       {label}
     </span>
   );
