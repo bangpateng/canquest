@@ -683,8 +683,14 @@ export class SwapService {
         // TOKEN_TO_CC menulis angka USDCx ke tabel CC sebagai "−1.76 CC").
         // CC_TO_TOKEN → CcTransaction SWAP_OUT (CC). TOKEN_TO_CC →
         // TokenTransaction SWAP_OUT (USDCx, debit via TOKEN_TX_DEBIT_TYPES).
-        // Kaki TERIMA selalu dicatat WSS handler dari event ledger; baris
-        // oneswap:*:out di bawah hanya proyeksi bisnis (notif), bukan fakta.
+        // cantonUpdateId = deposit updateId (ledger asli kaki ini) → baris
+        // SWAP_OUT selalu punya link explorer. Tanpa deposit updateId, link
+        // kosong (jujur) — bukan synthetic tanpa identitas.
+        // Kaki TERIMA TIDAK ditulis di sini: WSS handler mencatatnya dari
+        // event ledger (updateId delivery asli + link). Satu kaki = satu
+        // baris = satu updateId. Notif "uang sampai" datang dari baris WSS
+        // (transaction:new) + swap:completed di bawah — tidak perlu baris
+        // synthetic kedua.
         const isTokenSell = direction === 'TOKEN_TO_CC';
         if (isTokenSell) {
           const sellToken = await this.resolveToken(params.from).catch(
@@ -703,6 +709,7 @@ export class SwapService {
                 : ' [deposit updateId not recorded]'),
             ledgerTxId: `oneswap:${done.id}:in`,
             referenceId: escrowParty,
+            cantonUpdateId: depositUpdateId ?? undefined,
             status: 'COMPLETED',
             silent: true,
           });
@@ -723,18 +730,6 @@ export class SwapService {
             silent: true,
           });
         }
-        await this.users.recordTransaction({
-          userId,
-          amountCc: done.amountOut ?? 0,
-          type: 'SWAP_IN',
-          description: `Swap received ${done.amountOut} ${params.to}`,
-          ledgerTxId: `oneswap:${done.id}:out`,
-          status: 'COMPLETED',
-          // TIDAK silent: SWAP_IN adalah "uang sampai" — user harus dapat
-          // toast + badge via transaction:new. WSS handler hanya melihat
-          // transfer CC (Amulet), bukan token USDCx — tanpa ini, user
-          // tidak pernah tahu swap-nya selesai.
-        });
         void this.inboundSync.alignBalanceFromChain(userId, args.user.username);
         void this.realtime.push(userId, 'swap:completed', {
           direction,
