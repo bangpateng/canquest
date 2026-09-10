@@ -470,22 +470,21 @@ export class BalanceEventHandlerService
       // KLASIFIKASI SWAP CC (R2, forensik 2026-09-09): kaki pulang swap
       // (delivery CC dari escrow) lahir sebagai SWAP_IN hanya bila matcher
       // kuat membuktikan (jumlah buyAmount + korelasi escrow). Miss → TRANSFER.
+      // TIDAK ADA refund-matcher: label "deposit returned" dari swap PENDING
+      // adalah tebakan (kasus nyata: deposit sendiri dilabel refund). History
+      // butuh updateId + bukti — tanpa bukti, tulis RECEIVED biasa.
       const swapMatch = await this.findMatchingSwapLegCc(
         user.userId,
         totalAmount,
         senderPartyId,
       );
       const isSwapIn = swapMatch !== null;
-      const refundMatch = !isSwapIn
-        ? await this.findMatchingSwapRefundCc(user.userId, totalAmount)
-        : null;
       // L60-C: change output sendiri — sender lookup miss (diri sendiri
       // di-exclude) DAN update yang sama memuat exercise transfer yang
       // di-actor-kan party receiver sendiri. Label jujur, tipe + identitas
       // tetap (TRANSFER_IN, updateId asli).
       const isSelfChange =
         !isSwapIn &&
-        !refundMatch &&
         senderPartyId == null &&
         (exercised ?? []).some(
           (ex) =>
@@ -500,11 +499,9 @@ export class BalanceEventHandlerService
         type: isSwapIn ? 'SWAP_IN' : 'TRANSFER_IN',
         description: isSwapIn
           ? `Swap received ${totalAmount.toFixed(6)} CC (OneSwap)`
-          : refundMatch
-            ? `Swap deposit returned ${totalAmount.toFixed(6)} CC (awaiting deposit)`
-            : isSelfChange
-              ? `Change from own transfer ${totalAmount.toFixed(6)} CC (on-chain)`
-              : `Received ${totalAmount.toFixed(6)} CC (on-chain)`,
+          : isSelfChange
+            ? `Change from own transfer ${totalAmount.toFixed(6)} CC (on-chain)`
+            : `Received ${totalAmount.toFixed(6)} CC (on-chain)`,
         // ← pengirim; null bila eksternal/tidak dikenal (row TETAP tampil —
         //   self-reference malah menyembunyikan row via isSelfReferenceWssRow).
         // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
@@ -589,34 +586,10 @@ export class BalanceEventHandlerService
   }
 
   /**
-   * Deteksi refund deposit swap CC: full sellAmount kembali dalam jendela swap
-   * CC_TO_TOKEN aktif (deposit tidak ke-detect → escrow kembalikan). Return
-   * true bila cocok — caller tulis deskripsi "deposit returned", tipe tetap
-   * TRANSFER_IN (benar secara ledger: itu receive biasa, bukan kaki swap).
+   * DIHAPUS (aturan updateId: tanpa bukti jangan label refund — kasus nyata
+   * deposit sendiri dilabel "deposit returned"). Tanpa bukti refund, tulis
+   * RECEIVED biasa.
    */
-  private async findMatchingSwapRefundCc(
-    userId: string,
-    amountCc: number,
-  ): Promise<boolean> {
-    try {
-      const since = new Date(Date.now() - 15 * 60_000);
-      const swaps = await this.prisma.swapTransaction.findMany({
-        where: {
-          userId,
-          direction: 'CC_TO_TOKEN',
-          status: { in: ['PENDING', 'FAILED'] },
-          createdAt: { gte: since },
-        },
-        select: { sellAmount: true },
-      });
-      for (const s of swaps) {
-        if (Math.abs(Number(s.sellAmount) - amountCc) < 1e-6) return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }
 
   /**
    * Apply aggregated token increment untuk 1 owner+instrument di 1 transaksi.
@@ -772,19 +745,14 @@ export class BalanceEventHandlerService
       // pernah boleh lahir sebagai SWAP_OUT (debit). Hanya SWAP_IN bila
       // matcher kuat membuktikan kaki pulang (jumlah + korelasi escrow).
       // Miss → TRANSFER biasa (false negative OK, false positive TIDAK).
+      // TANPA refund-matcher: tanpa bukti, tulis RECEIVED biasa (updateId ada,
+      // tebakan tidak ada).
       const swapLegIn = await this.findMatchingSwapLeg(
         tk.userId,
         tk.instrumentId,
         tk.amount,
         senderPartyId,
       );
-      const refundMatch = !swapLegIn
-        ? await this.findMatchingSwapRefundToken(
-            tk.userId,
-            tk.instrumentId,
-            tk.amount,
-          )
-        : false;
       const isSwapIn = swapLegIn !== null;
 
       await this.users.recordTokenTransaction({
@@ -795,9 +763,7 @@ export class BalanceEventHandlerService
         type: isSwapIn ? 'SWAP_IN' : 'TOKEN_TRANSFER_IN',
         description: isSwapIn
           ? `Swap received ${tk.amount} ${tk.instrumentId} (OneSwap)`
-          : refundMatch
-            ? `Swap deposit returned ${tk.amount} ${tk.instrumentId} (awaiting deposit)`
-            : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
+          : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
         // null bila pengirim eksternal — row tetap tampil (jangan self-reference).
         // IDENTITY (fix double-history 2026-09-07): basis = updateId ASLI
         // tanpa prefix `wss:` — parity dengan path CC + controller-side.
@@ -1450,35 +1416,9 @@ export class BalanceEventHandlerService
    */
 
   /**
-   * Deteksi refund deposit swap token: full sellAmount kembali dalam jendela
-   * swap TOKEN_TO_CC PENDING/FAILED (deposit tidak ke-detect → kembalikan).
-   * Tipe tetap TRANSFER_IN (benar secara ledger), deskripsi jujur.
+   * DIHAPUS (aturan updateId: tanpa bukti jangan label refund). Tanpa bukti
+   * refund, tulis RECEIVED biasa.
    */
-  private async findMatchingSwapRefundToken(
-    userId: string,
-    instrumentId: string,
-    amount: number,
-  ): Promise<boolean> {
-    try {
-      const since = new Date(Date.now() - 15 * 60_000);
-      const swaps = await this.prisma.swapTransaction.findMany({
-        where: {
-          userId,
-          direction: 'TOKEN_TO_CC',
-          sellInstrumentId: { equals: instrumentId, mode: 'insensitive' },
-          status: { in: ['PENDING', 'FAILED'] },
-          createdAt: { gte: since },
-        },
-        select: { sellAmount: true },
-      });
-      for (const s of swaps) {
-        if (Math.abs(Number(s.sellAmount) - amount) < 1e-9) return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }
 
   /**
    * Resolve owner party → user via DB. Cache 5 menit.
