@@ -5633,9 +5633,13 @@ export class QuestsService {
   /**
    * Count a user's REAL swaps since `since` whose CC side is at least
    * MIN_TASK_ACTION_CC. Each swap pair contributes exactly one leg in CC:
-   *   - CC → token: the SWAP_OUT row (input amount, description "Swap N CC → …")
-   *   - token → CC: the SWAP_IN row (output amount, description "Swap received N CC")
-   * Count only rows whose description names CC and whose amount clears the min.
+   *   - CC → token: the SWAP_OUT row (deposit, ledger-linked).
+   *   - token → CC: the SWAP_IN row (delivery, ledger-linked).
+   *
+   * Syarat ledger (bukan teks): cantonUpdateId TERISI = fakta onchain.
+   * Baris synthetic tanpa updateId (oneswap:* lama) tidak dihitung.
+   * Satuan dijamin skema (amountMicroCc), BUKAN parsing deskripsi —
+   * deskripsi itu teks bebas ("−1.76 CC" pernah berisi USDCx).
    */
   private async countRecentUserSwaps(
     userId: string,
@@ -5648,19 +5652,11 @@ export class QuestsService {
         status: 'COMPLETED',
         createdAt: { gte: since },
         amountMicroCc: { gte: QuestsService.MIN_TASK_ACTION_MICRO_CC },
+        cantonUpdateId: { not: null },
       },
-      select: { type: true, description: true },
+      select: { id: true },
     });
-    let count = 0;
-    for (const r of rows) {
-      // Leg CC = description menuliskan unit CC pada nominalnya.
-      const desc = r.description ?? '';
-      const namesCc =
-        (r.type === 'SWAP_OUT' && desc.includes(' CC ')) ||
-        (r.type === 'SWAP_IN' && desc.trimEnd().endsWith(' CC'));
-      if (namesCc) count++;
-    }
-    return count;
+    return rows.length;
   }
 
   /**
