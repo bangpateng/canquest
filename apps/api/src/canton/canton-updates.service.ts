@@ -165,6 +165,10 @@ interface CreatedEventShape {
   eventType?: 'created';
   /** Node ID dalam transaction tree (untuk ExercisedEvent.childNodeIds traversal). */
   nodeId?: number;
+  /** Per-event ledger offset (wire field LEDGER_EFFECTS — observed di
+   *  ExercisedEvent; dipakai SEBAGAI fallback checkpoint bila top-level
+   *  offset absen, lihat resolveUpdateOffset). */
+  offset?: number;
   contractId: string;
   templateId: string;
   createArgument: Record<string, unknown>;
@@ -182,6 +186,8 @@ interface CreatedEventShape {
 interface ArchivedEventShape {
   eventType?: 'archived';
   nodeId?: number;
+  /** Per-event ledger offset (wire field — lihat CreatedEventShape.offset). */
+  offset?: number;
   contractId: string;
   templateId: string;
   /** Contract yang di-archive (untuk match dengan created sebelumnya). */
@@ -206,6 +212,10 @@ interface ArchivedEventShape {
 interface ExercisedEventShape {
   eventType?: 'exercised';
   nodeId?: number;
+  /** Per-event ledger offset (observed: "offset":1325354 di ExercisedEvent
+   *  LEDGER_EFFECTS; dipakai SEBAGAI fallback checkpoint bila top-level
+   *  offset absen, lihat resolveUpdateOffset). */
+  offset?: number;
   contractId: string;
   templateId: string;
   /** Nama choice DAML yang di-exercise. */
@@ -248,6 +258,54 @@ export interface CantonUpdateEvent {
 }
 
 const RECONNECT_BASE_DELAY_MS = 1_000;
+
+/**
+ * Resolusi offset checkpoint untuk satu update transaksi.
+ *
+ * Protokol (terbukti): 1 transaksi = tepat 1 offset ("at most one transaction
+ * ID at a given offset", docs Canton). Per-event offset di dalam satu
+ * Transaction.value karena itu SELALU seragam (bukti DB: 0 transaksi dengan
+ * per-event offset berbeda; top-level == max per-event di semua sampel).
+ *
+ * Aturan:
+ *   1. Top-level offset bila ada (finite) → pakai itu (perilaku lama).
+ *   2. Bila absen → pakai per-event offset HANYA bila semua finite DAN
+ *      unanimous/identik.
+ *   3. Bila tidak ada event offset ATAU berbeda → NaN (checkpoint TAHAN,
+ *      replay aman — perilaku fail-safe lama).
+ *
+ * TIDAK PERNAH disintesis dari: effectiveAt, recordTime, nodeId, array index,
+ * lastOffset. Pure function — diuji unit tanpa service.
+ */
+export function resolveUpdateOffset(
+  topOffsetRaw: string | { absolute?: string } | number | undefined | null,
+  events: Array<{ offset?: unknown }>,
+): number {
+  const topNum =
+    topOffsetRaw !== undefined && topOffsetRaw !== null
+      ? Number(
+          typeof topOffsetRaw === 'string'
+            ? topOffsetRaw
+            : typeof topOffsetRaw === 'object'
+              ? (topOffsetRaw as { absolute?: unknown }).absolute
+              : topOffsetRaw,
+        )
+      : NaN;
+  if (Number.isFinite(topNum)) return topNum;
+  // null/undefined = absen (JANGAN Number(null)=0 — offset 0 = genesis,
+  // promosi palsu ke titik nol akan memicu replay seluruh ledger).
+  const eventOffsets: number[] = [];
+  for (const e of events) {
+    const raw = e?.offset;
+    if (raw === undefined || raw === null) continue;
+    const n = Number(raw);
+    if (Number.isFinite(n)) eventOffsets.push(n);
+  }
+  const unanimous =
+    eventOffsets.length > 0 &&
+    eventOffsets.every((n) => n === eventOffsets[0]);
+  return unanimous ? eventOffsets[0] : NaN;
+}
 /**
  * Token-standard interface IDs yang wajib diminta dengan includeInterfaceView
  * di subscription /v2/updates produksi (LEDGER_EFFECTS).
@@ -922,20 +980,12 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // L2a: ekstrak offset transaksi ini sebagai NILAI LOKAL — lastOffset tidak
+    // L2a: offset transaksi dihitung di bawah via resolveUpdateOffset
+    // (top-level dulu, fallback per-event unanimous) — lastOffset TIDAK
     // dimajukan di sini. Pemajuan hanya terjadi SETELAH dispatch berhasil
     // (at-least-once): crash sebelum titik itu menyebabkan event di-replay,
-    // bukan hilang. Parse ke number — AsyncAPI spec /v2/updates menolak
-    // string beginExclusive.
-    const offsetRaw =
-      typeof update.offset === 'string'
-        ? update.offset
-        : update.offset?.absolute;
-    const offsetNum =
-      offsetRaw !== undefined && offsetRaw !== null
-        ? Number(offsetRaw)
-        : NaN;
-    const hasOffset = Number.isFinite(offsetNum);
+    // bukan hilang. AsyncAPI spec /v2/updates menolak string beginExclusive
+    // sehingga hasil akhir selalu number (atau NaN = tahan checkpoint).
 
     // WAVE 6: Parse SEMUA event types (created/archived/exercised) dari top-level events.
     const created: CreatedEventShape[] = [];
@@ -972,6 +1022,19 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     if (update.eventsById && typeof update.eventsById === 'object') {
       this.flattenTreeChildren(update.eventsById, created, archived, exercised);
     }
+
+    // L60 fallback cursor (terbukti protokol: 1 tx = 1 offset). Bila top-level
+    // offset absen (bentuk nested LEDGER_EFFECTS produksi), pakai per-event
+    // offset HANYA bila semua finite + unanimous — else NaN (= checkpoint
+    // TAHAN, replay aman). TIDAK PERNAH dari effectiveAt/recordTime/nodeId/
+    // index/lastOffset.
+    const resolvedOffset = resolveUpdateOffset(update.offset, [
+      ...created,
+      ...archived,
+      ...exercised,
+    ]);
+    const hasOffset = Number.isFinite(resolvedOffset);
+    const offsetNum = resolvedOffset;
 
     // Kumpulkan party yang visible event ini untuk routing dispatch.
     // Prioritas: witnessParties (pre-compute Canton, paling efisien & akurat
