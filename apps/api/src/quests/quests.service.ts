@@ -54,6 +54,7 @@ import { parseQuestSocialLinks } from './quest-social-links.util';
 import { isFeeTransactionRow } from '../users/cc-transaction-visibility';
 import {
   isSwapCcLeg,
+  isSwapEscrowReference,
   swapCcLegMicro,
   SWAP_ESCROW_PREFIX,
 } from '../common/swap-legs';
@@ -6018,6 +6019,8 @@ export class QuestsService {
     for (const r of ccRows) {
       // Skip legacy balance-sync rows with no sender identity.
       if (r.ledgerTxId?.startsWith('inbound-sync:')) continue;
+      // Skip kaki masuk swap (escrow OneSwap) — bukan kiriman dari wallet luar.
+      if (isSwapEscrowReference(r.referenceId)) continue;
       if (!r.referenceId) continue;
       // Skip self-referential rows (legacy inbound-sync fallback).
       if (ownPartyId && cantonPartyIdsEqual(r.referenceId, ownPartyId))
@@ -6080,6 +6083,8 @@ export class QuestsService {
         const candidates: string[] = [];
         for (const r of ccRows) {
           if (r.ledgerTxId?.startsWith('inbound-sync:')) continue;
+          // Kaki masuk swap (dari escrow) bukan kiriman user CanQuest.
+          if (isSwapEscrowReference(r.referenceId)) continue;
           if (r.referenceId) candidates.push(r.referenceId);
         }
         if (candidates.length === 0) return 0;
@@ -6097,6 +6102,10 @@ export class QuestsService {
           type: 'TOKEN_TRANSFER_IN',
           status: 'COMPLETED',
           createdAt: { gte: since },
+          // Kaki masuk swap (delivery dari escrow OneSwap) BUKAN kiriman dari
+          // user CanQuest — kalau ikut terhitung, swap menggratiskan task
+          // receive. Escrow bukan user CanQuest dan tidak pernah mengirim P2P.
+          NOT: { referenceId: { startsWith: SWAP_ESCROW_PREFIX } },
         },
       }),
     ]);
