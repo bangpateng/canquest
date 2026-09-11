@@ -1573,4 +1573,21 @@ export class BalanceEventHandlerService
       return false; // DB bermasalah — skip apply (fail-closed)
     }
   }
+  /**
+   * Ekspose ekstraksi holding murni untuk tool forensik (replay/reconstruct)
+   * — SATU implementasi, dipakai handler live dan tool. Keempatnya tidak
+   * memakai `this`, jadi aman dipanggil ter-bind ke instance mana pun.
+   */
+  getExtractors() {
+    return {
+      isTokenHoldingTemplate: (t: string) => this.isTokenHoldingTemplate(t),
+      extractTokenOwnerParty: (a: Record<string, unknown>) =>
+        this.extractTokenOwnerParty(a),
+      extractTokenInstrument: (a: Record<string, unknown>) =>
+        this.extractTokenInstrument(a),
+      extractTokenAmount: (a: Record<string, unknown>) =>
+        this.extractTokenAmount(a),
+    };
+  }
+
 }
