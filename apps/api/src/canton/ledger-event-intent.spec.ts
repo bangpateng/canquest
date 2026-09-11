@@ -304,3 +304,61 @@ describe('readSwapOutLeg (kaki keluar dari event WSS)', () => {
     expect(readSwapOutLeg(ev())).toBeNull();
   });
 });
+
+describe('readLedgerIntent — sumber sender urutan parser resmi', () => {
+  it('delivery token tanpa meta → sender dari choiceArgument.transfer.sender', () => {
+    // Produksi 12207833aa1c…: TransferRule_TwoStepTransfer sender=escrow,
+    // receiver=USER, amount=0.695 — TANPA meta sama sekali.
+    const intent = readLedgerIntent(
+      ev({
+        exercised: [
+          {
+            contractId: 'cid-rule',
+            templateId: 'pkg:Utility.Registry.V0.Rule.Transfer:TransferRule',
+            choice: 'TransferRule_TwoStepTransfer',
+            choiceArgument: {
+              transfer: { sender: ESCROW, receiver: USER, amount: '0.6952488883' },
+            },
+          },
+        ] as never,
+      }),
+    );
+    expect(intent.sender).toBe(ESCROW);
+  });
+
+  it('meta sender dan transfer.sender sama → tetap satu nilai (tidak ambigu)', () => {
+    const intent = readLedgerIntent(
+      ev({
+        exercised: [
+          {
+            contractId: 'cid-a',
+            templateId: 't',
+            choice: 'TransferFactory_Transfer',
+            choiceArgument: {
+              transfer: { sender: ESCROW, meta: { values: { [LEDGER_META.sender]: ESCROW } } },
+            },
+          },
+        ] as never,
+      }),
+    );
+    expect(intent.sender).toBe(ESCROW);
+  });
+
+  it('meta sender ≠ transfer.sender → ambigu → null (jujur)', () => {
+    const intent = readLedgerIntent(
+      ev({
+        exercised: [
+          {
+            contractId: 'cid-a',
+            templateId: 't',
+            choice: 'X',
+            choiceArgument: {
+              transfer: { sender: ESCROW, meta: { values: { [LEDGER_META.sender]: USER } } },
+            },
+          },
+        ] as never,
+      }),
+    );
+    expect(intent.sender).toBeNull();
+  });
+});

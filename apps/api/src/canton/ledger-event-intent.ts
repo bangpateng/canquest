@@ -109,8 +109,16 @@ function collectMeta(node: unknown, acc: MetaAcc, depth = 0): void {
 
 /**
  * Baca intent (tx-kind / reason / sender) dari seluruh exercised event.
- * `sender` hanya diisi bila tepat satu nilai unik — dua sender berbeda dalam
- * satu update = ambigu, dan menebak salah lebih buruk daripada null.
+ *
+ * Sumber `sender` mengikuti urutan parser resmi Canton (token-standard cli
+ * `txparse/parserv1.ts`): meta `sender` → `choiceArgument.transfer.sender`.
+ * Keduanya dikumpulkan; hasil hanya diisi bila tepat SATU nilai unik — dua
+ * sender berbeda dalam satu update = ambigu, dan menebak salah lebih buruk
+ * daripada null.
+ *
+ * Ini klasifikasi arah yang didokumentasikan: leg masuk = sender ≠ party
+ * kita, leg keluar = sender === party kita (EventLog V2 memakai
+ * `transferLegSides[].side` SenderSide/ReceiverSide dengan semantik sama).
  */
 export function readLedgerIntent(
   ev: Pick<CantonUpdateEvent, 'exercised'>,
@@ -123,6 +131,14 @@ export function readLedgerIntent(
   for (const ex of (ev.exercised ?? []) as ExercisedLike[]) {
     collectMeta(ex.exerciseResult, acc);
     collectMeta(ex.choiceArgument, acc);
+    // Parser resmi V1 membaca `choiceArgument.transfer.sender` sebagai sumber
+    // pengirim (delivery token tidak membawa meta sama sekali — terverifikasi
+    // di produksi: TransferRule_TwoStepTransfer sender=escrow, meta kosong).
+    const ca = ex.choiceArgument as
+      | { transfer?: { sender?: unknown } }
+      | undefined;
+    const tSender = ca?.transfer?.sender;
+    if (typeof tSender === 'string' && tSender) acc.senders.add(tSender);
   }
   return {
     txKinds: [...acc.txKinds],
