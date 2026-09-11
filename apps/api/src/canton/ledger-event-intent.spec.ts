@@ -12,6 +12,7 @@ import {
   transientContractIds,
   readSwapOutLeg,
   isSelfFundsMovement,
+  readLockMovement,
   LEDGER_META,
 } from './ledger-event-intent';
 import type { CantonUpdateEvent } from './canton-updates.service';
@@ -388,5 +389,96 @@ describe('isSelfFundsMovement', () => {
       isSelfFundsMovement([{ choice: 'LockedAmulet_UnlockV2', actingParties: ['DSO::x'] }], USER),
     ).toBe(false);
     expect(isSelfFundsMovement(undefined, USER)).toBe(false);
+  });
+});
+
+describe('readLockMovement (lock/unlock dana sendiri)', () => {
+  const PARTY = USER;
+  const HOLD_IV = (owner: string, amount: string) => [
+    { viewValue: { owner, amount, instrumentId: { id: 'Amulet', admin: 'DSO::x' } } },
+  ];
+
+  it('LOCK: LockedAmulet persisten milik party → kind=lock + cid', () => {
+    const m = readLockMovement(
+      {
+        created: [
+          {
+            contractId: 'cid-locked',
+            templateId: 'pkg:Splice.Amulet:LockedAmulet',
+            createArgument: { lock: {}, amulet: { owner: PARTY, amount: { initialAmount: '8.0000000000' } } },
+            interfaceViews: HOLD_IV(PARTY, '8.0000000000'),
+          },
+        ],
+        archived: [],
+        exercised: [{ choice: 'AmuletRules_Transfer', actingParties: [PARTY], choiceArgument: {} }],
+      } as never,
+      PARTY,
+    );
+    expect(m).toMatchObject({ kind: 'lock', amount: '8.0000000000', lockedAmuletCid: 'cid-locked' });
+  });
+
+  it('UNLOCK: OwnerExpireLockV2 + Amulet persisten milik party → kind=unlock', () => {
+    const m = readLockMovement(
+      {
+        created: [
+          {
+            contractId: 'cid-amulet',
+            templateId: 'pkg:Splice.Amulet:Amulet',
+            createArgument: {},
+            interfaceViews: HOLD_IV(PARTY, '8.0000000000'),
+          },
+        ],
+        archived: [],
+        exercised: [
+          { choice: 'LockedAmulet_OwnerExpireLockV2', contractId: 'cid-locked', actingParties: [PARTY], choiceArgument: {} },
+        ],
+      } as never,
+      PARTY,
+    );
+    expect(m).toMatchObject({ kind: 'unlock', amount: '8.0000000000', lockedAmuletCid: 'cid-locked' });
+  });
+
+  it('SWAP deposit (LockedAmulet + transfer keluar) TIDAK dianggap lock', () => {
+    const m = readLockMovement(
+      {
+        created: [
+          {
+            contractId: 'cid-locked',
+            templateId: 'pkg:Splice.Amulet:LockedAmulet',
+            createArgument: {},
+            interfaceViews: HOLD_IV(PARTY, '15.0000000000'),
+          },
+        ],
+        archived: [],
+        exercised: [
+          {
+            choice: 'TransferFactory_Transfer',
+            actingParties: [PARTY],
+            choiceArgument: { transfer: { sender: PARTY, receiver: 'oneswap-wallet::x', amount: '15' } },
+          },
+        ],
+      } as never,
+      PARTY,
+    );
+    expect(m).toBeNull();
+  });
+
+  it('LockedAmulet milik ORANG LAIN → null', () => {
+    const m = readLockMovement(
+      {
+        created: [
+          {
+            contractId: 'cid-locked',
+            templateId: 'pkg:Splice.Amulet:LockedAmulet',
+            createArgument: {},
+            interfaceViews: HOLD_IV('orang-lain::x', '5.0000000000'),
+          },
+        ],
+        archived: [],
+        exercised: [{ choice: 'AmuletRules_Transfer', actingParties: [PARTY], choiceArgument: {} }],
+      } as never,
+      PARTY,
+    );
+    expect(m).toBeNull();
   });
 });

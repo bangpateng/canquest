@@ -71,6 +71,8 @@ interface ExercisedLike {
   contractId?: string;
   choiceArgument?: unknown;
   exerciseResult?: unknown;
+  /** Party yang meng-exercise choice (dipakai klasifikasi lock/unlock). */
+  actingParties?: string[];
 }
 
 interface MetaAcc {
@@ -328,4 +330,145 @@ export function isSelfFundsMovement(
       SELF_FUNDS_CHOICES.has(ex.choice) &&
       (ex.actingParties ?? []).includes(party),
   );
+}
+
+/**
+ * Pergerakan LOCK/UNLOCK dana sendiri (lock campaign), bukan transfer ke
+ * pihak lain. Dikembalikan oleh readLockMovement().
+ */
+export interface LockMovement {
+  kind: 'lock' | 'unlock';
+  /** Jumlah CC (desimal string). */
+  amount: string;
+  /** cid LockedAmulet: yang dibuat (lock) atau yang dikonsumsi (unlock). */
+  lockedAmuletCid: string | null;
+}
+
+/** Choice yang menandakan LockedAmulet dibuka. */
+const UNLOCK_CHOICES: ReadonlySet<string> = new Set([
+  'LockedAmulet_UnlockV2',
+  'LockedAmulet_OwnerExpireLockV2',
+]);
+
+/**
+ * Baca owner+amount holding dari satu created event. Sumber kanonis =
+ * interfaceViews[].viewValue (dipakai Amulet & LockedAmulet di update lock),
+ * fallback ke createArgument.
+ *
+ * CATATAN kenapa helper kecil ini ada (bukan memakai extractor handler):
+ *   - LockedAmulet.createArgument menaruh pemilik/jumlah di objek NESTED
+ *     `amulet` (bukan `owner`/`amount` di top-level) — bentuk yang tidak
+ *     dikenal extractTokenOwnerParty/extractTokenAmount.
+ *   - Nilai kanonis di update ini justru ada di interfaceViews, yang tidak
+ *     dibaca extractor tsb.
+ * Jadi ini pembaca bentuk-bentuk spesifik lock/unlock, bukan duplikasi
+ * logika holding umum.
+ */
+function readHoldingOwnerAmount(c: Record<string, unknown>): {
+  owner: string | null;
+  amount: string | null;
+} {
+  const ivs = Array.isArray(c.interfaceViews)
+    ? (c.interfaceViews as Array<{ viewValue?: Record<string, unknown> }>)
+    : [];
+  for (const iv of ivs) {
+    const v = iv?.viewValue;
+    if (!v || typeof v !== 'object') continue;
+    const owner = typeof v.owner === 'string' ? v.owner : null;
+    const amount = typeof v.amount === 'string' ? v.amount : null;
+    if (owner && amount) return { owner, amount };
+  }
+  const args = (c.createArgument ?? {}) as Record<string, unknown>;
+  // Bentuk LockedAmulet: { lock, amulet: { owner, amount } }.
+  const nested = args.amulet as Record<string, unknown> | undefined;
+  const src = nested && typeof nested === 'object' ? nested : args;
+  const owner =
+    typeof src.owner === 'string'
+      ? src.owner
+      : typeof src.receiver === 'string'
+        ? src.receiver
+        : null;
+  const amt = src.amount as Record<string, unknown> | string | undefined;
+  const amount =
+    typeof amt === 'string'
+      ? amt
+      : typeof amt?.initialAmount === 'string'
+        ? (amt.initialAmount as string)
+        : typeof amt?.amount === 'string'
+          ? (amt.amount as string)
+          : null;
+  return { owner, amount };
+}
+
+/**
+ * Deteksi pergerakan lock/unlock MILIK party dari satu update (ledger-only).
+ *
+ * Aturan (semua harus lolos; tanpa fallback):
+ *   1. Tidak ada transfer KELUAR dari party di update ini — kalau ada, update
+ *      itu bagian dari transfer/swap (mis. deposit swap yang juga membuat
+ *      LockedAmulet), BUKAN lock campaign.
+ *   2. LOCK   : ada created `Splice.Amulet:LockedAmulet` persisten (tidak
+ *               dikonsumsi di update yang sama) dengan owner = party.
+ *   3. UNLOCK : ada exercise LockedAmulet_UnlockV2 / OwnerExpireLockV2 dengan
+ *               actingParties memuat party, DAN update mengembalikan Amulet
+ *               persisten milik party (jumlah unlock).
+ */
+export function readLockMovement(
+  ev: Pick<CantonUpdateEvent, 'created' | 'exercised' | 'archived'>,
+  party: string,
+): LockMovement | null {
+  const hasOutgoing = ((ev.exercised ?? []) as ExercisedLike[]).some((ex) => {
+    const t = (ex.choiceArgument as { transfer?: Record<string, unknown> })
+      ?.transfer;
+    return (
+      !!t &&
+      t.sender === party &&
+      typeof t.receiver === 'string' &&
+      t.receiver !== party
+    );
+  });
+  if (hasOutgoing) return null;
+
+  const transient = transientContractIds(ev);
+
+  // UNLOCK
+  const unlock = ((ev.exercised ?? []) as ExercisedLike[]).find(
+    (ex) =>
+      !!ex.choice &&
+      UNLOCK_CHOICES.has(ex.choice) &&
+      (ex.actingParties ?? []).includes(party),
+  );
+  if (unlock) {
+    for (const c of (ev.created ?? []) as unknown as Array<
+      Record<string, unknown>
+    >) {
+      const tpl = String(c.templateId ?? '');
+      if (!tpl.includes(':Splice.Amulet:Amulet')) continue;
+      if (transient.has(String(c.contractId ?? ''))) continue;
+      const { owner, amount } = readHoldingOwnerAmount(c);
+      if (owner === party && amount) {
+        return {
+          kind: 'unlock',
+          amount,
+          lockedAmuletCid: unlock.contractId ?? null,
+        };
+      }
+    }
+    return null;
+  }
+
+  // LOCK
+  for (const c of (ev.created ?? []) as unknown as Array<
+      Record<string, unknown>
+    >) {
+    const tpl = String(c.templateId ?? '');
+    if (!tpl.endsWith(':Splice.Amulet:LockedAmulet')) continue;
+    const cid = String(c.contractId ?? '');
+    if (transient.has(cid)) continue;
+    const { owner, amount } = readHoldingOwnerAmount(c);
+    if (owner === party && amount) {
+      return { kind: 'lock', amount, lockedAmuletCid: cid };
+    }
+  }
+  return null;
 }

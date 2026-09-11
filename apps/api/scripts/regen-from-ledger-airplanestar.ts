@@ -31,6 +31,7 @@ import {
   readSwapOutLeg,
   transientContractIds,
   isSelfFundsMovement,
+  readLockMovement,
 } from '../src/canton/ledger-event-intent';
 import { UsersService } from '../src/users/users.service';
 import { PointsService } from '../src/users/points.service';
@@ -51,7 +52,7 @@ const ALLOWED_USERNAME = 'airplanestar';
 const APPLY = process.argv.includes('--apply');
 
 interface Fact {
-  kind: 'in' | 'out';
+  kind: 'in' | 'out' | 'lock' | 'unlock';
   instrument: string;
   admin: string;
   amount: string; // desimal
@@ -112,7 +113,7 @@ async function main(): Promise<void> {
   const seenOut = new Set<string>();
   const seenIn = new Set<string>();
 
-  for (const up of updates) {
+  updateLoop: for (const up of updates) {
     const env = up.envelope as Record<string, unknown>;
     const ev = {
       offset: 0,
@@ -156,6 +157,33 @@ async function main(): Promise<void> {
           type: 'SWAP_OUT',
         });
       }
+    }
+
+    // LOCK/UNLOCK: pergerakan dana sendiri (lock campaign). Dikenali lebih dulu
+    // supaya LockedAmulet tidak ikut tercatat sebagai fakta IN biasa.
+    // Identitas = updateId ledger asli (durable, link explorer jalan).
+    const lockMove = readLockMovement(ev, ALLOWED_PARTY);
+    if (lockMove) {
+      const isCcInstrument = true; // lock campaign selalu CC
+      facts.push({
+        kind: lockMove.kind,
+        instrument: 'CC',
+        admin: '',
+        amount: lockMove.amount,
+        updateId: up.updateId,
+        ledgerTxId: isCcInstrument
+          ? `${up.updateId}:${lockMove.kind}`
+          : `${up.updateId}:${lockMove.kind}:cc`,
+        ts: up.effectiveAt,
+        counterparty: ALLOWED_PARTY, // dana sendiri → From/To = You
+        isSwap: false,
+        isChange: false,
+        type: lockMove.kind === 'lock' ? 'CC_LOCK' : 'CC_UNLOCK',
+      });
+      seenIn.add(`in|${up.updateId}`);
+      // Amulet yang dibuat di update lock/unlock ADALAH gerakan itu sendiri
+      // (change lock / hasil unlock) → jangan dicatat dobel sebagai IN.
+      continue updateLoop;
     }
 
     // IN: holding dibuat untuk party.
@@ -229,25 +257,58 @@ async function main(): Promise<void> {
     return;
   }
 
-  // ── APPLY: hapus semua baris wallet ini, lalu tulis fakta kanonis ─────────
+  // ── APPLY: hapus HANYA tipe yang tool ini mampu regenerate ────────────────
+  // Pelajaran insiden: deleteManmany({userId}) pernah ikut menghapus tipe
+  // bersemantik app (mis. CC_UNLOCK) yang tidak dihasilkan tool → history
+  // kehilangan label. Sekarang wipe dibatasi ke tipe yang memang ditulis di
+  // bawah (transfer/swap/lock/unlock); tipe lain (reward, fee, offer, dll)
+  // TIDAK disentuh.
   console.log('\n── APPLY ──');
-  const dCc = await prisma.ccTransaction.deleteMany({ where: { userId: uid } });
-  const dTk = await prisma.tokenTransaction.deleteMany({ where: { userId: uid } });
-  console.log(`dihapus: CC=${dCc.count} TOKEN=${dTk.count}`);
+  const REGEN_TYPES_CC = [
+    'TRANSFER_IN',
+    'TRANSFER_OUT',
+    'SWAP_IN',
+    'SWAP_OUT',
+    'CC_LOCK',
+    'CC_UNLOCK',
+  ];
+  const REGEN_TYPES_TOK = [
+    'TOKEN_TRANSFER_IN',
+    'TOKEN_TRANSFER_OUT',
+    'SWAP_IN',
+    'SWAP_OUT',
+  ];
+  const dCc = await prisma.ccTransaction.deleteMany({
+    where: { userId: uid, type: { in: REGEN_TYPES_CC as never } },
+  });
+  const dTk = await prisma.tokenTransaction.deleteMany({
+    where: { userId: uid, type: { in: REGEN_TYPES_TOK as never } },
+  });
+  console.log(`dihapus (tipe regenerate): CC=${dCc.count} TOKEN=${dTk.count}`);
 
   let written = 0;
   for (const f of facts) {
     const n = Number(f.amount);
-    const signed = f.kind === 'in' ? n : -n;
+    // Konvensi tanda (sama dgn recordTransaction produksi): `kind` mengikuti
+    // ARAH DANA. lock = keluar dari saldo tersedia (debit), unlock = kembali
+    // (kredit), in = kredit, out = debit.
+    const isCredit = f.kind === 'in' || f.kind === 'unlock';
+    const signed = isCredit ? n : -n;
     // Skema label app (keputusan produk): Swap (hanya kaki keluar),
-    // Receive, Change, Send.
-    const desc = f.isSwap
-      ? 'Swap'
-      : f.isChange
-        ? 'Change'
-        : f.kind === 'in'
-          ? 'Receive'
-          : 'Send';
+    // Receive, Change, Send. Lock/unlock memakai label deskriptif sendiri
+    // (feTidak menampilkan desc ini untuk CC_LOCK/CC_UNLOCK — lihat txDirection).
+    const desc =
+      f.kind === 'lock'
+        ? 'CC Locked'
+        : f.kind === 'unlock'
+          ? 'CC Unlocked'
+          : f.isSwap
+            ? 'Swap'
+            : f.isChange
+              ? 'Change'
+              : f.kind === 'in'
+                ? 'Receive'
+                : 'Send';
     if (f.instrument.toUpperCase() === 'CC') {
       await users.recordTransaction({
         userId: uid,
