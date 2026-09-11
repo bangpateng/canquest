@@ -362,6 +362,13 @@ export class BalanceEventHandlerService
     if (!user) return; // pengirim bukan user Canquest (escrow/DSO lain).
 
     const isCc = (leg.instrument ?? 'CC').toUpperCase() === 'CC';
+    // IDENTITAS KAKI = identitas SWAP (escrowId), bukan updateId. Satu swap
+    // token-sell diumumkan lewat DUA update (instruction dibuat 07:47 +
+    // dieksekusi 07:48 — terverifikasi di raw layer) dan KEDUANYA membawa
+    // transfer + marker yang sama. Kunci per-updateId akan menulis 2 baris
+    // SWAP_OUT untuk 1 swap; kunci per-escrowId membuat unique constraint
+    // mendedupkannya secara alami (P2002 di-swallow di bawah).
+    const legKey = leg.escrowId ?? updateId;
     try {
       if (isCc) {
         await this.users.recordTransaction({
@@ -370,8 +377,8 @@ export class BalanceEventHandlerService
           type: 'SWAP_OUT',
           description: `Swap sent ${leg.amount} ${leg.instrument ?? 'CC'} (OneSwap${leg.escrowId ? ` ${leg.escrowId}` : ''})`,
           referenceId: leg.receiver,
-          ledgerTxId: `${ev.updateId}:out`,
-          cantonUpdateId: ev.updateId,
+          ledgerTxId: `swap:${legKey}:out`,
+          cantonUpdateId: updateId,
           status: 'COMPLETED',
           silent: true,
         });
@@ -384,8 +391,8 @@ export class BalanceEventHandlerService
           type: 'SWAP_OUT',
           description: `Swap sent ${leg.amount} ${leg.instrument} (OneSwap${leg.escrowId ? ` ${leg.escrowId}` : ''})`,
           referenceId: leg.receiver,
-          ledgerTxId: `${ev.updateId}:out:${leg.instrument.toLowerCase()}`,
-          cantonUpdateId: ev.updateId,
+          ledgerTxId: `swap:${legKey}:out:${leg.instrument.toLowerCase()}`,
+          cantonUpdateId: updateId,
           status: 'COMPLETED',
           silent: true,
         });

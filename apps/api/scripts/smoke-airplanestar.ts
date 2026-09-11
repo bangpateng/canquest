@@ -228,14 +228,24 @@ async function main(): Promise<void> {
   });
   const passIds = new Set(passingRows.map((r) => r.id));
   const hiddenRows = allSwapRows.filter((r) => !passIds.has(r.id));
+  // Yang BOLEH tersembunyi: (1) duplikat oneswap:*:out pra-migrasi,
+  // (2) 3 kaki jual token salah tabel (sudah diregenerasi dari raw layer).
+  const allowedHidden = (txId: string): boolean =>
+    txId.endsWith(':out') ||
+    [
+      'oneswap:esc_0f59377e51d6b9789c1a2297:in',
+      'oneswap:esc_b1db3c7ba64474c925809b8c:in',
+      'oneswap:esc_285ca74f3725ca1a88b8b008:in',
+    ].includes(txId);
   const unexpectedHidden = hiddenRows.filter(
-    (r) => !String(r.ledgerTxId ?? '').endsWith(':out'),
+    (r) => !allowedHidden(String(r.ledgerTxId ?? '')),
   );
   check(
     'S9',
     unexpectedHidden.length === 0,
     `baris swap tersembunyi: ${hiddenRows.length}/${allSwapRows.length} ` +
-      `(harus semuanya duplikat oneswap:*:out); tak terduga=${unexpectedHidden.length}`,
+      `(duplikat oneswap:*:out + 3 salah-tabel yang sudah diregenerasi); ` +
+      `tak terduga=${unexpectedHidden.length}`,
   );
 
   // ── S6: reassignment tidak bocor ke feed ──────────────────────────────────

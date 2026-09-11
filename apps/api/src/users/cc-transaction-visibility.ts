@@ -93,6 +93,24 @@ export const CC_TRANSACTION_HISTORY_WHERE: Prisma.CcTransactionWhereInput = {
           { ledgerTxId: { endsWith: ':out' } },
         ],
       },
+      /**
+       * Pra-perbaikan b518ceb (3 baris, 1 user): kaki jual TOKEN_TO_CC
+       * tertulis di tabel CC dengan denominsi CC ("−1.76 CC" padahal yang
+       * dijual USDCx). Kaki benar diregenerasi dari raw layer lewat penulis
+       * produksi (scripts/replay-swap-out-legs.ts) sebagai TokenTransaction
+       * ber-identitas ledger `swap:<esc>:out:<inst>`. Daftar eksplisit —
+       * sengaja TIDAK pola umum, supaya kaki jual CC yang sah tidak ikut
+       * tertelan.
+       */
+      {
+        ledgerTxId: {
+          in: [
+            'oneswap:esc_0f59377e51d6b9789c1a2297:in',
+            'oneswap:esc_b1db3c7ba64474c925809b8c:in',
+            'oneswap:esc_285ca74f3725ca1a88b8b008:in',
+          ],
+        },
+      },
     ],
   },
 };
