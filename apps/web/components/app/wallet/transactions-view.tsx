@@ -421,6 +421,9 @@ function txDisplayDescription(
   // Normalisasi deskripsi teknis era lama ke kosakata app.
   if (/^Swap received\b/.test(d)) return "Receive";
   if (/^Change from own transfer\b/.test(d)) return "Change";
+  // Label lock/unlock ringkas (baris lama menyimpan "CC Locked"/"CC Unlocked").
+  if (/^CC Locked\b/.test(d)) return "Lock";
+  if (/^CC Unlocked\b/.test(d)) return "Unlock";
   if (/^Received\b/.test(d)) return "Receive";
   if (/^Sent\b/.test(d)) return "Send";
   if (d) return d;

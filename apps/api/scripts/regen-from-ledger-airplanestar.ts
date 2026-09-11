@@ -299,9 +299,9 @@ async function main(): Promise<void> {
     // (feTidak menampilkan desc ini untuk CC_LOCK/CC_UNLOCK — lihat txDirection).
     const desc =
       f.kind === 'lock'
-        ? 'CC Locked'
+        ? 'Lock'
         : f.kind === 'unlock'
-          ? 'CC Unlocked'
+          ? 'Unlock'
           : f.isSwap
             ? 'Swap'
             : f.isChange

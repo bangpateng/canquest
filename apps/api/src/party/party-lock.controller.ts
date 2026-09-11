@@ -129,7 +129,7 @@ export class PartyLockController {
           userId: user.id,
           amountCc,
           type: 'CC_LOCK',
-          description: 'CC Locked',
+          description: 'Lock',
           referenceId: lockRow?.id,
           // ledgerTxId + cantonUpdateId = Canton update_id supaya link explorer jalan.
           // Fallback ke lockedAmuletCid (contract_id) bila updateId tidak ter-parse —
@@ -225,7 +225,7 @@ export class PartyLockController {
         userId: user.id,
         amountCc: Number(lock.amountCc),
         type: 'CC_UNLOCK',
-        description: 'CC Unlocked',
+        description: 'Unlock',
         referenceId: lock.id,
         ledgerTxId: result.updateId ?? undefined,
         cantonUpdateId: result.updateId ?? undefined,
