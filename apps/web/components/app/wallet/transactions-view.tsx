@@ -302,8 +302,16 @@ function txUsdAmount(tx: TxItem): { token: string; amount: number } | null {
  *  - token non-CC (amountDecimal + instrumentId) → "+5.0000 USDCx"
  *  - CC (default) → "+0.2000 CC" (microCC → CC)
  *  USD hanya muncul bila harga token tersedia (CBTC dll. otomatis tanpa USD). */
-function AmountText({ tx }: { tx: TxItem }) {
+function AmountText({
+  tx,
+  align = "left",
+}: {
+  tx: TxItem;
+  /** Perataan blok amount+USD. Mobile memakai "right"; tabel desktop "left". */
+  align?: "left" | "right";
+}) {
   const usd = txUsdAmount(tx);
+  const box = align === "right" ? "block text-right" : "inline-block text-left";
   // Cancelled offer (reject/withdraw) — tampilkan amount ASLI yang dibatalkan.
   // Saldo tidak bergerak (amount=0), jadi pakai cancelledAmountCc/cancelledAmount.
   if (CANCELLED_TX_TYPES.has(tx.type)) {
@@ -320,8 +328,8 @@ function AmountText({ tx }: { tx: TxItem }) {
       ? tx.cancelledInstrumentId ?? tx.instrumentId ?? "token"
       : "CC";
     return (
-      <span className="inline-block text-left">
-        <span>
+      <span className={box}>
+        <span className={align === "right" ? "block" : undefined}>
           {"\u2212"}
           {amt.toFixed(4)} {label}
         </span>
@@ -344,8 +352,8 @@ function AmountText({ tx }: { tx: TxItem }) {
     const tokenAmt = Math.abs(Number(tx.amountDecimal ?? "0"));
     const sign = tx.type === "SWAP_OUT" ? "\u2212" : "+";
     return (
-      <span className="inline-block text-left">
-        <span>
+      <span className={box}>
+        <span className={align === "right" ? "block" : undefined}>
           {sign}
           {tokenAmt.toFixed(4)} {tx.instrumentId}
         </span>
@@ -363,8 +371,8 @@ function AmountText({ tx }: { tx: TxItem }) {
   if (isTokenAmountTx(tx)) {
     const tokenAmt = Math.abs(Number(tx.amountDecimal ?? "0"));
     return (
-      <span className="inline-block text-left">
-        <span>
+      <span className={box}>
+        <span className={align === "right" ? "block" : undefined}>
           {amountSign(tx.type)}
           {tokenAmt.toFixed(4)} {tx.instrumentId}
         </span>
@@ -380,8 +388,8 @@ function AmountText({ tx }: { tx: TxItem }) {
   }
   const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
   return (
-    <span className="inline-block text-left">
-      <span>
+    <span className={box}>
+      <span className={align === "right" ? "block" : undefined}>
         {amountSign(tx.type)}
         {ccAmt.toFixed(4)} CC
       </span>
@@ -707,7 +715,7 @@ export function TransactionsView({
                              amountColor(tx.type),
                            )}
                          >
-                           <AmountText tx={tx} />
+                           <AmountText tx={tx} align="right" />
                          </p>
                        </div>
                     </button>
