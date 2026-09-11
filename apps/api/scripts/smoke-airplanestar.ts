@@ -179,7 +179,9 @@ async function main(): Promise<void> {
         ? Number(it.amountMicroCc ?? NaN) / 1_000_000
         : Number(it.amountDecimal ?? NaN);
       const led = String(it.ledgerTxId ?? '');
-      const isCanonical = /^[0-9a-f]{16,}/i.test(led) && /^Swap /.test(String(it.description ?? ''));
+      // Kanonis = identitas ledger asli (updateId). Deskripsi tidak lagi
+      // disyaratkan berawalan "Swap " — skema app memakai "Swap" ringkas.
+      const isCanonical = /^[0-9a-f]{16,}/i.test(led);
       if (
         String(it.type) === 'SWAP_OUT' &&
         Number.isFinite(amt) &&
