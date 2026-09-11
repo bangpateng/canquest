@@ -38,6 +38,16 @@ export function isSelfReferenceWssRow(
  *   2. description prefix "Platform fee" — backward-compat untuk baris lama.
  *   3. description "Sent N CC claim fee" — claim-fee rows (FCFS/raffle/code) yang ditulis
  *      di quests.service.collectClaimFee.
+ *   4. `oneswap:<esc>:out` pra-migrasi — baris sintetis SWAP_IN controller yang duplikat
+ *      baris delivery WSS (atau artefak token-as-CC). WSS kini menulis KEDUA kaki dengan
+ *      identitas ledger, jadi duplikatnya disembunyikan agar satu swap tetap dua kaki.
+ *      Baris `oneswap:*:in` (kaki jual lama) TETAP tampil — satu-satunya catatan
+ *      penjualan historis pra-migrasi.
+ *
+ * NULL-SAFE (fix 2026-09-11): `NOT (NULL OR false …)` = NULL di SQL tiga-nilai — bentuk
+ * lama membuang diam-diam SEMUA baris ber-referenceId NULL (156/297 baris, termasuk
+ * hasil WSS: pengirim luar tidak dikenal, dan leg swap). Baris tanpa referenceId
+ * diberi jalur eksplisit; seleksi fee tetap berlaku untuk baris ber-referenceId.
  *
  * Baris transfer normal TIDAK terkena kondisi ini. Penerima = party fee ditangani tambahan
  * secara post-query via isFeePartyRecipient() (lihat bawah), karena penerima disimpan
@@ -46,22 +56,43 @@ export function isSelfReferenceWssRow(
 export const CC_TRANSACTION_HISTORY_WHERE: Prisma.CcTransactionWhereInput = {
   NOT: {
     OR: [
-      /** Fee marker (A3) — penanda tahan banting yang ditulis di party.controller.ts. */
-      { referenceId: { startsWith: 'fee:' } },
-      /** Legacy fee rows: deskripsi diawali "Platform fee". */
-      { description: { startsWith: 'Platform fee' } },
-      /** Claim-fee rows: "Sent N CC claim fee" (FCFS / raffle / code claim). */
-      { description: { contains: ' CC claim fee' } },
       /**
-       * Inbound-sync artifacts: baris TRANSFER_IN yang dibuat cc-inbound-sync.service
-       * saat balance on-chain naik. referenceId di-set ke partyId user sendiri (balance
-       * API tidak tahu pengirim asli), jadi tampil sebagai "From (You) → To (You)" yang
-       * membingungkan. Transfer masuk asli dari pihak lain sudah tampil di on-chain
-       * history (Modo API) dengan sender/receiver yang benar, jadi row DB ini redundan
-       * + menyesatkan. Balance tetap di-update akurat oleh sync; hanya display yang
-       * disembunyikan.
+       * NULL-SAFE (fix 2026-09-11): `referenceId` dan `ledgerTxId` nullable.
+       * SQL `NOT(NULL LIKE 'fee:%' OR …)` = NULL → baris ber-referenceId NULL
+       * (hasil WSS: pengirim luar tak dikenal, dan leg swap) terbuang diam-
+       * diam — 156/297 baris. Setiap kondisi atas kolom nullable diberi guard
+       * `IS NOT NULL` agar bernilai false (bukan NULL) untuk baris tersebut.
        */
-      { ledgerTxId: { startsWith: 'inbound-sync:' } },
+      {
+        AND: [
+          { referenceId: { not: null } },
+          { referenceId: { startsWith: 'fee:' } },
+        ],
+      },
+      /** description NOT NULL di schema → aman tanpa guard. */
+      { description: { startsWith: 'Platform fee' } },
+      { description: { contains: ' CC claim fee' } },
+      {
+        AND: [
+          { ledgerTxId: { not: null } },
+          { ledgerTxId: { startsWith: 'inbound-sync:' } },
+        ],
+      },
+      /**
+       * Pra-migrasi: `oneswap:<esc>:out` — baris sintetis SWAP_IN controller.
+       * Duplikat baris delivery WSS (TRANSFER_IN dengan updateId asli) atau
+       * artefak token-as-CC. WSS kini menulis KEDUA kaki dengan identitas
+       * ledger; sembunyikan agar satu swap tetap dua kaki seperti di explorer.
+       * Baris `oneswap:*:in` (kaki jual lama) TETAP tampil — satu-satunya
+       * catatan penjualan historis pra-migrasi.
+       */
+      {
+        AND: [
+          { ledgerTxId: { not: null } },
+          { ledgerTxId: { startsWith: 'oneswap:' } },
+          { ledgerTxId: { endsWith: ':out' } },
+        ],
+      },
     ],
   },
 };
