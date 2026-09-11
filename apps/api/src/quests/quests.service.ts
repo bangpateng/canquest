@@ -53,6 +53,11 @@ import { withQuestMediaUrls } from '../storage/quest-media.util';
 import { parseQuestSocialLinks } from './quest-social-links.util';
 import { isFeeTransactionRow } from '../users/cc-transaction-visibility';
 import {
+  isSwapCcLeg,
+  swapCcLegMicro,
+  SWAP_ESCROW_PREFIX,
+} from '../common/swap-legs';
+import {
   startOfTodayUtc,
   ROLLING_24H_MS,
   isWithin24h,
@@ -5647,29 +5652,27 @@ export class QuestsService {
     userId: string,
     since: Date,
   ): Promise<number> {
-    const min = QuestsService.MIN_TASK_ACTION_MICRO_CC;
+    // SUMBER = history wallet (CcTransaction), satu baris = satu kaki CC swap.
+    // Kaki CC diidentifikasi dari referenceId party escrow OneSwap — penanda
+    // ledger-derived (lihat common/swap-legs.ts). Ini menangkap DUA arah:
+    //   - CC_TO_TOKEN : baris SWAP_OUT (CC dikirim ke escrow)
+    //   - TOKEN_TO_CC : baris TRANSFER_IN (CC diterima dari escrow)
+    // Menghitung dari tipe SWAP_IN/SWAP_OUT saja (versi lama) membuat swap
+    // TOKEN_TO_CC tidak terhitung, karena kaki masuknya bertipe TRANSFER_IN.
     const rows = await this.prisma.ccTransaction.findMany({
       where: {
         userId,
-        type: { in: ['SWAP_OUT', 'SWAP_IN'] },
         status: 'COMPLETED',
         createdAt: { gte: since },
-        // Kaki jual negatif: pakai OR karena Prisma where tidak punya ABS.
-        OR: [{ amountMicroCc: { gte: min } }, { amountMicroCc: { lte: -min } }],
-        AND: [
-          {
-            OR: [
-              // Baris baru: ditulis WSS, identitas = updateId ledger asli.
-              { cantonUpdateId: { not: null } },
-              // Baris legacy pra-migrasi (marker sintetis controller).
-              { ledgerTxId: { startsWith: 'oneswap:' } },
-            ],
-          },
-        ],
+        type: { in: ['SWAP_OUT', 'TRANSFER_IN'] },
+        referenceId: { startsWith: SWAP_ESCROW_PREFIX },
       },
-      select: { id: true },
+      select: { type: true, amountMicroCc: true, referenceId: true },
     });
-    return rows.length;
+    const min = BigInt(QuestsService.MIN_TASK_ACTION_MICRO_CC);
+    return rows.filter(
+      (r) => isSwapCcLeg(r) && swapCcLegMicro(r) >= min,
+    ).length;
   }
 
   /**
@@ -5900,13 +5903,43 @@ export class QuestsService {
   }
 
   /** Count locks the user CREATED today (lockedAt since 00:00 UTC). */
+  /**
+   * Hitung lock yang dibuat sejak `since`, dari HISTORY wallet sebagai sumber
+   * utama (CcTransaction CC_LOCK — punya updateId ledger asli), di-UNION dengan
+   * tabel metadata CcLock untuk lock lama yang belum punya baris history.
+   *
+   * Dedup: baris CcLock yang sudah diwakili baris history (history.referenceId
+   * = CcLock.id) tidak dihitung dua kali.
+   *
+   * Kenapa union: data produksi menunjukkan sebagian user punya puluhan lock di
+   * CcLock TANPA baris history (lock sebelum raw layer / bookkeeping gagal).
+   * Memakai history saja akan membuat task lock mereka gagal; memakai CcLock
+   * saja akan melewatkan lock yang history-nya ada tapi metadata-nya gagal tulis.
+   */
   private async countLocksCreatedToday(
     userId: string,
     since: Date,
   ): Promise<number> {
-    return this.prisma.ccLock.count({
-      where: { userId, lockedAt: { gte: since } },
+    const histRows = await this.prisma.ccTransaction.findMany({
+      where: {
+        userId,
+        type: 'CC_LOCK',
+        status: 'COMPLETED',
+        createdAt: { gte: since },
+      },
+      select: { referenceId: true },
     });
+    const linkedLockIds = histRows
+      .map((r) => r.referenceId)
+      .filter((v): v is string => !!v);
+    const legacy = await this.prisma.ccLock.count({
+      where: {
+        userId,
+        lockedAt: { gte: since },
+        ...(linkedLockIds.length > 0 ? { id: { notIn: linkedLockIds } } : {}),
+      },
+    });
+    return histRows.length + legacy;
   }
 
   /**
@@ -6118,6 +6151,10 @@ export class QuestsService {
       };
     }
     const tierSeconds = this.lockCcTierSeconds(params.target);
+    // Tier butuh DURASI lock; durasi hanya ada di metadata CcLock (history
+    // menyimpan jumlah + updateId, bukan lockSeconds). Jadi penentuan tier
+    // tetap membaca CcLock — sementara keberadaan lock-nya sendiri sudah
+    // tercatat di history (dipakai oleh hitungan harian di atas).
     const qualifying = await this.prisma.ccLock.findFirst({
       where: { userId: params.userId, lockSeconds: { gte: tierSeconds } },
       select: { id: true },

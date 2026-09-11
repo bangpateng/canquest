@@ -62,6 +62,8 @@ interface Fact {
   counterparty: string | null;
   isSwap: boolean;
   isChange: boolean;
+  /** cid LockedAmulet (khusus lock/unlock) — dipakai menautkan ke baris CcLock. */
+  lockCid?: string | null;
   type: string;
 }
 
@@ -175,7 +177,11 @@ async function main(): Promise<void> {
           ? `${up.updateId}:${lockMove.kind}`
           : `${up.updateId}:${lockMove.kind}:cc`,
         ts: up.effectiveAt,
-        counterparty: ALLOWED_PARTY, // dana sendiri → From/To = You
+        // referenceId lock/unlock DIISI di tahap tulis = CcLock.id (menyusul
+        // penulis produksi yang memakai referenceId: lockRow.id). Di sini
+        // simpan dulu cid LockedAmulet untuk lookup.
+        counterparty: null,
+        lockCid: lockMove.lockedAmuletCid,
         isSwap: false,
         isChange: false,
         type: lockMove.kind === 'lock' ? 'CC_LOCK' : 'CC_UNLOCK',
@@ -309,13 +315,28 @@ async function main(): Promise<void> {
               : f.kind === 'in'
                 ? 'Receive'
                 : 'Send';
+    // Lock/unlock: referenceId = CcLock.id (link ke metadata durasi), sama
+    // seperti penulis produksi. Dicari lewat lockedAmuletCid dari ledger.
+    let referenceId = f.counterparty;
+    if (f.lockCid) {
+      const lockRow = await prisma.ccLock.findFirst({
+        where: { userId: uid, lockedAmuletCid: f.lockCid },
+        select: { id: true },
+      });
+      referenceId = lockRow?.id ?? null;
+      if (!lockRow) {
+        console.log(
+          `  ! lock ${f.type} cid=${String(f.lockCid).slice(0, 14)} — CcLock tidak ditemukan (referenceId null)`,
+        );
+      }
+    }
     if (f.instrument.toUpperCase() === 'CC') {
       await users.recordTransaction({
         userId: uid,
         amountCc: signed,
         type: f.type as never,
         description: desc,
-        referenceId: f.counterparty,
+        referenceId,
         ledgerTxId: f.ledgerTxId,
         cantonUpdateId: f.updateId,
         status: 'COMPLETED',
@@ -338,7 +359,7 @@ async function main(): Promise<void> {
         amount: f.amount,
         type: f.type as never,
         description: desc,
-        referenceId: f.counterparty,
+        referenceId,
         ledgerTxId: f.ledgerTxId,
         cantonUpdateId: f.updateId,
         status: 'COMPLETED',
