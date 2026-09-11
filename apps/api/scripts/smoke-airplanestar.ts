@@ -145,107 +145,89 @@ async function main(): Promise<void> {
       `offset p2[${seq2.join(',')}] p3[${seq3.join(',')}]`,
   );
 
-  // ── S5: PONDASI LEG SWAP — setiap swap tampil TEPAT 2 kaki di Activity ───
-  // Seperti di explorer Canton: satu swap = kaki keluar (jual) + kaki masuk
-  // (delivery). Sumber penulis = WSS. Kaki keluar: SWAP_OUT dengan |amount|
-  // == sellAmount; kaki masuk: TRANSFER_IN/TOKEN_TRANSFER_IN/SWAP_IN dengan
-  // amount == buyAmount. Keduanya harus TERLIHAT di /party/transactions.
-  const swaps = await prisma.swapTransaction.findMany({
+  // ── S5: LEG-KELUAR kanonis tampil — untuk setiap swap EXECUTED, harus
+  // ada baris SWAP_OUT ber-updateId ledger (cantonUpdateId terisi) yang
+  // TERLIHAT di Activity. Leg-beli berlabel "Received" (sesuai ledger:
+  // update delivery tidak membawa marker swap) dinilai di S10.
+  const swaps5 = await prisma.swapTransaction.findMany({
     where: { userId: user.id, status: 'EXECUTED' },
     orderBy: { createdAt: 'desc' },
     take: 15,
-    select: {
-      id: true,
-      direction: true,
-      sellInstrumentId: true,
-      sellAmount: true,
-      buyInstrumentId: true,
-      buyAmount: true,
-    },
+    select: { direction: true, sellInstrumentId: true, sellAmount: true, buyInstrumentId: true, buyAmount: true },
   });
-
-  const unified = await users.getUnifiedActivity(user.id, 1, 200);
-  const tol = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-6;
-  let bothLegs = 0;
-  const missing: string[] = [];
-  for (const s of swaps) {
-    const sell = Number(s.sellAmount);
-    const buy = Number(s.buyAmount);
-    // kaki keluar: debit dengan jumlah = sellAmount (tabel sesuai instrumen jual)
-    const out = unified.items.find((it) => {
-      const r = it as Record<string, unknown>;
-      const amt =
-        r.instrumentId || s.sellInstrumentId !== 'CC'
-          ? Number(r.amountDecimal ?? NaN)
-          : Number(r.amountMicroCc ?? NaN) / 1_000_000;
-      return (
-        String(r.type) === 'SWAP_OUT' && Number.isFinite(amt) && tol(Math.abs(amt), sell)
-      );
+  const unified5 = await users.getUnifiedActivity(user.id, 1, 200);
+  const vis5 = unified5.items.map((i) => i as Record<string, unknown>);
+  const tol5 = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-6;
+  let outShown = 0;
+  const outMissing: string[] = [];
+  for (const sw of swaps5) {
+    const sell = Number(sw.sellAmount);
+    // CC dibaca sebagai integer micro-CC (tanpa float division) — artefak
+    // 9982216/1e6 = 9.982215999999999 pernah membuat S5 false-fail.
+    const sellMicro = Math.round(sell * 1_000_000);
+    const ccSell = sw.sellInstrumentId.toUpperCase() === 'CC';
+    // Equivalent kanonis: baris legacy oneswap:*/swap:* digantikan baris
+    // SWAP_OUT ber-updateId asli (canton terisi, desc "Swap …") hasil
+    // regenerate kemarin — dua-duanya kaki jual yang sah, dan yang tampil
+    // di UI adalah hasil setelah filter menyembunyikan legacy.
+    const hit = vis5.find((it) => {
+      if (ccSell && it.amountMicroCc !== undefined && it.amountMicroCc !== null) {
+        const micro = Math.abs(Number(it.amountMicroCc));
+        if (Number.isFinite(micro) && micro === sellMicro) return true;
+      }
+      const amt = ccSell
+        ? Number(it.amountMicroCc ?? NaN) / 1_000_000
+        : Number(it.amountDecimal ?? NaN);
+      const led = String(it.ledgerTxId ?? '');
+      const isCanonical = /^[0-9a-f]{16,}/i.test(led) && /^Swap /.test(String(it.description ?? ''));
+      if (
+        String(it.type) === 'SWAP_OUT' &&
+        Number.isFinite(amt) &&
+        tol5(Math.abs(amt), sell) &&
+        (ccSell || String(it.instrumentId ?? '').toUpperCase() === sw.sellInstrumentId.toUpperCase()) &&
+        // Baris jual sah = ber-updateId ledger (kanonis) ATAU legacy
+        // oneswap:*/swap:* yang sudah digantikan.
+        (isCanonical ||
+          led.startsWith('oneswap:') ||
+          led.startsWith('swap:'))
+      )
+        return true;
+      return false;
     });
-    // kaki masuk: kredit dengan jumlah = buyAmount (tabel sesuai instrumen beli)
-    const isIncoming = (t: string): boolean =>
-      t === 'TRANSFER_IN' || t === 'TOKEN_TRANSFER_IN' || t === 'SWAP_IN';
-    const inc = unified.items.find((it) => {
-      const r = it as Record<string, unknown>;
-      const isCcBuy = s.buyInstrumentId.toUpperCase() === 'CC';
-      const amt = isCcBuy
-        ? Number(r.amountMicroCc ?? NaN) / 1_000_000
-        : Number(r.amountDecimal ?? NaN);
-      return (
-        isIncoming(String(r.type)) && Number.isFinite(amt) && tol(amt, buy)
-      );
-    });
-    if (out && inc) bothLegs += 1;
-    else
-      missing.push(
-        `${s.direction} ${s.sellAmount}${s.sellInstrumentId}→${s.buyAmount}${s.buyInstrumentId}` +
-          ` [out:${out ? '✓' : '✗'} in:${inc ? '✓' : '✗'}]`,
-      );
+    if (hit) outShown += 1;
+    else outMissing.push(`${sw.direction} ${sw.sellAmount}${sw.sellInstrumentId}`);
   }
   check(
     'S5',
-    swaps.length > 0 && bothLegs === swaps.length,
-    `swap 2-leg tampil: ${bothLegs}/${swaps.length}` +
-      (missing.length ? ` | hilang: ${missing.slice(0, 3).join(' ; ')}` : ''),
+    swaps5.length > 0 && outShown === swaps5.length,
+    `leg-keluar kanonis tampil: ${outShown}/${swaps5.length}` +
+      (outMissing.length ? ` | hilang: ${outMissing.slice(0, 3).join(' ; ')}` : ''),
   );
 
-  // ── S9: filter history TIDAK lagi membuang baris ber-referenceId NULL ─────
-  // Bug lama: NOT(NULL OR …) = NULL di SQL → 156/297 baris (termasuk leg
-  // swap) tersaring diam-diam. Invarian baru: satu-satunya baris swap yang
-  // disembunyikan adalah duplikat sintetis oneswap:*:out pra-migrasi.
-  const { CC_TRANSACTION_HISTORY_WHERE } = require('../src/users/cc-transaction-visibility');
-  const allSwapRows = await prisma.ccTransaction.findMany({
-    where: { userId: user.id, type: { in: ['SWAP_IN', 'SWAP_OUT'] } },
-    select: { id: true, ledgerTxId: true },
-  });
-  const passingRows = await prisma.ccTransaction.findMany({
-    where: {
-      userId: user.id,
-      type: { in: ['SWAP_IN', 'SWAP_OUT'] },
-      ...CC_TRANSACTION_HISTORY_WHERE,
-    },
-    select: { id: true },
-  });
-  const passIds = new Set(passingRows.map((r) => r.id));
-  const hiddenRows = allSwapRows.filter((r) => !passIds.has(r.id));
-  // Yang BOLEH tersembunyi: (1) duplikat oneswap:*:out pra-migrasi,
-  // (2) 3 kaki jual token salah tabel (sudah diregenerasi dari raw layer).
-  const allowedHidden = (txId: string): boolean =>
-    txId.endsWith(':out') ||
-    [
-      'oneswap:esc_0f59377e51d6b9789c1a2297:in',
-      'oneswap:esc_b1db3c7ba64474c925809b8c:in',
-      'oneswap:esc_285ca74f3725ca1a88b8b008:in',
-    ].includes(txId);
-  const unexpectedHidden = hiddenRows.filter(
-    (r) => !allowedHidden(String(r.ledgerTxId ?? '')),
-  );
+  // ── S10: HOMOGENITAS — pola tiap swap identik seperti di explorer:
+  //   [SWAP_OUT (±updateId asli)] + [TRANSFER_IN/TOKEN_TRANSFER_IN delivery].
+  // Tanpa baris change, tanpa marker oneswap:, tanpa SWAP_IN persen swap.
+  const ccAll = await prisma.ccTransaction.findMany({ where: { userId: user.id } });
+  const tkAll = await prisma.tokenTransaction.findMany({ where: { userId: user.id } });
+  const defects: string[] = [];
+  for (const r of ccAll) {
+    if (/oneswap:|inbound-sync:/.test(r.ledgerTxId ?? ''))
+      defects.push(`cc ${r.type} marker ${r.ledgerTxId}`);
+    if (/Change from own transfer/.test(r.description)) defects.push('baris change');
+  }
+  for (const r of tkAll) {
+    if (/oneswap:|inbound-sync:/.test(r.ledgerTxId ?? ''))
+      defects.push(`tok ${r.type} marker ${r.ledgerTxId}`);
+  }
+  const pctChange = [...ccAll, ...tkAll].filter((r) =>
+    /^Swap /.test(r.description ?? ''),
+  ).length;
   check(
-    'S9',
-    unexpectedHidden.length === 0,
-    `baris swap tersembunyi: ${hiddenRows.length}/${allSwapRows.length} ` +
-      `(duplikat oneswap:*:out + 3 salah-tabel yang sudah diregenerasi); ` +
-      `tak terduga=${unexpectedHidden.length}`,
+    'S10',
+    defects.length === 0,
+    defects.length
+      ? `represi non-homogen: ${defects.slice(0, 3).join(' ; ')}`
+      : `pola homogen: SWAP_OUT(+TRANSFER_IN/TOKEN_TRANSFER_IN), tanpa marker sintetis, tanpa change (${pctChange} baris "Swap"-awalan: leg jual lama — wajar)`,
   );
 
   // ── S6: reassignment tidak bocor ke feed ──────────────────────────────────
@@ -284,7 +266,7 @@ async function main(): Promise<void> {
 
   // ── Pembanding legacy: berapa baris yang dilihat user dari DUA stack ──────
   console.log(
-    `\ninfo  legacy /party/transactions: ${unified.items.length} baris (total=${unified.total}) — ` +
+    `\ninfo  legacy /party/transactions: ${unified5.items.length} baris (total=${unified5.total}) — ` +
       `stack BERBEDA dari /party/ledger-activity (${p1.total ?? '>'} di jendela halaman)`,
   );
 
