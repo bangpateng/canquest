@@ -435,8 +435,7 @@ async function main(): Promise<void> {
     const byIdentity = rows.find(
       (r) =>
         unmatched.has(r.id) &&
-        (r.ledgerTxId === f.ledgerTxId ||
-          normTxId(r.ledgerTxId) === normTxId(f.ledgerTxId)),
+        normTxId(r.ledgerTxId) === normTxId(f.ledgerTxId),
     );
     if (byIdentity) {
       unmatched.delete(byIdentity.id);
@@ -633,14 +632,19 @@ async function main(): Promise<void> {
     // → dihapus. Hanya baris ber-desc "(on-chain)" milik wallet ini.
     for (const r of rows) {
       if (!/\(on-chain\)$/.test(r.description)) continue;
-      const hasFact = factsDeduped.some(
-        (f) =>
-          f.instrument.toUpperCase() === r.instrument.toUpperCase() &&
-          Math.sign(f.amount) === Math.sign(r.amount) &&
-          Math.abs(Math.abs(f.amount) - Math.abs(r.amount)) <= TOL &&
-          f.ts !== null &&
-          Math.abs(r.createdAt.getTime() - f.ts.getTime()) <= WINDOW_MS,
-      );
+      // hasFact: identitas ledgerTxId DULU (baris hasil insert rekonstruksi
+      // punya createdAt = waktu tulis, bukan waktu event), lalu fallback
+      // amount+arah+waktu utk baris legacy.
+      const hasFact =
+        factsDeduped.some((f) => f.ledgerTxId === r.ledgerTxId) ||
+        factsDeduped.some(
+          (f) =>
+            f.instrument.toUpperCase() === r.instrument.toUpperCase() &&
+            Math.sign(f.amount) === Math.sign(r.amount) &&
+            Math.abs(Math.abs(f.amount) - Math.abs(r.amount)) <= TOL &&
+            f.ts !== null &&
+            Math.abs(r.createdAt.getTime() - f.ts.getTime()) <= WINDOW_MS,
+        );
       if (hasFact) continue;
       if (r.table === 'cc') {
         await prisma.ccTransaction.delete({ where: { id: r.id } });
