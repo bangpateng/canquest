@@ -228,6 +228,10 @@ function factsFromEnvelope(
         ? (meta['splice.lfdecentralizedtrust.org/reason'] as string)
         : null;
     const isSwap = /OneSwap esc_[0-9a-fA-F]+/.test(reason);
+    // ARAH KETAT: fakta wallet HANYA bila party adalah peserta transfer.
+    // sender == party → OUT; receiver == party → IN; transfer pihak ketiga
+    // (fee orang lain, dsb — party cuma witness) → BUKAN fakta wallet ini.
+    if (sender !== party && receiver !== party) continue;
     const kind: 'in' | 'out' = sender === party ? 'out' : 'in';
     const isCc = instrument.toUpperCase() === 'CC';
     const counterparty = kind === 'out' ? receiver : sender;
@@ -623,6 +627,28 @@ async function main(): Promise<void> {
       }
       removed += 1;
       console.log(`  − phantom dihapus: ${p.type} ${p.amount} ${p.instrument} led=${String(p.ledgerTxId ?? '').slice(0, 26)}`);
+    }
+    // Baris hasil rekonstruksi sebelumnya yang TIDAK match fakta manapun =
+    // salah arah (mis. fee pihak ketiga yang di-insert sebagai "Received")
+    // → dihapus. Hanya baris ber-desc "(on-chain)" milik wallet ini.
+    for (const r of rows) {
+      if (!/\(on-chain\)$/.test(r.description)) continue;
+      const hasFact = factsDeduped.some(
+        (f) =>
+          f.instrument.toUpperCase() === r.instrument.toUpperCase() &&
+          Math.sign(f.amount) === Math.sign(r.amount) &&
+          Math.abs(Math.abs(f.amount) - Math.abs(r.amount)) <= TOL &&
+          f.ts !== null &&
+          Math.abs(r.createdAt.getTime() - f.ts.getTime()) <= WINDOW_MS,
+      );
+      if (hasFact) continue;
+      if (r.table === 'cc') {
+        await prisma.ccTransaction.delete({ where: { id: r.id } });
+      } else {
+        await prisma.tokenTransaction.delete({ where: { id: r.id } });
+      }
+      removed += 1;
+      console.log(`  − salah-arah dihapus: ${r.type} ${r.amount} ${r.instrument} "${r.description.slice(0, 40)}" led=${String(r.ledgerTxId ?? '').slice(0, 20)}…`);
     }
     for (const d of duplicates.filter((x) => x.row.visible)) {
       if (d.row.table === 'cc') {
