@@ -183,8 +183,10 @@ export function TransactionDetailContent({
   const cancelledLabel = isCancelledToken
     ? detail.cancelledInstrumentId ?? detail.instrumentId ?? "token"
     : "CC";
-  // Debit (negatif): TRANSFER_OUT, TOKEN_TRANSFER_OUT & CC_LOCK.
-  const isDebit = isOut || isTokenOut || isLock;
+  // Debit (negatif): TRANSFER_OUT, TOKEN_TRANSFER_OUT, CC_LOCK, dan SWAP_OUT
+  // (kaki keluar swap — sebelumnya terlewat sehingga detail swap keluar
+  // tampil hijau/plus).
+  const isDebit = isOut || isTokenOut || isLock || detail.type === "SWAP_OUT";
   // Token non-CC: amount sudah unit asli (amountDecimal), suffix = instrumentId.
   const isTokenAmountTx =
     isTokenTransfer &&

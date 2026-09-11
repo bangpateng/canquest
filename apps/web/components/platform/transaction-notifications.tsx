@@ -404,6 +404,8 @@ export function TransactionNotifications() {
       case "TOKEN_TRANSFER_OUT":
         return <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />;
       case "TOKEN_TRANSFER_IN":
+      case "SWAP_IN":
+        // Kaki masuk (termasuk delivery swap) = penerimaan → ikon masuk hijau.
         return <Coins className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
       case "CC_LOCK":
         return <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />;
@@ -419,8 +421,8 @@ export function TransactionNotifications() {
         return <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />;
       case "PREAPPROVAL_DISABLED":
         return <ShieldOff className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />;
-      case "SWAP_IN":
       case "SWAP_OUT":
+        // Hanya kaki keluar yang berlabel/ber-ikon Swap.
         return <ArrowLeftRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />;
       default:
         return <ArrowDownLeft className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;

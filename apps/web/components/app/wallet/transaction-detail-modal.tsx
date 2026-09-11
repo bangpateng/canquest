@@ -35,12 +35,14 @@ export function TransactionDetailModal({
   if (!open) return null;
 
   // Decide direction from the detail. Defaults to "sent" until detail loads
-  // (most modal openers are post-send), but flips to "received" for TRANSFER_IN / TOKEN_TRANSFER_IN.
+  // (most modal openers are post-send). Footer skema label app: kaki masuk =
+  // TRANSFER_IN / TOKEN_TRANSFER_IN / SWAP_IN; kaki keluar (SWAP_OUT) = "Send".
   const isIn =
     detail?.type === "TRANSFER_IN" ||
-    detail?.type === "TOKEN_TRANSFER_IN";
+    detail?.type === "TOKEN_TRANSFER_IN" ||
+    detail?.type === "SWAP_IN";
 
-  const headerTitle = title ?? (isIn ? "Transfer received" : "Transfer sent");
+  const headerTitle = title ?? (isIn ? "Receive" : "Send");
   const headerSubtitle = subtitle ?? "";
 
   return (

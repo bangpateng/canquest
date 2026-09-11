@@ -121,14 +121,6 @@ const CANCELLED_TX_TYPES: ReadonlySet<TxItem["type"]> = new Set([
   "TOKEN_OFFER_WITHDRAWN",
 ]);
 
-/** Semua type token non-CC (CIP-0056). */
-const TOKEN_TX_TYPES: ReadonlySet<TxItem["type"]> = new Set([
-  "TOKEN_TRANSFER_IN",
-  "TOKEN_TRANSFER_OUT",
-  "TOKEN_OFFER_REJECTED",
-  "TOKEN_OFFER_WITHDRAWN",
-]);
-
 /** Kaki swap — CC (SWAP_IN/OUT, instrumentId null) maupun token (SWAP_IN/OUT
  *  + instrumentId terisi, migration 20260908160000). Kuning + ikon swap. */
 function isSwapTx(tx: TxItem): boolean {
@@ -186,11 +178,13 @@ function TxTypeIcon({ type }: { type: TxItem["type"] }) {
     case "AIRDROP":
       return <Gift className="h-4 w-4" />;
     case "SWAP_OUT":
-    case "SWAP_IN":
+      // Hanya kaki keluar swap yang ber-ikon swap.
       return <ArrowLeftRight className="h-4 w-4" />;
     case "TOKEN_TRANSFER_OUT":
       return <ArrowUpRight className="h-4 w-4" />;
     case "TOKEN_TRANSFER_IN":
+    case "SWAP_IN":
+      // Kaki masuk swap = penerimaan (ikon masuk).
       return <Coins className="h-4 w-4" />;
     default:
       return <Zap className="h-4 w-4" />;
@@ -225,9 +219,7 @@ function txIconBg(type: TxItem["type"]): string {
     case "AIRDROP":
       return "bg-canton-subtle text-canton-muted ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "SWAP_OUT":
-    case "SWAP_IN":
-      // Kaki swap (CC maupun token) — KUNING (approved kepala proyek 2026-09-08).
-      // Beda dari receive hijau / send merah supaya putaran swap kebaca 1 bahasa.
+      // Kaki KELUAR swap — KUNING (satu-satunya yang berlabel Swap).
       return "bg-amber-500/15 text-amber-600 ring-1 ring-amber-500/25";
     default:
       return "bg-[var(--muted)] text-[var(--muted-foreground)]";
@@ -237,8 +229,9 @@ function txIconBg(type: TxItem["type"]): string {
 function amountColor(type: TxItem["type"]): string {
   // Toggle (amount 0) → muted netral.
   if (TOGGLE_TX_TYPES.has(type)) return "text-[var(--muted-foreground)]";
-  // Kaki swap → amber (sama bahasa dengan ikon).
-  if (type === "SWAP_OUT" || type === "SWAP_IN") return "text-amber-600";
+  // Kaki KELUAR swap → amber (sama bahasa dengan ikon). Kaki masuk = credit
+  // biasa (hijau) karena keputusan app: hanya OUT yang berlabel Swap.
+  if (type === "SWAP_OUT") return "text-amber-600";
   // CC_LOCK = debit (amber, netral — bukan merah transfer).
   if (type === "CC_LOCK") return "text-orange-600";
   // Debit (keluar): muted, bukan merah.
@@ -398,18 +391,6 @@ function AmountText({ tx }: { tx: TxItem }) {
       ) : null}
     </span>
   );
-}
-
-function txDisplayTitle(tx: TxItem, fallback: string): string {
-  const d = tx.description?.trim() ?? "";
-  if (d.startsWith("Sent ") || d.startsWith("Received ")) {
-    return d;
-  }
-  // Lock/unlock sudah punya judul deskriptif ("CC Locked" / "CC Unlocked").
-  if (tx.type === "CC_LOCK" || tx.type === "CC_UNLOCK") {
-    return d || fallback;
-  }
-  return fallback;
 }
 
 /** Label description untuk Activity. Description user/memo diprioritaskan;
