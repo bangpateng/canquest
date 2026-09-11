@@ -3,7 +3,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Ban, Check, Copy, ExternalLink, Lock, LockOpen, Zap } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Ban, Check, Copy, ExternalLink, Lock, LockOpen, Zap } from "lucide-react";
 
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -148,14 +148,17 @@ export function TransactionDetailContent({
 
   const ccAmt = microCcToCc(detail.amountMicroCc);
   const isOut = detail.type === "TRANSFER_OUT";
-  const isIn = detail.type === "TRANSFER_IN";
+  // Kaki masuk (transfer maupun hasil swap) → satu bahasa: panah hijau.
+  const isIn = detail.type === "TRANSFER_IN" || detail.type === "SWAP_IN";
   const isLock = detail.type === "CC_LOCK";
   const isUnlock = detail.type === "CC_UNLOCK";
   // Token non-CC (CIP-0056 P2P transfer, mis. USDCx).
   const isTokenOut = detail.type === "TOKEN_TRANSFER_OUT";
   const isTokenIn = detail.type === "TOKEN_TRANSFER_IN";
   const isTokenTransfer = isTokenOut || isTokenIn;
-  const isTransfer = isOut || isIn || isTokenTransfer;
+  // Swap (CC maupun token) juga pergerakan transfer → tampilkan From/To.
+  const isSwap = detail.type === "SWAP_IN" || detail.type === "SWAP_OUT";
+  const isTransfer = isOut || isIn || isTokenTransfer || isSwap;
   // Toggle onchain (reject/withdraw/preapproval, CC maupun token) — amount 0, netral.
   const isToggle =
     detail.type === "OFFER_REJECTED" ||
@@ -188,8 +191,8 @@ export function TransactionDetailContent({
   // tampil hijau/plus).
   const isDebit = isOut || isTokenOut || isLock || detail.type === "SWAP_OUT";
   // Token non-CC: amount sudah unit asli (amountDecimal), suffix = instrumentId.
+  // Termasuk kaki swap token (SWAP_IN/SWAP_OUT + instrumentId).
   const isTokenAmountTx =
-    isTokenTransfer &&
     detail.instrumentId != null &&
     detail.instrumentId !== "Amulet" &&
     detail.amountDecimal != null;
@@ -270,9 +273,11 @@ export function TransactionDetailContent({
                 ? "bg-[var(--muted)] text-[var(--muted-foreground)]"
                 : isLock
                   ? "bg-amber-500/15 text-amber-600"
-                  : isUnlock || isIn || isTokenIn
-                    ? "bg-green-500/15 text-green-600"
-                    : "bg-red-500/15 text-red-600",
+                  : detail.type === "SWAP_OUT"
+                    ? "bg-amber-500/15 text-amber-600"
+                    : isUnlock || isIn || isTokenIn
+                      ? "bg-green-500/15 text-green-600"
+                      : "bg-red-500/15 text-red-600",
             )}
             aria-hidden
           >
@@ -281,7 +286,10 @@ export function TransactionDetailContent({
             ) : isUnlock ? (
               <LockOpen className="h-5 w-5" />
             ) : isIn || isTokenIn ? (
+              // Semua dana masuk (transfer maupun hasil swap) — panah hijau.
               <ArrowDownLeft className="h-5 w-5" />
+            ) : detail.type === "SWAP_OUT" ? (
+              <ArrowLeftRight className="h-5 w-5" />
             ) : isOut || isTokenOut ? (
               <ArrowUpRight className="h-5 w-5" />
             ) : (
@@ -296,7 +304,7 @@ export function TransactionDetailContent({
                 ? "text-[var(--muted-foreground)]"
                 : isLock
                   ? "text-amber-600"
-                  : isOut
+                  : isDebit
                     ? "text-red-600"
                     : "text-green-600",
             )}

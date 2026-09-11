@@ -8,7 +8,6 @@ import {
   ArrowLeftRight,
   Ban,
   Bell,
-  Coins,
   Lock,
   LockOpen,
   ShieldCheck,
@@ -257,12 +256,13 @@ function NotificationRow({ item }: { item: NotificationItem }) {
         className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--primary)]/8"
       >
         <span className={iconClass}>
-          {tx.type === "SWAP_IN" || tx.type === "SWAP_OUT" ? (
+          {tx.type === "SWAP_OUT" ? (
             <ArrowLeftRight className="h-4 w-4" aria-hidden />
-          ) : tx.type === "TRANSFER_IN" ? (
+          ) : tx.type === "TRANSFER_IN" ||
+            tx.type === "TOKEN_TRANSFER_IN" ||
+            tx.type === "SWAP_IN" ? (
+            // Semua dana masuk (transfer maupun hasil swap) — panah hijau.
             <ArrowDownLeft className="h-4 w-4" aria-hidden />
-          ) : tx.type === "TOKEN_TRANSFER_IN" ? (
-            <Coins className="h-4 w-4" aria-hidden />
           ) : tx.type === "TRANSFER_OUT" || tx.type === "TOKEN_TRANSFER_OUT" ? (
             <ArrowUpRight className="h-4 w-4" aria-hidden />
           ) : tx.type === "CC_LOCK" ? (
@@ -403,10 +403,11 @@ export function TransactionNotifications() {
       case "TRANSFER_OUT":
       case "TOKEN_TRANSFER_OUT":
         return <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />;
+      case "TRANSFER_IN":
       case "TOKEN_TRANSFER_IN":
       case "SWAP_IN":
-        // Kaki masuk (termasuk delivery swap) = penerimaan → ikon masuk hijau.
-        return <Coins className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
+        // Semua dana masuk (transfer maupun hasil swap) — panah hijau.
+        return <ArrowDownLeft className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
       case "CC_LOCK":
         return <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />;
       case "CC_UNLOCK":

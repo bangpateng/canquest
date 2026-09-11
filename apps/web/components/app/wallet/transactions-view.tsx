@@ -182,10 +182,11 @@ function TxTypeIcon({ type }: { type: TxItem["type"] }) {
       return <ArrowLeftRight className="h-4 w-4" />;
     case "TOKEN_TRANSFER_OUT":
       return <ArrowUpRight className="h-4 w-4" />;
+    case "TRANSFER_IN":
     case "TOKEN_TRANSFER_IN":
     case "SWAP_IN":
-      // Kaki masuk swap = penerimaan (ikon masuk).
-      return <Coins className="h-4 w-4" />;
+      // Dana masuk (transfer maupun hasil swap) — SATU bahasa: panah hijau.
+      return <ArrowDownLeft className="h-4 w-4" />;
     default:
       return <Zap className="h-4 w-4" />;
   }
@@ -198,6 +199,8 @@ function txIconBg(type: TxItem["type"]): string {
       return "bg-red-500/10 text-red-600 ring-1 ring-red-500/15";
     case "TRANSFER_IN":
     case "TOKEN_TRANSFER_IN":
+    case "SWAP_IN":
+      // Semua dana masuk — hijau (panah hijau konsisten).
       return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "CC_LOCK":
       // Netral/amber — BUKAN merah transfer (dana dikunci, bukan keluar).
