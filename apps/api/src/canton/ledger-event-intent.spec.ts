@@ -11,6 +11,7 @@ import {
   isNonValueKind,
   transientContractIds,
   readSwapOutLeg,
+  isSelfFundsMovement,
   LEDGER_META,
 } from './ledger-event-intent';
 import type { CantonUpdateEvent } from './canton-updates.service';
@@ -360,5 +361,32 @@ describe('readLedgerIntent — sumber sender urutan parser resmi', () => {
       }),
     );
     expect(intent.sender).toBeNull();
+  });
+});
+
+describe('isSelfFundsMovement', () => {
+  it('unlock/expire acted by party → true (dana sendiri)', () => {
+    expect(
+      isSelfFundsMovement(
+        [{ choice: 'LockedAmulet_OwnerExpireLockV2', actingParties: [USER] }],
+        USER,
+      ),
+    ).toBe(true);
+    expect(
+      isSelfFundsMovement(
+        [{ choice: 'LockedAmulet_UnlockV2', actingParties: [USER, 'DSO::x'] }],
+        USER,
+      ),
+    ).toBe(true);
+  });
+
+  it('choice lain / aktor bukan party → false', () => {
+    expect(
+      isSelfFundsMovement([{ choice: 'TransferFactory_Transfer', actingParties: [USER] }], USER),
+    ).toBe(false);
+    expect(
+      isSelfFundsMovement([{ choice: 'LockedAmulet_UnlockV2', actingParties: ['DSO::x'] }], USER),
+    ).toBe(false);
+    expect(isSelfFundsMovement(undefined, USER)).toBe(false);
   });
 });

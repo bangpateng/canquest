@@ -30,6 +30,7 @@ import {
   readLedgerIntent,
   readSwapOutLeg,
   transientContractIds,
+  isSelfFundsMovement,
 } from '../src/canton/ledger-event-intent';
 import { UsersService } from '../src/users/users.service';
 import { PointsService } from '../src/users/points.service';
@@ -200,7 +201,12 @@ async function main(): Promise<void> {
         updateId: up.updateId,
         ledgerTxId,
         ts: up.effectiveAt,
-        counterparty: sender && sender !== ALLOWED_PARTY ? sender : null,
+        // Selaras penulis produksi: referenceId = sender ledger APA ADANYA
+        // (termasuk diri sendiri untuk change/unlock) — supaya detail From/To
+        // menampilkan "You", bukan kosong.
+        counterparty:
+          sender ??
+          (isSelfFundsMovement(ev.exercised, ALLOWED_PARTY) ? ALLOWED_PARTY : null),
         isSwap: false,
         isChange,
         type: isCc ? 'TRANSFER_IN' : 'TOKEN_TRANSFER_IN',

@@ -203,14 +203,17 @@ export function TransactionDetailContent({
 
   // From / To use the REAL sender/receiver addresses. We only tag the one that
   // matches the user's party as "(You)" — never default both to the user.
-  // Token transfer juga diperlakukan seperti CC transfer (direction sama).
+  // Token transfer DAN kaki swap diperlakukan sama: SWAP_OUT = keluar
+  // (From=You, To=escrow), SWAP_IN = masuk (From=escrow, To=You).
+  const isOutbound = isOut || isTokenOut || detail.type === "SWAP_OUT";
+  const inbound = isIn || isTokenIn || detail.type === "SWAP_IN";
   const fromAddress =
     detail.senderAddress ??
-    (isOut || isTokenOut ? ownAddress : detail.counterparty) ??
+    (isOutbound ? ownAddress : detail.counterparty) ??
     null;
   const toAddress =
     detail.receiverAddress ??
-    (isIn || isTokenIn ? ownAddress : detail.counterparty) ??
+    (inbound ? ownAddress : detail.counterparty) ??
     null;
 
   // Tx ID untuk copy — HANYA id on-chain real (event/update/contract id).

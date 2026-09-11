@@ -302,3 +302,30 @@ export function transientContractIds(
   }
   return transient;
 }
+
+/**
+ * Choice yang menandakan dana MILIK PARTY SENDIRI berpindah status (bukan
+ * transfer dari/ke pihak lain):
+ *   - LockedAmulet_UnlockV2          : lock dibuka (atas permintaan party)
+ *   - LockedAmulet_OwnerExpireLockV2 : lock kedaluwarsa → dana kembali
+ * Ledger menegaskannya lewat `actingParties` party itu sendiri. Dipakai untuk
+ * mengisi counterparty SELF (bukan null) sehingga From/To menampilkan "You",
+ * bukan kosong. Bukan tebakan: syaratnya choice + actor ledger.
+ */
+const SELF_FUNDS_CHOICES: ReadonlySet<string> = new Set([
+  'LockedAmulet_UnlockV2',
+  'LockedAmulet_OwnerExpireLockV2',
+]);
+
+/** True bila update ini memindahkan dana party itu sendiri (unlock/expire). */
+export function isSelfFundsMovement(
+  exercised: ReadonlyArray<{ choice?: string; actingParties?: string[] }> | undefined,
+  party: string,
+): boolean {
+  return (exercised ?? []).some(
+    (ex) =>
+      !!ex?.choice &&
+      SELF_FUNDS_CHOICES.has(ex.choice) &&
+      (ex.actingParties ?? []).includes(party),
+  );
+}

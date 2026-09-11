@@ -55,6 +55,7 @@ import {
   hasSwapMarker,
   transientContractIds,
   readSwapOutLeg,
+  isSelfFundsMovement,
   type LedgerEventIntent,
 } from './ledger-event-intent';
 
@@ -574,7 +575,11 @@ export class BalanceEventHandlerService
         // 1 updateId = 1 ledgerTxId → race controller-vs-handler ditendang oleh
         // @@unique([userId, ledgerTxId]) (P2002 di-swallow di bawah).
         // Kaki swap: ref = sender ledger (escrow) bila teridentifikasi.
-        referenceId: senderPartyId,
+        // Self-movement (unlock / lock kedaluwarsa): dana milik party sendiri →
+        // ref = party itu sendiri supaya From/To menampilkan "You", bukan kosong.
+        referenceId:
+          senderPartyId ??
+          (isSelfFundsMovement(exercised, ownerPartyId) ? ownerPartyId : null),
         ledgerTxId: updateId,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
