@@ -375,7 +375,7 @@ export class BalanceEventHandlerService
           userId: user.userId,
           amountCc: Number(leg.amount),
           type: 'SWAP_OUT',
-          description: `Swap sent ${leg.amount} ${leg.instrument ?? 'CC'} (OneSwap${leg.escrowId ? ` ${leg.escrowId}` : ''})`,
+          description: 'Swap',
           referenceId: leg.receiver,
           ledgerTxId: `swap:${legKey}:out`,
           cantonUpdateId: updateId,
@@ -389,7 +389,7 @@ export class BalanceEventHandlerService
           instrumentId: leg.instrument,
           instrumentAdmin: leg.instrumentAdmin,
           type: 'SWAP_OUT',
-          description: `Swap sent ${leg.amount} ${leg.instrument} (OneSwap${leg.escrowId ? ` ${leg.escrowId}` : ''})`,
+          description: 'Swap',
           referenceId: leg.receiver,
           ledgerTxId: `swap:${legKey}:out:${leg.instrument.toLowerCase()}`,
           cantonUpdateId: updateId,
@@ -563,12 +563,10 @@ export class BalanceEventHandlerService
       await this.users.recordTransaction({
         userId: user.userId,
         amountCc: totalAmount,
-        type: isSwapIn ? 'SWAP_IN' : 'TRANSFER_IN',
-        description: isSwapIn
-          ? `Swap received ${totalAmount.toFixed(6)} CC (OneSwap)`
-          : isSelfChange
-            ? `Change from own transfer ${totalAmount.toFixed(6)} CC (on-chain)`
-            : `Received ${totalAmount.toFixed(6)} CC (on-chain)`,
+        // KEPUTUSAN APP: hanya kaki KELUAR swap yang berlabel Swap. Delivery
+        // masuk (termasuk dari escrow) = penerimaan biasa → TRANSFER_IN.
+        type: 'TRANSFER_IN',
+        description: isSelfChange ? 'Change' : 'Receive',
         // ← pengirim; null bila eksternal/tidak dikenal (row TETAP tampil —
         //   self-reference malah menyembunyikan row via isSelfReferenceWssRow).
         // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
@@ -752,22 +750,18 @@ export class BalanceEventHandlerService
       // TANPA lookup DB, TANPA jendela waktu.
       const senderPartyId = intent.sender ?? null;
 
-      // KLASIFIKASI SWAP (R1): holding MASUK tidak pernah boleh lahir sebagai
-      // SWAP_OUT (debit). Hanya SWAP_IN bila penanda swap ledger ADA. Miss →
-      // TRANSFER biasa (false negative OK, false positive TIDAK).
-      // TANPA refund-matcher: tanpa bukti, tulis RECEIVED biasa (updateId ada,
-      // tebakan tidak ada).
-      const isSwapIn = hasSwapMarker(intent.reasons);
+      // KLASIFIKASI (R1): holding MASUK tidak pernah boleh lahir sebagai
+      // SWAP_OUT (debit). KEPUTUSAN APP: hanya kaki KELUAR swap berlabel Swap;
+      // delivery masuk (termasuk dari escrow) = penerimaan biasa.
+      void hasSwapMarker;
 
       await this.users.recordTokenTransaction({
         userId: tk.userId,
         amount: tk.amount,
         instrumentId: tk.instrumentId,
         instrumentAdmin: tk.instrumentAdmin,
-        type: isSwapIn ? 'SWAP_IN' : 'TOKEN_TRANSFER_IN',
-        description: isSwapIn
-          ? `Swap received ${tk.amount} ${tk.instrumentId} (OneSwap)`
-          : `Received ${tk.amount} ${tk.instrumentId} (on-chain)`,
+        type: 'TOKEN_TRANSFER_IN',
+        description: 'Receive',
         // null bila pengirim eksternal — row tetap tampil (jangan self-reference).
         // IDENTITY (fix double-history 2026-09-07): basis = updateId ASLI
         // tanpa prefix `wss:` — parity dengan path CC + controller-side.

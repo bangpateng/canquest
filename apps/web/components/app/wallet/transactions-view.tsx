@@ -415,15 +415,22 @@ function txDisplayTitle(tx: TxItem, fallback: string): string {
 /** Label description untuk Activity. Description user/memo diprioritaskan;
  *  bila kosong, fallback ke label generik per-tipe (mis. "Sent CC" / "Sent USDCx").
  *  Dipakai supaya kolom description tidak kosong saat sender tidak isi memo.
- *  KECUALI kaki swap (SWAP_IN/OUT): selalu "Swap" — description mentah
- *  ("Swap received ...", "Swap 1.7 ... fee incl.") disembunyikan supaya 1 swap
- *  = 1 bahasa, tidak redundan dengan label tipe. */
+ *  Description dari server sudah memakai skema ramah app (Swap/Receive/Change/
+ *  Send) — ditampilkan apa adanya; hanya deskripsi teknis panjang era lama
+ *  ("... (on-chain)", "Swap sent ... (OneSwap ...)") yang dinormalkan. */
 function txDisplayDescription(
   tx: TxItem,
   fallback: string,
 ): string {
-  if (tx.type === "SWAP_IN" || tx.type === "SWAP_OUT") return "Swap";
+  // Skema app: kaki keluar swap → "Swap"; kaki masuk → "Receive".
+  if (tx.type === "SWAP_OUT") return "Swap";
   const d = tx.description?.trim() ?? "";
+  if (tx.type === "SWAP_IN") return d || "Receive";
+  // Normalisasi deskripsi teknis era lama ke kosakata app.
+  if (/^Swap received\b/.test(d)) return "Receive";
+  if (/^Change from own transfer\b/.test(d)) return "Change";
+  if (/^Received\b/.test(d)) return "Receive";
+  if (/^Sent\b/.test(d)) return "Send";
   if (d) return d;
   // Memo kosong → label generik (bukan party-id mentah).
   return fallback;
@@ -447,17 +454,18 @@ export function TransactionsView({
   const t = usePlatformT();
   const embedded = variant === "embedded";
   const queryClient = useQueryClient();
-  // Type column = arah transaksi yang ramah. Lock/unlock pakai label sendiri (bukan Sent/Received).
+  // Type column = arah/aksi yang ramah. Skema label app (keputusan produk):
+  // Swap (HANYA kaki keluar), Receive, Change, Send.
   const txDirection = (type: TxItem["type"]): string => {
     if (type === "CC_LOCK") return t(TX_TYPE_KEYS.CC_LOCK);
     if (type === "CC_UNLOCK") return t(TX_TYPE_KEYS.CC_UNLOCK);
     if (TOGGLE_TX_TYPES.has(type)) return t(TX_TYPE_KEYS[type]);
-    // Kaki swap (CC maupun token) — label "Swap" (approved kepala proyek).
-    if (type === "SWAP_IN" || type === "SWAP_OUT") return "Swap";
-    // Token non-CC map ke Sent/Received (sama arah dengan CC transfer).
-    if (type === "TOKEN_TRANSFER_OUT") return "Sent";
-    if (type === "TOKEN_TRANSFER_IN") return "Received";
-    return type === "TRANSFER_OUT" ? "Sent" : "Received";
+    // Kaki keluar swap — satu-satunya yang berlabel "Swap".
+    if (type === "SWAP_OUT") return "Swap";
+    // Kaki masuk swap = penerimaan biasa (hanya OUT yang berlabel Swap).
+    if (type === "SWAP_IN") return "Receive";
+    if (type === "TOKEN_TRANSFER_OUT" || type === "TRANSFER_OUT") return "Send";
+    return "Receive";
   };
   const [currentPage, setCurrentPage] = useState(1);
   const [modalTx, setModalTx] = useState<TxItem | null>(null);

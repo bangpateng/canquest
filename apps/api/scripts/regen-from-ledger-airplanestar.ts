@@ -59,6 +59,7 @@ interface Fact {
   ts: Date | null;
   counterparty: string | null;
   isSwap: boolean;
+  isChange: boolean;
   type: string;
 }
 
@@ -123,6 +124,7 @@ async function main(): Promise<void> {
     } as unknown as Parameters<typeof readLedgerIntent>[0];
     const transient = transientContractIds(ev);
     const intent = readLedgerIntent(ev);
+    const updateIsSwap = facts.length >= 0 && /OneSwap esc_/.test(intent.reasons.join(' '));
 
     // Instrumen yang keluar di update ini (untuk deteksi change).
     const leg = readSwapOutLeg(ev);
@@ -149,6 +151,7 @@ async function main(): Promise<void> {
           ts: up.effectiveAt,
           counterparty: leg.receiver,
           isSwap: true,
+          isChange: false,
           type: 'SWAP_OUT',
         });
       }
@@ -175,9 +178,11 @@ async function main(): Promise<void> {
       }
       // Transien (create+consume di update sama) → bukan fakta.
       if (transient.has(cid)) continue;
-      // CHANGE: instrumen sama dengan yang keluar di update ini → kembalian,
-      // bukan penerimaan baru.
-      if (outInstrument === instrument.toUpperCase()) continue;
+      // CHANGE: instrumen sama dengan yang keluar di update ini → kembalian.
+      // Pada update SWAP: dibuang (app menampilkan swap = 2 leg). Pada update
+      // non-swap (self-transfer): DIPERTAHANKAN sebagai baris "Change".
+      const isChange = outInstrument === instrument.toUpperCase();
+      if (isChange && updateIsSwap) continue;
 
       const isCc = instrument.toUpperCase() === 'CC';
       const ledgerTxId = isCc
@@ -197,6 +202,7 @@ async function main(): Promise<void> {
         ts: up.effectiveAt,
         counterparty: sender && sender !== ALLOWED_PARTY ? sender : null,
         isSwap: false,
+        isChange,
         type: isCc ? 'TRANSFER_IN' : 'TOKEN_TRANSFER_IN',
       });
     }
@@ -227,9 +233,15 @@ async function main(): Promise<void> {
   for (const f of facts) {
     const n = Number(f.amount);
     const signed = f.kind === 'in' ? n : -n;
+    // Skema label app (keputusan produk): Swap (hanya kaki keluar),
+    // Receive, Change, Send.
     const desc = f.isSwap
-      ? `Swap sent ${f.amount} ${f.instrument} (OneSwap)`
-      : `${f.kind === 'in' ? 'Received' : 'Sent'} ${f.amount} ${f.instrument} (on-chain)`;
+      ? 'Swap'
+      : f.isChange
+        ? 'Change'
+        : f.kind === 'in'
+          ? 'Receive'
+          : 'Send';
     if (f.instrument.toUpperCase() === 'CC') {
       await users.recordTransaction({
         userId: uid,
