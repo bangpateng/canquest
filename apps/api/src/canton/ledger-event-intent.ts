@@ -332,6 +332,51 @@ export function isSelfFundsMovement(
   );
 }
 
+/** Choice transfer yang menandakan pergerakan dana keluar dari actor. */
+const TRANSFER_CHOICES: ReadonlySet<string> = new Set([
+  'TransferFactory_Transfer',
+  'AmuletRules_Transfer',
+]);
+
+/**
+ * True bila holding yang di-credit ini adalah CHANGE (kembalian) milik
+ * PENGIRIM sendiri — bukan penerimaan dari pihak lain.
+ *
+ * Fakta ledger: satu update transfer juga membuat Amulet kembalian (change)
+ * untuk pengirim. Change = fakta dana (saldo memang naik), TAPI BUKAN baris
+ * history tersendiri; baris history transfer = TRANSFER_OUT (Send) yang ditulis
+ * controller. Menulis change sebagai TRANSFER_IN merusak dua hal nyata (kasus
+ * 1220a16ef0ed674281):
+ *   1. Salah label: baris "+0.376575 Receive" dengan counterparty = party
+ *      sendiri (tampil "(You) → (You)").
+ *   2. MEREBUT slot unik (userId, ledgerTxId=updateId) milik baris Send yang
+ *      ditulis controller → Send kalah P2002 dan HILANG permanen dari history
+ *      pengirim (transfer on-chain sukses, tak tercatat).
+ *
+ * Deteksi tanpa tebak (semua dari ledger):
+ *   - bukan leg swap (penanda swap pada reason) — leg swap punya alur sendiri, DAN
+ *   - pengirim di ledger = party pemilik holding (senderPartyId === owner), ATAU
+ *   - pengirim tak teridentifikasi TAPI party ini yang mengexercise transfer
+ *     (L60-C: sender lookup miss karena diri sendiri di-exclude).
+ */
+export function isOwnChangeCredit(params: {
+  ownerPartyId: string;
+  senderPartyId: string | null;
+  isSwapIn: boolean;
+  exercised?: ReadonlyArray<{ choice?: string; actingParties?: string[] }>;
+}): boolean {
+  if (params.isSwapIn) return false;
+  if (params.senderPartyId != null) {
+    return params.senderPartyId === params.ownerPartyId;
+  }
+  return (params.exercised ?? []).some(
+    (ex) =>
+      !!ex?.choice &&
+      TRANSFER_CHOICES.has(ex.choice) &&
+      (ex.actingParties ?? []).includes(params.ownerPartyId),
+  );
+}
+
 /**
  * Pergerakan LOCK/UNLOCK dana sendiri (lock campaign), bukan transfer ke
  * pihak lain. Dikembalikan oleh readLockMovement().

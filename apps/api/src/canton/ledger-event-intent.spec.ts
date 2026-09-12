@@ -12,6 +12,7 @@ import {
   transientContractIds,
   readSwapOutLeg,
   isSelfFundsMovement,
+  isOwnChangeCredit,
   readLockMovement,
   LEDGER_META,
 } from './ledger-event-intent';
@@ -480,5 +481,102 @@ describe('readLockMovement (lock/unlock dana sendiri)', () => {
       PARTY,
     );
     expect(m).toBeNull();
+  });
+});
+
+describe('isOwnChangeCredit — change pengirim bukan penerimaan (regresi Send hilang)', () => {
+  const AMEL =
+    'canquest-user-9bd3d1a7820c::1220d2d3f8c8a2f2e2e9e7b8af6900f62c6210c7e3905ba40b7afa34678b695cdfc6';
+  const AIRPLANE =
+    'canquest-user-7fd3df003453::1220a5e003d34981573be4bc35737d6b78176e7117af28e80c90ec339a0262b92260';
+
+  it('sender ledger = owner sendiri → change (true)', () => {
+    expect(
+      isOwnChangeCredit({
+        ownerPartyId: AMEL,
+        senderPartyId: AMEL,
+        isSwapIn: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('sender ledger = pihak lain → penerimaan nyata (false)', () => {
+    expect(
+      isOwnChangeCredit({
+        ownerPartyId: AIRPLANE,
+        senderPartyId: AMEL,
+        isSwapIn: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('sender null tapi owner yang mengexercise transfer → change (true) — kasus 1220a16ef0', () => {
+    expect(
+      isOwnChangeCredit({
+        ownerPartyId: AMEL,
+        senderPartyId: null,
+        isSwapIn: false,
+        exercised: [
+          { choice: 'TransferFactory_Transfer', actingParties: [AMEL] },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it('sender null & owner bukan actor (delivery dari escrow) → penerimaan (false)', () => {
+    expect(
+      isOwnChangeCredit({
+        ownerPartyId: AIRPLANE,
+        senderPartyId: null,
+        isSwapIn: false,
+        exercised: [
+          { choice: 'TransferFactory_Transfer', actingParties: [AMEL] },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('leg swap masuk TIDAK pernah dianggap change (alur swap punya sendiri)', () => {
+    expect(
+      isOwnChangeCredit({
+        ownerPartyId: AMEL,
+        senderPartyId: AMEL,
+        isSwapIn: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('sender null + tanpa exercised → bukan change (jangan menebak)', () => {
+    expect(
+      isOwnChangeCredit({
+        ownerPartyId: AMEL,
+        senderPartyId: null,
+        isSwapIn: false,
+      }),
+    ).toBe(false);
+    expect(
+      isOwnChangeCredit({
+        ownerPartyId: AMEL,
+        senderPartyId: null,
+        isSwapIn: false,
+        exercised: [
+          { choice: 'AmuletRules_Transfer', actingParties: ['DSO::x'] },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('update LOCK (change 0.1 milik pengirim) → change, bukan Receive — kasus airplanestar 1220f33a', () => {
+    // Realita ledger update lock: created LockedAmulet 10 CC + created Amulet
+    // 0.1 CC (change) milik pengirim, plus AmuletRules_Transfer sender=pengirim.
+    const PL = 'canquest-user-7fd3df003453::1220a5e003d34981573be4bc35737d6b78176e7117af28e80c90ec339a0262b92260';
+    expect(
+      isOwnChangeCredit({
+        ownerPartyId: PL,
+        senderPartyId: PL,
+        isSwapIn: false,
+        exercised: [{ choice: 'AmuletRules_Transfer', actingParties: [PL] }],
+      }),
+    ).toBe(true);
   });
 });

@@ -56,6 +56,7 @@ import {
   transientContractIds,
   readSwapOutLeg,
   isSelfFundsMovement,
+  isOwnChangeCredit,
   type LedgerEventIntent,
 } from './ledger-event-intent';
 
@@ -500,6 +501,35 @@ export class BalanceEventHandlerService
       return;
     }
 
+    // STEP 1b: CHANGE OUTPUT PENGIRIM SENDIRI — bukan penerimaan.
+    // Satu update transfer juga membuat Amulet kembalian (change) untuk
+    // pengirim. Balance tetap naik (STEP 1 = fakta dana), TAPI change BUKAN
+    // baris history: baris transfer = TRANSFER_OUT (Send) yang ditulis
+    // controller. Menulis change sebagai TRANSFER_IN (a) salah label — ref =
+    // party sendiri, dan (b) MEREBUT slot unik (userId, ledgerTxId=updateId)
+    // milik baris Send → saat handler menang balapan, Send kena P2002 dan
+    // hilang permanen dari history pengirim (kasus nyata 1220a16ef0ed674281:
+    // +0.376575 "Receive" menendang -10.1 Send milik amel).
+    const senderPartyId = intent.sender ?? null;
+    const isSwapIn = hasSwapMarker(intent.reasons);
+    if (
+      isOwnChangeCredit({
+        ownerPartyId,
+        senderPartyId,
+        isSwapIn,
+        exercised,
+      })
+    ) {
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: skip baris change milik pengirim @${user.username ?? user.userId.slice(0, 8)} +${totalAmount} CC (bukan penerimaan; Send = sumber history, updateId=${updateId.slice(0, 16)}...)`,
+        );
+      }
+      // balance:changed sudah di-push di STEP 1. Tidak ada baris + tidak ada
+      // notif masuk — ini bukan transfer yang diterima.
+      return;
+    }
+
     // STEP 2: Cek apakah controller sudah catat history row (anti duplikat row).
     // Skip insert + skip push transaction:new (anti duplikat badge notif).
     // TETAP push balance:changed di atas (sudah dilakukan di STEP 1).
@@ -532,42 +562,16 @@ export class BalanceEventHandlerService
     // STEP 3: Insert history row (kalau controller belum catat).
     // Idempotent via @@unique([userId, ledgerTxId]).
     try {
-      // PENGIRIM dari metadata ledger (splice.../sender) pada event update ini
-      // — TANPA lookup DB, TANPA jendela waktu. Pengirim escrow/eksternal tidak
-      // punya baris TRANSFER_OUT di DB; hanya ledger yang tahu siapa mereka.
-      const senderPartyId = intent.sender ?? null;
-
-      // KLASIFIKASI SWAP CC dari metadata ledger (penanda swap pada reason,
-      // ditulis ke ledger saat submit CanQuest). Kaki pulang swap (delivery CC
-      // dari escrow) lahir sebagai SWAP_IN bila penandanya ADA. Tanpa penanda
-      // → TRANSFER. Tidak ada matcher DB — tidak ditebak dari jumlah/jendela.
-      const isSwapIn = hasSwapMarker(intent.reasons);
-      // REFUND = gate dana, bukan tebakan bisnis. Ditentukan di
-      // SwapService.finalizeSwapInBackground (terminal resmi OneSwap
-      // `refunded` + jumlah + pengirim escrow) yang menempel label ke baris
-      // RECEIVED yang sudah ada. Handler WSS di sini TIDAK menilai refund:
-      // dana masuk = RECEIVED, titik.
-      // L60-C: change output sendiri — sender lookup miss (diri sendiri
-      // di-exclude) DAN update yang sama memuat exercise transfer yang
-      // di-actor-kan party receiver sendiri. Label jujur, tipe + identitas
-      // tetap (TRANSFER_IN, updateId asli).
-      const isSelfChange =
-        !isSwapIn &&
-        senderPartyId == null &&
-        (exercised ?? []).some(
-          (ex) =>
-            (ex.choice === 'TransferFactory_Transfer' ||
-              ex.choice === 'AmuletRules_Transfer') &&
-            (ex.actingParties ?? []).includes(ownerPartyId),
-        );
-
+      // senderPartyId / isSwapIn dihitung di STEP 1b (dipakai guard change).
+      // Di sini sisa kasus = dana MASUK nyata dari pihak lain (sender ≠ owner)
+      // → label 'Receive'. Change milik pengirim sudah di-skip di STEP 1b.
       await this.users.recordTransaction({
         userId: user.userId,
         amountCc: totalAmount,
         // KEPUTUSAN APP: hanya kaki KELUAR swap yang berlabel Swap. Delivery
         // masuk (termasuk dari escrow) = penerimaan biasa → TRANSFER_IN.
         type: 'TRANSFER_IN',
-        description: isSelfChange ? 'Change' : 'Receive',
+        description: 'Receive',
         // ← pengirim; null bila eksternal/tidak dikenal (row TETAP tampil —
         //   self-reference malah menyembunyikan row via isSelfReferenceWssRow).
         // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
