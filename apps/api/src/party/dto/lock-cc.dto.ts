@@ -1,17 +1,19 @@
 import {
   IsNumber,
+  IsOptional,
   IsString,
   Max,
   MaxLength,
   Min,
-  MinLength,
 } from 'class-validator';
 
 /**
  * Request body for POST /api/party/lock.
  *
- * termKey divalidasi terhadap map LOCK_TERM_OPTIONS di controller (validasi ketat:
- * harus salah satu key di daftar env, else 400). amountCc > 0.
+ * MODE OPEN (2026-09-12): pilihan durasi DIHAPUS — `termKey` tidak lagi
+ * diperlukan dan DIABAIKAN oleh controller (semua lock pakai term 'open',
+ * tanpa batas waktu, masa tunggu unlock 2 menit). Field tetap ada supaya
+ * client lama tidak 400.
  */
 export const MAX_LOCK_CC = 1_000_000;
 
@@ -21,8 +23,8 @@ export class LockCcDto {
   @Max(MAX_LOCK_CC, { message: 'Amount exceeds the per-lock ceiling.' })
   amountCc!: number;
 
+  @IsOptional()
   @IsString()
-  @MinLength(1, { message: 'termKey is required.' })
   @MaxLength(32)
-  termKey!: string;
+  termKey?: string;
 }

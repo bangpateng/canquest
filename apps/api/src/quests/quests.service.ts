@@ -6160,13 +6160,32 @@ export class QuestsService {
       };
     }
     const tierSeconds = this.lockCcTierSeconds(params.target);
-    // Tier butuh DURASI lock; durasi hanya ada di metadata CcLock (history
-    // menyimpan jumlah + updateId, bukan lockSeconds). Jadi penentuan tier
-    // tetap membaca CcLock — sementara keberadaan lock-nya sendiri sudah
-    // tercatat di history (dipakai oleh hitungan harian di atas).
-    const qualifying = await this.prisma.ccLock.findFirst({
-      where: { userId: params.userId, lockSeconds: { gte: tierSeconds } },
-      select: { id: true },
+    // Tier butuh DURASI lock. MODE OPEN: lock baru tidak lagi membawa durasi
+    // pilihan (lockSeconds = sentinel 0) — hitungannya MAJU: lama terkunci
+    // berjalan (elapsed) sejak lockedAt, sampai unlockedAt kalau sudah dibuka.
+    // Lock legacy (lockSeconds > 0) tetap dihitung dari durasi pilihannya.
+    const locks = await this.prisma.ccLock.findMany({
+      where: { userId: params.userId },
+      select: {
+        lockSeconds: true,
+        lockedAt: true,
+        unlockedAt: true,
+        status: true,
+      },
+    });
+    const nowMs = Date.now();
+    const qualifying = locks.find((l) => {
+      // Mode open (sentinel 0) → lama terkunci berjalan maju.
+      const effective =
+        l.lockSeconds > 0
+          ? l.lockSeconds
+          : Math.max(
+              0,
+              ((l.unlockedAt ?? (l.status === 'LOCKED' ? new Date(nowMs) : l.lockedAt)).getTime() -
+                l.lockedAt.getTime()) /
+                1000,
+            );
+      return effective >= tierSeconds;
     });
     if (!qualifying) {
       const days = Math.round(tierSeconds / (24 * 60 * 60));

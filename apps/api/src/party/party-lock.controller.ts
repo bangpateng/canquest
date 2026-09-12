@@ -23,7 +23,12 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { UnlockCcDto } from './dto/unlock-cc.dto';
 import { UsersService } from '../users/users.service';
 import { hasRealWallet } from '../common/wallet-policy';
-import { parseLockTerms } from '../canton/lock-terms';
+import {
+  OPEN_LOCK_SECONDS,
+  OPEN_LOCK_SECONDS_SENTINEL,
+  OPEN_TERM_KEY,
+  parseLockTerms,
+} from '../canton/lock-terms';
 import type { AuthedReq } from './party-shared';
 
 /** Lock/unlock CC + terms & status. Prefix & guard sama dengan controller party lama. */
@@ -72,17 +77,24 @@ export class PartyLockController {
     const ownerParty = user.cantonPartyId;
 
     const { map } = this.getLockTerms();
-    const seconds = map.get(body.termKey);
-    if (seconds === undefined) {
-      throw new BadRequestException(`term "${body.termKey}" tidak valid`);
+    // MODE OPEN (2026-09-12): pilihan durasi DIHAPUS. termKey dari body diabaikan —
+    // semua lock pakai term 'open' (tanpa batas waktu). Yang tersisa hanya MASA
+    // TUNGGU MINIMUM (OPEN_LOCK_SECONDS = 2 menit): on-chain expiresAt di-set ke
+    // lockedAt + 120s sehingga choice unlock tersedia tepat saat masa tunggu habis.
+    // Setelah itu dana tetap terkunci sampai user sendiri yang unlock.
+    if (map.size > 0 && body.termKey && map.get(body.termKey) !== undefined) {
+      this.logger.warn(
+        `lockCc: termKey "${body.termKey}" dikirim tapi mode durasi sudah dihapus — diabaikan (mode open).`,
+      );
     }
+    const seconds = OPEN_LOCK_SECONDS;
     const amountCc = Number(body.amountCc);
     if (!Number.isFinite(amountCc) || amountCc <= 0) {
       throw new BadRequestException('amountCc must be greater than 0.');
     }
 
     this.logger.log(
-      `lockCc: user=@${user.username} amount=${amountCc} term=${body.termKey} (${seconds}s)`,
+      `lockCc: user=@${user.username} amount=${amountCc} term=open (${seconds}s minimum)`,
     );
 
     const result = await this.ledger.lockCc(ownerParty, amountCc, seconds);
@@ -100,8 +112,10 @@ export class PartyLockController {
           ownerParty,
           userId: user.id,
           amountCc,
-          termKey: body.termKey,
-          lockSeconds: seconds,
+          termKey: OPEN_TERM_KEY,
+          // Sentinel 0 = TANPA durasi ditentukan. Tier quest lock menghitung
+          // elapsed (maju) dari lockedAt, bukan dari durasi pilihan.
+          lockSeconds: OPEN_LOCK_SECONDS_SENTINEL,
           lockedAt,
           expiresAt,
           status: 'LOCKED',
@@ -239,14 +253,16 @@ export class PartyLockController {
   }
 
   /**
-   * GET /party/lock-terms — daftar pilihan term dari LOCK_TERM_OPTIONS.
-   * UI render tombol durasi dari sini (BUKAN hard-code 7/15/30).
+   * GET /party/lock-terms — daftar pilihan term.
+   *
+   * MODE OPEN (2026-09-12): pilihan durasi DIHAPUS. Selalu balikin kosong
+   * supaya UI menyembunyikan grid durasi apa pun isi env LOCK_TERM_OPTIONS di
+   * mesin deploy (env tidak ikut repo). Lock kini selalu mode 'open'.
    */
   @SkipThrottle()
   @Get('lock-terms')
   lockTerms() {
-    const { options } = this.getLockTerms();
-    return { terms: options };
+    return { terms: [] };
   }
 
   /**
@@ -341,6 +357,9 @@ export class PartyLockController {
           ? questTitles.get(l.termKey.slice(4)) ?? null
           : null,
         lockSeconds: l.lockSeconds,
+        // MODE OPEN: UI menghitung lama terkunci secara MAJU dari lockedAt
+        // (bukan countdown mundur ke expiresAt).
+        lockedAt: l.lockedAt.toISOString(),
         expiresAt: l.expiresAt.toISOString(),
         lockedAmuletCid: l.lockedAmuletCid,
       })),

@@ -7,6 +7,13 @@ import { Logger } from '@nestjs/common';
  * uji cepat, lalu hari di produksi TANPA ubah kode.
  *   Produksi:   LOCK_TERM_OPTIONS=7d:604800,15d:1296000,30d:2592000
  *   Uji cepat:  LOCK_TERM_OPTIONS=2m:120,5m:300,10m:600
+ *
+ * MODE OPEN (2026-09-12): pilihan durasi DIHAPUS dari UI. Semua lock sekarang
+ * term 'open' — tanpa batas waktu, dana terkunci sampai user sendiri unlock.
+ * Yang tersisa hanya MASA TUNGGU MINIMUM sebelum unlock boleh dilakukan:
+ * `OPEN_LOCK_SECONDS` (2 menit). On-chain `expiresAt = lockedAt + 120s` membuat
+ * choice `LockedAmulet_OwnerExpireLockV2` tersedia tepat saat masa tunggu habis —
+ * setelah itu dana TETAP terkunci sampai user yang meng-exercise.
  */
 export interface LockTermOption {
   /** key asli dari env, mis. "15d" atau "5m" */
@@ -16,6 +23,15 @@ export interface LockTermOption {
   /** label untuk UI — key apa adanya (UI format sendiri ke "15 hari"/"5 menit") */
   label: string;
 }
+
+/** termKey untuk lock mode open (tanpa batas waktu). */
+export const OPEN_TERM_KEY = 'open';
+
+/** Masa tunggu minimum sebelum unlock boleh dilakukan (detik). */
+export const OPEN_LOCK_SECONDS = 120;
+
+/** Sentinel lockSeconds untuk lock mode open — durasi TIDAK ditentukan saat lock. */
+export const OPEN_LOCK_SECONDS_SENTINEL = 0;
 
 /**
  * Parse LOCK_TERM_OPTIONS dari env string → map { key -> seconds } + list options.

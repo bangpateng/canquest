@@ -15,6 +15,7 @@ import type { ActiveLock, LockStatus } from "@/lib/hooks/use-lock-status";
 
 /** Render termKey (mis. "15d"/"5m") jadi label manusiawi untuk tombol aksi. */
 function termLabel(termKey: string): string {
+  if (termKey === "open") return "Open";
   const m = termKey.match(/^(\d+)([smhd])$/i);
   if (!m) return termKey;
   const n = Number(m[1]);
@@ -24,6 +25,12 @@ function termLabel(termKey: string): string {
   if (unit === "h") return `${n} hours`;
   return `${n} day`;
 }
+
+/**
+ * MODE OPEN: termKey 'open' = lock tanpa batas waktu (count MAJU).
+ * Masa tunggu unlock minimum 2 menit di-enforce backend via expiresAt.
+ */
+const OPEN_TERM_KEY = "open";
 
 interface CcLockModalProps {
   open: boolean;
@@ -110,14 +117,15 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
   const submitLock = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!selectedTerm || !amountValid) return;
+      // MODE OPEN: tanpa pilihan durasi — termKey 'open' dikirim apa adanya.
+      if (!amountValid) return;
       setReview({ kind: "lock" });
     },
-    [selectedTerm, amountValid],
+    [amountValid],
   );
 
   const runLock = useCallback(async () => {
-    if (!selectedTerm || !amountValid) return;
+    if (!amountValid) return;
       setLockState("loading");
       setLockMessage("");
       // M3b: user external → sign di browser; tahap 'sign' menunggu passphrase.
@@ -125,10 +133,10 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         try {
           await signRelayTransaction(
             "lock_cc",
-            { amountCc: numericAmount, termKey: selectedTerm },
+            { amountCc: numericAmount, termKey: OPEN_TERM_KEY },
             {
               onWalletLocked: () =>
-                promptPassphrase(`Lock ${numericAmount} CC (${termLabel(selectedTerm)})`),
+                promptPassphrase(`Lock ${numericAmount} CC`),
             },
           );
           setLockState("idle");
@@ -138,10 +146,10 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           tx.succeed({
             amountText: `${numericAmount} CC`,
             title: "CC locked",
-            subtitle: `Locked for ${termLabel(selectedTerm)}`,
+            subtitle: "Locked (no term)",
             meta: [
               { label: "Amount", value: `${numericAmount} CC` },
-              { label: "Duration", value: termLabel(selectedTerm) },
+              { label: "Term", value: "Open" },
               { label: "Network", value: "Canton" },
             ],
           });
@@ -159,7 +167,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
       tx.startBroadcast({
         amountText: `${numericAmount} CC`,
         title: "CC locked",
-        subtitle: `Locked for ${termLabel(selectedTerm)}`,
+        subtitle: "Locked (no term)",
         accentBg: "bg-[var(--primary)]/15",
         accentText: "text-canton",
       });
@@ -170,7 +178,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             amountCc: numericAmount,
-            termKey: selectedTerm,
+            termKey: OPEN_TERM_KEY,
           }),
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
@@ -188,10 +196,10 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         tx.succeed({
           amountText: `${numericAmount} CC`,
           title: "CC locked",
-          subtitle: `Locked for ${termLabel(selectedTerm)}`,
+          subtitle: "Locked (no term)",
           meta: [
             { label: "Amount", value: `${numericAmount} CC` },
-            { label: "Duration", value: termLabel(selectedTerm) },
+            { label: "Term", value: "Open" },
             { label: "Network", value: "Canton" },
           ],
         });
@@ -201,7 +209,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         setLockMessage("Network error. Check your connection.");
       }
   },
-    [selectedTerm, amountValid, numericAmount, onRefresh, tx, isExternalWallet, promptPassphrase],
+    [amountValid, numericAmount, onRefresh, tx, isExternalWallet, promptPassphrase],
   );
 
   // Tombol Unlock → buka tahap REVIEW dulu. Eksekusi di runUnlock().
@@ -321,7 +329,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         subText={
           review?.kind === "unlock"
             ? review.lock.campaignTitle ?? "Funds return to your wallet"
-            : `for ${termLabel(selectedTerm)}`
+            : "Open — no term"
         }
         rows={
           review?.kind === "unlock"
@@ -329,12 +337,12 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
                 { label: "Amount", value: `${review.lock.amountCc} CC` },
                 ...(review.lock.campaignTitle
                   ? [{ label: "Campaign", value: review.lock.campaignTitle }]
-                  : [{ label: "Duration", value: termLabel(review.lock.termKey) }]),
+                  : [{ label: "Term", value: termLabel(review.lock.termKey) }]),
                 { label: "Network", value: "Canton" },
               ]
             : [
                 { label: "Amount", value: `${numericAmount} CC` },
-                { label: "Duration", value: termLabel(selectedTerm) },
+                { label: "Term", value: "Open" },
                 { label: "Network", value: "Canton" },
               ]
         }
@@ -412,8 +420,10 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
             <p className="text-xs text-[var(--muted-foreground)]">Lock 30 CC to unlock Earn campaigns.</p>
           </div>
 
-          {/* Pilihan durasi — di-render dari GET /lock-terms, BUKAN hard-code */}
-          {terms.length > 0 ? (
+          {/* MODE OPEN: pilihan durasi DIHAPUS — semua lock tanpa batas waktu.
+              Grid durasi hanya muncul bila backend masih menyediakan opsi
+              (kompatibilitas; env LOCK_TERM_OPTIONS sudah dikosongkan). */}
+          {terms.length > 0 && (
             <div className="space-y-2">
               <span className="text-sm font-medium text-[var(--muted-foreground)]">Duration</span>
               <div className="grid grid-cols-3 gap-2">
@@ -438,8 +448,11 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
                 })}
               </div>
             </div>
-          ) : (
-            <p className="text-xs text-[var(--muted-foreground)]">Loading duration options…</p>
+          )}
+          {terms.length === 0 && (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Open lock — no fixed term. Unlockable any time after 2 minutes.
+            </p>
           )}
 
           {lockState === "error" && (
@@ -451,7 +464,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
 
           <button
             type="submit"
-            disabled={lockState === "loading" || !amountValid || !selectedTerm}
+            disabled={lockState === "loading" || !amountValid}
             className={cn(buttonVariants({ size: "sm" }), "w-full gap-2")}
           >
             {lockState === "loading" ? (
@@ -459,8 +472,8 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
                 <LoadingSpinner size="sm" /> Lock…
               </>
             ) : (
-              amountValid && selectedTerm
-                ? `Lock ${numericAmount} CC for ${termLabel(selectedTerm)}`
+              amountValid
+                ? `Lock ${numericAmount} CC`
                 : "Lock"
             )}
           </button>
@@ -503,15 +516,17 @@ function ActiveLockRow({
   onUnlock: () => void;
 }) {
   const expiresMs = Date.parse(lock.expiresAt);
+  // ready = masa tunggu minimum (2 menit) sudah lewat → tombol Unlock aktif.
   const ready = Number.isFinite(expiresMs) && now >= expiresMs;
-  const remainingMs = Math.max(0, expiresMs - now);
 
-  // Format countdown dd/hh/mm/ss (frontend-only).
-  const countdown = formatCountdown(remainingMs);
+  // MODE OPEN — COUNT MAJU: tampilkan LAMA TERKUNCI (elapsed sejak lockedAt),
+  // berjalan maju tiap detik. Bukan lagi countdown mundur ke expiresAt.
+  const lockedMs = Math.max(0, now - Date.parse(lock.lockedAt));
+  const lockedFor = formatCountdown(lockedMs);
 
   // v30 campaign lock (termKey "v30-…") vs savings lock — label pembeda
   // supaya jelas mana lock campaign (terbuka saat campaign berakhir) dan
-  // mana tabungan pribadi berterm.
+  // mana tabungan pribadi (mode open).
   const isCampaignLock = lock.termKey.startsWith("v30-");
 
   return (
@@ -529,7 +544,9 @@ function ActiveLockRow({
             )}
           </p>
           <p className={cn("text-xs font-medium", ready ? "text-canton" : "text-[var(--muted-foreground)]")}>
-            {ready ? "Unlocked" : `Unlock ${countdown}`}
+            {ready
+              ? `Locked ${lockedFor}`
+              : `Unlocks in ${formatCountdown(Math.max(0, expiresMs - now))}`}
           </p>
         </div>
         <button

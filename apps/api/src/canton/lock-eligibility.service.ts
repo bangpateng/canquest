@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CantonLedgerService } from './canton-ledger.service';
-import { parseLockTerms } from './lock-terms';
+import {
+  OPEN_LOCK_SECONDS_SENTINEL,
+  OPEN_TERM_KEY,
+  parseLockTerms,
+} from './lock-terms';
 
 export type LockTier = 'NONE' | 'FULL';
 
@@ -224,11 +228,16 @@ export class LockEligibilityService {
       }
       const expiresAt = new Date(expiresMs);
       const termSeconds = lock.termSeconds || 0;
-      const termKey = this.bestTermKey(
-        map,
-        termSeconds,
-        [...map.values()].sort((a, b) => a - b),
-      );
+      // MODE OPEN: env term kosong → orphan lock dibuat sbg mode open
+      // (tanpa durasi, lockSeconds sentinel 0, lockedAt dihitung dari chain).
+      const termKey =
+        map.size > 0
+          ? this.bestTermKey(
+              map,
+              termSeconds,
+              [...map.values()].sort((a, b) => a - b),
+            )
+          : OPEN_TERM_KEY;
       const lockedAt = new Date(Math.max(0, expiresMs - termSeconds * 1000));
 
       try {
@@ -237,8 +246,9 @@ export class LockEligibilityService {
             ownerParty,
             userId,
             amountCc: lock.amount,
-            termKey: termKey || `chain-${termSeconds}s`,
-            lockSeconds: termSeconds,
+            termKey: termKey || OPEN_TERM_KEY,
+            // MODE OPEN: lock tanpa durasi → sentinel 0 (tier quest hitung elapsed).
+            lockSeconds: map.size > 0 ? termSeconds : OPEN_LOCK_SECONDS_SENTINEL,
             lockedAt,
             expiresAt,
             status: 'LOCKED',

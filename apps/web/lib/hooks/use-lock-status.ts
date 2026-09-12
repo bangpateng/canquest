@@ -14,6 +14,8 @@ export interface ActiveLock {
   /** v30: judul campaign utk lock campaign (null utk lock tabungan). */
   campaignTitle?: string | null;
   lockSeconds: number;
+  /** MODE OPEN: UI menghitung lama terkunci secara MAJU dari lockedAt. */
+  lockedAt: string;
   expiresAt: string;
   lockedAmuletCid: string | null;
 }

@@ -7,6 +7,11 @@ import { SpliceValidatorService } from './splice-validator.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { hasRealWallet } from '../common/wallet-policy';
+import {
+  OPEN_LOCK_SECONDS,
+  OPEN_LOCK_SECONDS_SENTINEL,
+  OPEN_TERM_KEY,
+} from './lock-terms';
 import { ClaimOfferService } from './v30/claim-offer.service';
 import { LockProposalService } from './v30/lock-proposal.service';
 import {
@@ -1669,6 +1674,9 @@ export class SigningRelayService {
   /**
    * Parse LOCK_TERM_OPTIONS ("2m:120,5m:300,10m:600") — mirror getLockTerms
    * di party-lock.controller.
+   *
+   * MODE OPEN: tidak lagi dipakai untuk lock (termKey diabaikan), tapi
+   * dipertahankan untuk pembacaan env legacy di tempat lain.
    */
   private lockTerms(): Map<string, number> {
     const map = new Map<string, number>();
@@ -1691,11 +1699,10 @@ export class SigningRelayService {
     user: { userId: string; partyId: string; username: string | null },
     params: Record<string, unknown>,
   ): Promise<BuiltFlow> {
-    const termKey = typeof params.termKey === 'string' ? params.termKey : '';
-    const seconds = this.lockTerms().get(termKey);
-    if (seconds === undefined) {
-      throw new BadRequestException(`term "${termKey}" is invalid`);
-    }
+    // MODE OPEN (2026-09-12): pilihan durasi DIHAPUS — termKey dari client
+    // diabaikan. Semua lock term 'open' (tanpa batas waktu); yang tersisa hanya
+    // MASA TUNGGU MINIMUM (OPEN_LOCK_SECONDS = 2 menit) sebelum unlock.
+    const seconds = OPEN_LOCK_SECONDS;
     const amountCc = Number(params.amountCc);
     if (!Number.isFinite(amountCc) || amountCc <= 0) {
       throw new BadRequestException('amountCc must be greater than 0.');
@@ -1714,8 +1721,13 @@ export class SigningRelayService {
       commands: [built.command],
       disclosedContracts: built.disclosedContracts,
       commandId: built.commandId,
-      meta: { amountCc, termKey, seconds, expiresAt: built.expiresAt },
-      description: `Lock ${amountCc} CC (${termKey})`,
+      meta: {
+        amountCc,
+        termKey: OPEN_TERM_KEY,
+        seconds: OPEN_LOCK_SECONDS_SENTINEL,
+        expiresAt: built.expiresAt,
+      },
+      description: `Lock ${amountCc} CC (open)`,
     };
   }
 
