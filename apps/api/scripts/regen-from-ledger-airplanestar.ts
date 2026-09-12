@@ -33,6 +33,7 @@ import {
   isSelfFundsMovement,
   readLockMovement,
 } from '../src/canton/ledger-event-intent';
+import { normalizeStoredEnvelope } from '../src/canton/ledger-envelope';
 import { UsersService } from '../src/users/users.service';
 import { PointsService } from '../src/users/points.service';
 import { RealtimeService } from '../src/realtime/realtime.service';
@@ -116,15 +117,17 @@ async function main(): Promise<void> {
   const seenIn = new Set<string>();
 
   updateLoop: for (const up of updates) {
-    const env = up.envelope as Record<string, unknown>;
+    // Normalisasi dua bentuk envelope tersimpan (flat raw-ingest vs. `events[]`
+    // backfill) — tanpa ini baris backfill terlihat tanpa event.
+    const env = normalizeStoredEnvelope(up.envelope);
     const ev = {
       offset: 0,
       offsetKnown: true,
       updateId: up.updateId,
       parties: [ALLOWED_PARTY],
-      created: (env.created as never) ?? [],
-      archived: (env.archived as never) ?? [],
-      exercised: (env.exercised as never) ?? [],
+      created: env.created as never,
+      archived: env.archived as never,
+      exercised: env.exercised as never,
     } as unknown as Parameters<typeof readLedgerIntent>[0];
     const transient = transientContractIds(ev);
     const intent = readLedgerIntent(ev);
@@ -193,7 +196,7 @@ async function main(): Promise<void> {
     }
 
     // IN: holding dibuat untuk party.
-    for (const c of (env.created as Array<Record<string, unknown>>) ?? []) {
+    for (const c of env.created) {
       const cid = String(c.contractId ?? '');
       const tpl = String(c.templateId ?? '');
       const args = (c.createArgument ?? {}) as Record<string, unknown>;

@@ -30,6 +30,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { readSwapOutLeg } from '../src/canton/ledger-event-intent';
+import { normalizeStoredEnvelope } from '../src/canton/ledger-envelope';
 import { BalanceEventHandlerService } from '../src/canton/balance-event-handler.service';
 import { UsersService } from '../src/users/users.service';
 import { PointsService } from '../src/users/points.service';
@@ -80,18 +81,21 @@ async function main(): Promise<void> {
       select: { envelope: true, effectiveAt: true },
     });
     if (!full) continue;
-    const env = full.envelope as Record<string, unknown>;
+    // Normalisasi dua bentuk envelope tersimpan (flat raw-ingest vs. `events[]`
+    // backfill) — tanpa ini swap di baris backfill terlihat kosong.
+    const rawEnv = full.envelope as Record<string, unknown>;
+    const env = normalizeStoredEnvelope(full.envelope);
     const ev: CantonUpdateEvent = {
       offset: 0,
       offsetKnown: true,
-      updateId: (env.updateId as string) ?? r.uid,
-      commandId: (env.commandId as string) ?? null,
-      effectiveAt: (env.effectiveAt as string) ?? null,
-      workflowId: (env.workflowId as string) ?? null,
+      updateId: (rawEnv.updateId as string) ?? r.uid,
+      commandId: (rawEnv.commandId as string) ?? null,
+      effectiveAt: (rawEnv.effectiveAt as string) ?? null,
+      workflowId: (rawEnv.workflowId as string) ?? null,
       parties: [],
-      created: (env.created as never) ?? [],
-      archived: (env.archived as never) ?? [],
-      exercised: (env.exercised as never) ?? [],
+      created: env.created as never,
+      archived: env.archived as never,
+      exercised: env.exercised as never,
     };
 
     const leg = readSwapOutLeg(ev);

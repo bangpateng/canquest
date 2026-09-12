@@ -37,6 +37,7 @@ import {
   hasSwapMarker,
   transientContractIds,
 } from '../src/canton/ledger-event-intent';
+import { normalizeStoredEnvelope } from '../src/canton/ledger-envelope';
 import { BalanceEventHandlerService } from '../src/canton/balance-event-handler.service';
 import { CC_TRANSACTION_HISTORY_WHERE } from '../src/users/cc-transaction-visibility';
 import { UsersService } from '../src/users/users.service';
@@ -103,25 +104,28 @@ interface Phantom {
 
 /** Fakta leg-neto dari SATU envelope — klasifikasi via fungsi produksi. */
 function factsFromEnvelope(
-  env: Record<string, unknown>,
+  envelope: unknown,
   updateId: string,
   effectiveAt: Date | null,
   party: string,
   ex: ReturnType<BalanceEventHandlerService['getExtractors']>,
 ): { facts: Fact[]; phantoms: Phantom[] } {
+  // Normalisasi dua bentuk envelope tersimpan (flat raw-ingest vs. `events[]`
+  // backfill). Tanpa ini, baris hasil backfill terlihat tanpa event.
+  const env = normalizeStoredEnvelope(envelope);
   const ev = {
     offset: 0,
     offsetKnown: true,
     updateId,
     parties: [party],
-    created: (env.created as never) ?? [],
-    archived: (env.archived as never) ?? [],
-    exercised: (env.exercised as never) ?? [],
+    created: env.created as never,
+    archived: env.archived as never,
+    exercised: env.exercised as never,
   } as unknown as Parameters<typeof readLedgerIntent>[0];
 
   const transient = transientContractIds(ev);
   const intent = readLedgerIntent(ev);
-  const created = (env.created as Array<Record<string, unknown>>) ?? [];
+  const created = env.created;
   const facts: Fact[] = [];
   const phantoms: Phantom[] = [];
 
@@ -305,8 +309,7 @@ async function main(): Promise<void> {
   const facts: Fact[] = [];
   const phantoms: Phantom[] = [];
   for (const up of updates) {
-    const env = up.envelope as Record<string, unknown>;
-    const r = factsFromEnvelope(env, up.updateId, up.effectiveAt, ALLOWED_PARTY, ex);
+    const r = factsFromEnvelope(up.envelope, up.updateId, up.effectiveAt, ALLOWED_PARTY, ex);
     facts.push(...r.facts);
     phantoms.push(...r.phantoms);
   }
