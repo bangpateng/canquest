@@ -201,11 +201,29 @@ export function QuestTaskPanel({
 
   const isTaskSequentiallyLocked = useCallback(
     (taskIndex: number, taskId: string) => {
+      // Task repeatable (daily check-in, lock cc daily, dsb) yang SUDAH
+      // verified dan cooldown 24h-nya habis HARUS tetap bisa diulang —
+      // jangan dikunci urutan walau ada task lain yang belum dikerjakan.
+      // Tanpa ini, daily check-in & lock cc_daily mati permanen begitu ada
+      // task di belakangnya yang belum selesai (kasus nyata airplanestar:
+      // send_to_user_daily belum verified → check-in tak bisa diulang).
+      const t = visibleTasks[taskIndex];
+      const sub = submissions[taskId];
+      if (
+        isQuestHub &&
+        t &&
+        isQuestHubRepeatableTask(t) &&
+        sub?.status === 'VERIFIED' &&
+        getQuestHubRepeatCooldownMs(sub, now) === 0
+      ) {
+        return false;
+      }
       if (firstOpenTaskIdx >= 0 && taskIndex !== firstOpenTaskIdx) return true;
       if (busyTaskId != null && busyTaskId !== taskId) return true;
       return false;
     },
-    [firstOpenTaskIdx, busyTaskId],
+    // `now` ikut supaya transisi cooldown→ready dievaluasi ulang (tick 60s).
+    [visibleTasks, submissions, isQuestHub, now, firstOpenTaskIdx, busyTaskId],
   );
 
   const loadProgress = useCallback(
