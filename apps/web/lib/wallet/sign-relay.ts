@@ -25,6 +25,26 @@ export interface SignRelayOptions {
   onWalletLocked?: (description: string) => Promise<string>;
 }
 
+/** Potongan pesan backend saat ada entry pending yang belum selesai. */
+const PREPARE_BUSY_MSG = 'already awaiting your signature';
+
+/**
+ * Buang entry pending signing milik user di relay. Dipanggil saat tanda tangan
+ * gagal/dibatalkan DI BROWSER (entry belum ditandatangani → belum ada di chain,
+ * aman dibuang) supaya transaksi berikutnya tidak terblokir sampai TTL 10 menit.
+ * Best-effort — kegagalan fetch diabaikan.
+ */
+async function cancelPendingSigning(): Promise<void> {
+  try {
+    await fetch('/api/party/sign/cancel', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {
+    /* best-effort — TTL relay tetap membersihkan */
+  }
+}
+
 /**
  * Tanda tangani hash transaksi dengan auto-unlock — dipakai semua alur sign
  * (relay & resume upgrade). Kalau dompet terkunci, panggil onWalletLocked
@@ -49,7 +69,11 @@ export async function signHashWithUnlock(
     //    prompt ini hanya muncul sekali per perangkat.
     if (options?.onWalletLocked) {
       const pass = await options.onWalletLocked(description);
-      if (!pass) throw err;
+      if (!pass) {
+        // User batal passphrase → buang entry pending supaya tidak nyangkut.
+        void cancelPendingSigning();
+        throw err;
+      }
       await unlock(pass);
       return signPreparedHash(hash);
     }
@@ -62,19 +86,32 @@ export async function signRelayTransaction(
   params?: Record<string, unknown>,
   options?: SignRelayOptions,
 ): Promise<SignRelayResult> {
-  const prep = await fetch('/api/party/sign/prepare', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ flow, params }),
-  });
-  const prepRaw = (await prep.json().catch(() => null)) as {
+  const doPrepare = () =>
+    fetch('/api/party/sign/prepare', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flow, params }),
+    });
+
+  let prep = await doPrepare();
+  let prepRaw = (await prep.json().catch(() => null)) as {
     hash?: string;
     description?: string;
     message?: string;
   } | null;
   if (!prep.ok || !prepRaw?.hash) {
-    throw new Error(prepRaw?.message ?? 'Failed to prepare transaction.');
+    // SELF-HEAL: entry pending lama (mis. sign gagal sebelum restore wallet)
+    // memblokir prepare baru. Buang entry-nya lalu prepare sekali lagi.
+    const msg = (prepRaw?.message ?? '').toLowerCase();
+    if (msg.includes(PREPARE_BUSY_MSG)) {
+      await cancelPendingSigning();
+      prep = await doPrepare();
+      prepRaw = (await prep.json().catch(() => null)) as typeof prepRaw;
+    }
+    if (!prep.ok || !prepRaw?.hash) {
+      throw new Error(prepRaw?.message ?? 'Failed to prepare transaction.');
+    }
   }
   return signRelayPrepared(
     { hash: prepRaw.hash, description: prepRaw.description },
@@ -91,8 +128,17 @@ export async function signRelayPrepared(
   prep: { hash: string; description?: string },
   options?: SignRelayOptions,
 ): Promise<SignRelayResult> {
-  // Tanda tangan terjadi di sini — di browser, dengan kunci user.
-  const signature = await signHashWithUnlock(prep.hash, prep.description ?? '', options);
+  let signature: string;
+  try {
+    // Tanda tangan terjadi di sini — di browser, dengan kunci user.
+    signature = await signHashWithUnlock(prep.hash, prep.description ?? '', options);
+  } catch (err) {
+    // Sign gagal/dibatalkan di browser → entry pending di relay belum
+    // ditandatangani (belum ada di chain), aman dibuang supaya transaksi
+    // berikutnya tidak terblokir sampai TTL 10 menit habis.
+    void cancelPendingSigning();
+    throw err;
+  }
 
   const exec = await fetch('/api/party/sign/execute', {
     method: 'POST',
