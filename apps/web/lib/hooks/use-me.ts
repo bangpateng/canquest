@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { getMe, type Me } from "@/lib/services/api/auth";
 import { queryKeys } from "@/lib/queries/query-keys";
@@ -13,14 +13,12 @@ import { queryKeys } from "@/lib/queries/query-keys";
  *
  * Catatan: getMe() di lib/services/api/auth.ts sudah memakai credentials +
  * AbortSignal.timeout(8s) via apiFetch, jadi error/jaringan ditangani di sana.
+ *
+ * Return type di-infer (bukan interseksi eksplisit) — UseQueryResult adalah
+ * union per-status, sehingga interseksi manual tidak satisfiable oleh spread.
+ * Alias `me` = query.data; isLoading/isError/error/refetch dibawa spread.
  */
-export function useMe(): UseQueryResult<Me> & {
-  me: Me | undefined;
-  isLoading: boolean;
-  isError: boolean;
-  error: unknown;
-  refetch: UseQueryResult<Me>["refetch"];
-} {
+export function useMe() {
   const query = useQuery<Me>({
     queryKey: queryKeys.auth.me,
     queryFn: getMe,

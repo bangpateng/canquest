@@ -82,12 +82,14 @@ export function WinnersPanel({ questId }: { questId: string }) {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      apiFetch(`/api/admin/quests/${questId}`),
-      apiFetch(`/api/admin/quests/${questId}/participants`),
-      apiFetch(`/api/admin/quests/${questId}/winners`),
-      apiFetch(`/api/admin/quests/${questId}/invite-codes`),
+      apiFetch<{ title: string; rewardType?: string; questKind?: string; rewardToken?: string }>(
+        `/api/admin/quests/${questId}`,
+      ),
+      apiFetch<Participant[]>(`/api/admin/quests/${questId}/participants`),
+      apiFetch<Winner[]>(`/api/admin/quests/${questId}/winners`),
+      apiFetch<InviteCode[]>(`/api/admin/quests/${questId}/invite-codes`),
     ])
-      .then(([quest, p, w, c]: [{ title: string; rewardType?: string; questKind?: string; rewardToken?: string }, Participant[], Winner[], InviteCode[]]) => {
+      .then(([quest, p, w, c]) => {
         // Winners/distribute/invite-codes are CAMPAIGN-only — bounce the Quest
         // hub (EARN_HUB) back to its own panel.
         if (quest?.questKind === "EARN_HUB") {

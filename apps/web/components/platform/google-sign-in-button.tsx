@@ -86,7 +86,6 @@ export function GoogleSignInButton({
         shape="circle"
         size="large"
         width="320"
-        locale="en"
       />
     </div>
   );

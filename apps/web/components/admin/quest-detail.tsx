@@ -91,8 +91,8 @@ export function QuestDetail({ questId }: { questId: string }) {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    apiFetch(`/api/admin/quests/${questId}`)
-      .then((r) => r.json())
+    // apiFetch SUDAH me-parse JSON — jangan panggil .json() lagi (TypeError).
+    apiFetch<QuestData>(`/api/admin/quests/${questId}`)
       .then((d: QuestData) => {
         if (d?.questKind === "EARN_HUB") {
           router.replace("/admin/quests");

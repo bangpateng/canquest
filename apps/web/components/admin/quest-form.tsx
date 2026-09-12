@@ -642,7 +642,8 @@ export function QuestForm({
               <select
                 value={partnerId}
                 onChange={(e) => {
-                  const id = e.target.value || null;
+                  // "" = tanpa partner (null hanya dipakai saat submit).
+                  const id = e.target.value;
                   setPartnerId(id);
                   const p = partnerOptions.find((o) => o.id === id);
                   if (p) {
