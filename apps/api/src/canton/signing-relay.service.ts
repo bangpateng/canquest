@@ -749,6 +749,38 @@ export class SigningRelayService {
     } | null,
   ): Promise<void> {
     try {
+      // ── GUARD DEDUP: WSS handler (applyTokenIncrement/applyCcIncrement)
+      // juga menulis baris penerima untuk update yang sama (ledgerTxId token
+      // ber-suffix `:usdcx` sehingga tidak tertangkap unique constraint).
+      // Tanpa guard ini, race handler-vs-relay menghasilkan DUA baris
+      // receive identik (kasus nyata 09-12: airplanestar terima 0.05 USDCx
+      // tercatat dobel). Feed sudah collapse via cantonUpdateId, tapi DB
+      // tetap ganda. Satu baris per (user, updateId) cukup.
+      if (updateId) {
+        const dupCc = await this.prisma.ccTransaction.findFirst({
+          where: {
+            userId: receiverUserId,
+            type: 'TRANSFER_IN',
+            cantonUpdateId: updateId,
+          },
+          select: { id: true },
+        });
+        const dupToken = await this.prisma.tokenTransaction.findFirst({
+          where: {
+            userId: receiverUserId,
+            type: 'TOKEN_TRANSFER_IN',
+            cantonUpdateId: updateId,
+          },
+          select: { id: true },
+        });
+        if (dupCc || dupToken) {
+          this.logger.log(
+            `accept_offer receiver row SUDAH ada (dedup) — skip: cc=${!!dupCc} token=${!!dupToken} user=${receiverUserId.slice(0, 8)}… updateId=${updateId.slice(0, 16)}…`,
+          );
+          return;
+        }
+      }
+
       // Cari row sender yang baru di-settle — dari situ ambil detail offer.
       const senderCc = await this.prisma.ccTransaction.findFirst({
         where: { transferInstructionCid, status: 'COMPLETED' },
