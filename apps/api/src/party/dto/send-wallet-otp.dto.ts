@@ -20,7 +20,9 @@ import { normalizeWalletUsername } from '../../common/canton-party-id';
  */
 export class SendWalletOtpDto {
   @IsString()
-  @Transform(({ value }) =>
+  // `value` dari class-transformer bertipe `any`; anotasi `unknown` membuat
+  // cabang non-string mengembalikan nilai apa adanya tanpa melepas tipe.
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string'
       ? (normalizeWalletUsername(value) ?? value)
       : value,

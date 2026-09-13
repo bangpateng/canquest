@@ -131,7 +131,9 @@ export type V30RewardKindJson =
  * perbedaan cara pilih pemenang murni backend, FLOW.md §Raffle/FCFS).
  */
 export function v30RewardKindFor(params: {
-  rewardType: RewardType | string;
+  // RewardType adalah string-enum, jadi `RewardType | string` menyusut jadi
+  // `string` — pakai `string` saja (nilai RewardType tetap diterima).
+  rewardType: string;
   rewardToken: string; // "CC" | "USDCx"
   rewardAmountCc: number;
   codePlaintext: string | null; // kode dari InviteCodePool (sudah di-assign)
@@ -258,7 +260,7 @@ export function v30ClaimModel(quest: {
   if (rt === 'CC_ONLY') {
     return {
       selection: 'FCFS',
-      reward: tokenKind as V30RewardKindSpec,
+      reward: tokenKind,
       allowed: true,
       requiresLock,
     };
@@ -270,7 +272,7 @@ export function v30ClaimModel(quest: {
   if (rt === 'CC_MANUAL') {
     return {
       selection: 'RAFFLE',
-      reward: tokenKind as V30RewardKindSpec,
+      reward: tokenKind,
       allowed: true,
       requiresLock,
     };

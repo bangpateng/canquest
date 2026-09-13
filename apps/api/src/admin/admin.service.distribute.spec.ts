@@ -31,11 +31,25 @@ type SendRewardResult = {
   error?: string;
 };
 
+/**
+ * Argumen `winnerDraw.update` yang diamati test ini. Mock jest bertipe bebas,
+ * jadi bentuknya dinyatakan eksplisit supaya tidak ada akses `any`.
+ */
+type WinnerDrawUpdateArgs = {
+  where?: { id?: string };
+  data?: {
+    distributed?: boolean;
+    ledgerTxId?: string | null;
+    distributedAt?: Date | null;
+  };
+};
+
+/** Nilai yang dicatat dari tiap pemanggilan update (field bisa absen). */
 type WinnerDrawUpdateCall = {
-  id: string;
-  distributed: boolean;
-  ledgerTxId?: string;
-  distributedAt: Date | null;
+  id?: string;
+  distributed?: boolean;
+  ledgerTxId?: string | null;
+  distributedAt?: Date | null;
 };
 
 describe('AdminService.distributeRewards — anti-silent-failure', () => {
@@ -96,15 +110,17 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
    */
   function trackWinnerDrawUpdates(): WinnerDrawUpdateCall[] {
     const calls: WinnerDrawUpdateCall[] = [];
-    prisma.winnerDraw.update.mockImplementation((args: any) => {
-      calls.push({
-        id: args.where?.id,
-        distributed: args.data?.distributed,
-        ledgerTxId: args.data?.ledgerTxId,
-        distributedAt: args.data?.distributedAt ?? null,
-      });
-      return Promise.resolve({});
-    });
+    prisma.winnerDraw.update.mockImplementation(
+      (args: WinnerDrawUpdateArgs) => {
+        calls.push({
+          id: args.where?.id,
+          distributed: args.data?.distributed,
+          ledgerTxId: args.data?.ledgerTxId,
+          distributedAt: args.data?.distributedAt ?? null,
+        });
+        return Promise.resolve({});
+      },
+    );
     return calls;
   }
 
@@ -343,15 +359,17 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
       rewardTxId: 'tx-retry',
     });
     const updates2: WinnerDrawUpdateCall[] = [];
-    prisma.winnerDraw.update.mockImplementation((args: any) => {
-      updates2.push({
-        id: args.where?.id,
-        distributed: args.data?.distributed,
-        ledgerTxId: args.data?.ledgerTxId,
-        distributedAt: args.data?.distributedAt ?? null,
-      });
-      return Promise.resolve({});
-    });
+    prisma.winnerDraw.update.mockImplementation(
+      (args: WinnerDrawUpdateArgs) => {
+        updates2.push({
+          id: args.where?.id,
+          distributed: args.data?.distributed,
+          ledgerTxId: args.data?.ledgerTxId,
+          distributedAt: args.data?.distributedAt ?? null,
+        });
+        return Promise.resolve({});
+      },
+    );
 
     const result2 = await service.distributeRewards(QUEST_ID);
 

@@ -1,4 +1,5 @@
 import { RewardType } from '@prisma/client';
+import { createHash } from 'crypto';
 import {
   v30Account,
   v30ClaimModel,
@@ -20,8 +21,7 @@ describe('v30 codeHash — rumus terkunci (AGENT.md)', () => {
   });
 
   it('bukan sha256 atas string-hex (kelas bug "sha256 mentah")', () => {
-    const wrong = require('crypto')
-      .createHash('sha256')
+    const wrong = createHash('sha256')
       .update(Buffer.from('INVITE-XYZ', 'utf8').toString('hex'), 'utf8')
       .digest('hex');
     expect(v30CodeHash('INVITE-XYZ')).not.toBe(wrong);

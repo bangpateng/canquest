@@ -16,6 +16,7 @@ import {
   resolveQuestDisplayStatus,
 } from '../common/prisma-types';
 import { ConfigService } from '@nestjs/config';
+import { errorMessage } from '../common/error-message';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -363,7 +364,7 @@ export class QuestsService {
       const amount = perEvent?.amount ?? 0;
       return {
         eligible,
-        mode: quest.entryGateMode as EntryGateMode,
+        mode: quest.entryGateMode,
         ccLockAmount: quest.entryCcLock ?? 0,
         entryCostPoints: quest.entryCostPoints ?? 0,
         lockedCc: amount,
@@ -3817,7 +3818,7 @@ export class QuestsService {
         );
       }
       if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
-        const campaignContractId = (quest as any).ledgerCampaignId ?? null;
+        const campaignContractId = quest.ledgerCampaignId ?? null;
         if (campaignContractId && !claimSessionId) {
           // v25: resolve eligibility contract (LOCK_CC / POINTS) utk on-chain guard.
           // v29: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
@@ -3830,13 +3831,13 @@ export class QuestsService {
               questId,
               userId,
               userPartyId: cantonPartyId,
-              eligibilityType: (quest as any).eligibilityType ?? 'NONE',
-              eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
+              eligibilityType: quest.eligibilityType ?? 'NONE',
+              eligibilityAmount: quest.eligibilityAmount ?? 0,
               campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
               ledgerPackage: QuestsService.ledgerPackageOf(quest),
             });
           } catch (e) {
-            throw new BadRequestException(String(e?.message ?? e));
+            throw new BadRequestException(errorMessage(e));
           }
           const claimResult = await this.questLedger.claimFcfsSlot({
             campaignContractId,
@@ -4179,7 +4180,7 @@ export class QuestsService {
         );
       }
       if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
-        const campaignContractId = (quest as any).ledgerCampaignId ?? null;
+        const campaignContractId = quest.ledgerCampaignId ?? null;
         if (campaignContractId && !claimSessionId) {
           // v25: resolve eligibility contract utk on-chain guard.
           // v29: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
@@ -4192,13 +4193,13 @@ export class QuestsService {
               questId,
               userId,
               userPartyId: cantonPartyId,
-              eligibilityType: (quest as any).eligibilityType ?? 'NONE',
-              eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
+              eligibilityType: quest.eligibilityType ?? 'NONE',
+              eligibilityAmount: quest.eligibilityAmount ?? 0,
               campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
               ledgerPackage: QuestsService.ledgerPackageOf(quest),
             });
           } catch (e) {
-            throw new BadRequestException(String(e?.message ?? e));
+            throw new BadRequestException(errorMessage(e));
           }
           const claimResult = await this.questLedger.drawRaffleWinner({
             campaignContractId,
@@ -4667,7 +4668,7 @@ export class QuestsService {
         cantonPartyId &&
         !codeClaimSessionId
       ) {
-        const campaignContractId = (quest as any).ledgerCampaignId ?? null;
+        const campaignContractId = quest.ledgerCampaignId ?? null;
         if (campaignContractId) {
           const claimId = inviteClaimId;
           try {
@@ -4677,8 +4678,8 @@ export class QuestsService {
               questId,
               userId,
               userPartyId: cantonPartyId,
-              eligibilityType: (quest as any).eligibilityType ?? 'NONE',
-              eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
+              eligibilityType: quest.eligibilityType ?? 'NONE',
+              eligibilityAmount: quest.eligibilityAmount ?? 0,
               campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
               ledgerPackage: QuestsService.ledgerPackageOf(quest),
             });
@@ -5008,7 +5009,7 @@ export class QuestsService {
       // v11.1: exercise DrawRaffleWinner di QuestCampaign on-chain untuk dapat
       // claimSessionId (sebelumnya flow CC+Code raffle tidak punya DAML audit).
 
-      const ccCodeCampaignCid = (quest as any).ledgerCampaignId ?? null;
+      const ccCodeCampaignCid = quest.ledgerCampaignId ?? null;
       // v29 anti-slot-burn: retry yang sudah punya receipt PRE_SETTLE pakai
       // ulang receipt — jangan exercise DrawWinner lagi (tiap exercise
       // mengonsumsi 1 kuota on-chain; tanpa contract keys ledger tidak
@@ -5034,8 +5035,8 @@ export class QuestsService {
             questId,
             userId,
             userPartyId: cantonPartyId,
-            eligibilityType: (quest as any).eligibilityType ?? 'NONE',
-            eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
+            eligibilityType: quest.eligibilityType ?? 'NONE',
+            eligibilityAmount: quest.eligibilityAmount ?? 0,
             campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
             ledgerPackage: QuestsService.ledgerPackageOf(quest),
           });

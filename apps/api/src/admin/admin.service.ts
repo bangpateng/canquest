@@ -14,6 +14,7 @@ import {
   SubmissionStatus,
   normalizeRewardType,
 } from '../common/prisma-types';
+import { errorMessage } from '../common/error-message';
 import { randomInt, randomUUID } from 'crypto';
 import { hashCode } from '../party/wallet-invite-code.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -261,7 +262,7 @@ export class AdminService {
         rewardPool: 'Earn points',
         status: QuestStatus.ACTIVE,
 
-        rewardType: RewardType.CC_ONLY as any,
+        rewardType: RewardType.CC_ONLY,
         questKind: QuestKind.EARN_HUB,
         tags: JSON.stringify(['earn', 'daily']),
         tasks: {
@@ -625,14 +626,13 @@ export class AdminService {
         endsAt: data.endsAt ? new Date(data.endsAt) : null,
         status: data.status ?? QuestStatus.ACTIVE,
 
-        rewardType: (data.rewardType ?? RewardType.CC_ONLY) as any,
+        rewardType: data.rewardType ?? RewardType.CC_ONLY,
         winnerMessage: data.winnerMessage?.trim() || null,
         redeemUrl: data.redeemUrl?.trim() || null,
         redeemInstructions: data.redeemInstructions?.trim() || null,
         questKind,
         // Per-event Earn access gate (CAMPAIGN). Null = global default.
-        entryGateMode: (data.entryGateMode ??
-          EntryGateMode.CC_OR_POINTS) as any,
+        entryGateMode: data.entryGateMode ?? EntryGateMode.CC_OR_POINTS,
         entryCcLock:
           data.entryCcLock != null && data.entryCcLock > 0
             ? data.entryCcLock
@@ -690,9 +690,9 @@ export class AdminService {
     const validCodes = (data.inviteCodes ?? []).map((c) => c.trim()).filter(Boolean);
     if (validCodes.length > 0) {
       const model = v30ClaimModel({
-        rewardType: (data.rewardType ?? RewardType.CC_ONLY) as string,
+        rewardType: data.rewardType ?? RewardType.CC_ONLY,
         rewardToken: data.rewardToken,
-        entryGateMode: data.entryGateMode as string | null,
+        entryGateMode: data.entryGateMode,
         rewardCc: data.rewardCc ?? 0,
       });
       if (model.reward === 'CODE' && data.maxWinners != null && validCodes.length !== data.maxWinners) {
@@ -982,7 +982,7 @@ export class AdminService {
         ...(data.status !== undefined && { status: data.status }),
 
         ...(data.rewardType !== undefined && {
-          rewardType: data.rewardType as any,
+          rewardType: data.rewardType,
         }),
         ...(data.maxWinners !== undefined && { maxWinners: data.maxWinners }),
         ...(data.codeWinnersQuota !== undefined && {
@@ -1001,7 +1001,7 @@ export class AdminService {
         ...(data.tags !== undefined && { tags: JSON.stringify(data.tags) }),
         // Per-event Earn access gate (CAMPAIGN). null = clear override → global default.
         ...(data.entryGateMode !== undefined && {
-          entryGateMode: data.entryGateMode as any,
+          entryGateMode: data.entryGateMode,
         }),
         ...(data.entryCcLock !== undefined && {
           entryCcLock:
@@ -2229,7 +2229,7 @@ export class AdminService {
       for (const g of given) {
         await this.revokeReferral(g.referredUserId).catch((err) => {
           this.logger.warn(
-            `Clawback skipped during delete (user ${id}): ${err?.message ?? err}`,
+            `Clawback skipped during delete (user ${id}): ${errorMessage(err)}`,
           );
         });
       }
@@ -3056,8 +3056,12 @@ export class AdminService {
     let socialLinks: Array<{ platform: string; url: string }> = [];
     if (setting?.value) {
       try {
-        const parsed = JSON.parse(setting.value);
-        if (Array.isArray(parsed)) socialLinks = parsed;
+        // Bentuk entri tidak divalidasi di sini (perilaku lama dipertahankan);
+        // anotasi `unknown` + cast sempit hanya menggantikan `any` implisit.
+        const parsed: unknown = JSON.parse(setting.value);
+        if (Array.isArray(parsed)) {
+          socialLinks = parsed as Array<{ platform: string; url: string }>;
+        }
       } catch {
         socialLinks = [];
       }

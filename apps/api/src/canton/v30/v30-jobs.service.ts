@@ -7,7 +7,6 @@ import { LockProposalService } from './lock-proposal.service';
 import {
   V30_PREAPPROVAL_LIFETIME_DAYS,
   V30_PREAPPROVAL_RENEWAL_MARGIN_DAYS,
-  isV30Quest,
   v30Enabled,
   v30T1At,
 } from './v30.constants';
@@ -57,8 +56,12 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
     }
     // Harian (renewal + expiry) — jitter supaya tidak bareng poller lain.
     const dayMs = 24 * 60 * 60 * 1000;
-    this.timers.push(setTimeout(() => this.dailyTick(), 60_000 + Math.random() * 60_000));
-    const daily = setInterval(() => this.dailyTick(), dayMs);
+    // `void` eksplisit: callback timer tidak menerima Promise, dan tick sudah
+    // menangani error sendiri (lihat pola rewardPendingTick di bawah).
+    this.timers.push(
+      setTimeout(() => void this.dailyTick(), 60_000 + Math.random() * 60_000),
+    );
+    const daily = setInterval(() => void this.dailyTick(), dayMs);
     daily.unref?.();
     this.timers.push(daily);
 

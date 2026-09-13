@@ -9,11 +9,15 @@ function makeLookup(
   rows: Array<{ id: string; username: string | null; cantonPartyId: string }>,
 ): PartyUserLookup {
   return {
-    async findMany(args) {
+    findMany(args) {
       const q = args.where.cantonPartyId.equals.toLowerCase();
-      return rows
-        .filter((r) => r.cantonPartyId.toLowerCase() === q)
-        .slice(0, args.take);
+      // Interface PartyUserLookup mewajibkan Promise — resolusi eksplisit
+      // supaya mock tetap sinkron (tanpa `async` yang tak menunggu apa pun).
+      return Promise.resolve(
+        rows
+          .filter((r) => r.cantonPartyId.toLowerCase() === q)
+          .slice(0, args.take),
+      );
     },
   };
 }
@@ -71,9 +75,9 @@ describe('findUserByPartyExact (resolver ketat party→user)', () => {
   it('party internal canquest: → null tanpa query DB', async () => {
     let queried = false;
     const users: PartyUserLookup = {
-      async findMany() {
+      findMany() {
         queried = true;
-        return [];
+        return Promise.resolve([]);
       },
     };
     await expect(

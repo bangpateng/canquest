@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 /**
  * DTO onboarding wallet external (non-custodial) — M2.

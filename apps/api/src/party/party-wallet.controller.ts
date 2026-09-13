@@ -3,7 +3,6 @@
  *
  * Diekstraksi dari party.controller.ts — route path & behavior identik.
  */
-import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from '../auth/auth.service';
 import {
@@ -31,7 +30,6 @@ import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { ExternalWalletService } from '../canton/external-wallet.service';
 import { hasRealWallet } from '../common/wallet-policy';
 import {
-  normalizeCantonPartyId,
   normalizeWalletUsername,
   participantSuffixFromParty,
   participantSuffixesMatch,

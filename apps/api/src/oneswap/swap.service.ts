@@ -40,6 +40,7 @@ import type { ExecuteSwapParams, SwapExecResult } from './oneswap.types';
 import { OpenSwapExistsError } from '@oneswap/sdk';
 import type { Token } from '@oneswap/sdk';
 import { SigningRelayService } from '../canton/signing-relay.service';
+import { errorMessage } from '../common/error-message';
 import { Decimal } from '@prisma/client/runtime/library';
 
 /** CC instrument id (Amulet) — symbol 'CC' memetakan ke instrument id 'Amulet'. */
@@ -819,8 +820,15 @@ export class SwapService {
       // kondisi open-swap-exists — bukan cuma OpenSwapExistsError bertipe.
       // Fallback: SELALU cek getOpenSwap sebelum menyerah.
       if (!(err instanceof OpenSwapExistsError)) {
+        // `err` bertipe unknown: nama konstruktor dibaca lewat narrowing
+        // eksplisit supaya tidak ada akses `any`.
+        const ctorName =
+          err !== null && typeof err === 'object'
+            ? ((err as { constructor?: { name?: string } }).constructor?.name ??
+              'object')
+            : typeof err;
         this.logger.warn(
-          `createSwap non-typed error (${err.constructor?.name}): ${String((err as Error).message).slice(0, 120)} — trying getOpenSwap fallback`,
+          `createSwap non-typed error (${ctorName}): ${errorMessage(err).slice(0, 120)} — trying getOpenSwap fallback`,
         );
       }
 
@@ -846,8 +854,6 @@ export class SwapService {
         const depositGone = await this.hasDepositArrived(
           args.userRef,
           open.depositParty,
-          args.inSymbol,
-          args.amountIn,
         );
         if (depositGone) {
           this.logger.log(
@@ -888,8 +894,6 @@ export class SwapService {
   private async hasDepositArrived(
     userRef: string,
     depositParty: string,
-    inSymbol: string,
-    amountIn: number,
   ): Promise<boolean> {
     try {
       const since = new Date(Date.now() - 15 * 60_000);

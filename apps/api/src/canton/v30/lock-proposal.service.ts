@@ -6,6 +6,7 @@ import { CantonLedgerService } from '../canton-ledger.service';
 import { UsersService } from '../../users/users.service';
 import { hasRealWallet } from '../../common/wallet-policy';
 import { cantonPartyIdsEqual } from '../../common/canton-party-id';
+import { readStr } from '../ledger-json';
 import {
   V30_PROPOSAL_WINDOW_MS,
   isV30Quest,
@@ -285,7 +286,7 @@ export class LockProposalService {
     meta: Record<string, unknown>,
     result: { updateId?: string } | undefined,
   ): Promise<void> {
-    const lockRecordId = String(meta.lockRecordId ?? '');
+    const lockRecordId = readStr(meta.lockRecordId) ?? '';
     if (!lockRecordId) return;
     try {
       const verified = await this.verifyAndRecord(lockRecordId, result?.updateId);

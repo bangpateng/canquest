@@ -26,7 +26,9 @@ describe('AdminAuthController — login + TOTP 2FA', () => {
       get: (key: string) => env[key],
     } as unknown as ConfigService;
     return new AdminAuthController(
-      { signAsync: async () => 'test-token' } as unknown as JwtService,
+      {
+        signAsync: () => Promise.resolve('test-token'),
+      } as unknown as JwtService,
       config,
     );
   }

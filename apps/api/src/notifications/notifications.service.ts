@@ -156,27 +156,32 @@ export class NotificationsService {
     const drawByUser = new Map(draws.map((d) => [d.userId, d]));
 
     const claimDeadline = this.claimDeadlineDate(quest);
-    const data = winners.map((w) => {
-      const draw = drawByUser.get(w.id);
-      const payload: WinnerPayload = {
-        kind: 'winner',
-        title: quest.title,
-        handle:
-          w.displayName?.trim() || (w.username ? `@${w.username}` : 'winner'),
-        rewardLabel: this.rewardLabel(draw, quest),
-        claimByLabel: claimDeadline
-          ? `Claim by ${formatDate(claimDeadline)}`
-          : 'Claim via your dApp dashboard',
-        claimUrl: this.emails.webUrl(`/earn/${questId}`),
-      };
-      return {
-        userId: w.id,
-        questId,
-        email: w.email,
-        type: 'CAMPAIGN_WINNER' as EmailNotificationType,
-        payload: payload as unknown as Prisma.InputJsonValue,
-      };
-    });
+    // Tipe eksplisit pada callback: literal `type` ikut ter-konteks ke enum
+    // EmailNotificationType, jadi tidak perlu `as` (yang di sini justru bikin
+    // eslint melaporkan assertion mubazir).
+    const data = winners.map(
+      (w): Prisma.EmailNotificationLogCreateManyInput => {
+        const draw = drawByUser.get(w.id);
+        const payload: WinnerPayload = {
+          kind: 'winner',
+          title: quest.title,
+          handle:
+            w.displayName?.trim() || (w.username ? `@${w.username}` : 'winner'),
+          rewardLabel: this.rewardLabel(draw, quest),
+          claimByLabel: claimDeadline
+            ? `Claim by ${formatDate(claimDeadline)}`
+            : 'Claim via your dApp dashboard',
+          claimUrl: this.emails.webUrl(`/earn/${questId}`),
+        };
+        return {
+          userId: w.id,
+          questId,
+          email: w.email,
+          type: 'CAMPAIGN_WINNER',
+          payload: payload as unknown as Prisma.InputJsonValue,
+        };
+      },
+    );
 
     const created = await this.prisma.emailNotificationLog.createMany({
       data,

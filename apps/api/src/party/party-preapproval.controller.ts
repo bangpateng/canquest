@@ -11,6 +11,7 @@ import {
 import { SkipThrottle } from '@nestjs/throttler';
 import { UsersService } from '../users/users.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
+import { pick, readStr } from '../canton/ledger-json';
 import type { AuthedReq } from './party-shared';
 
 /**
@@ -60,16 +61,19 @@ export class PartyPreapprovalController {
             body: `grant_type=client_credentials&client_id=${this.config.get('LEDGER_CLIENT_ID')}&client_secret=${this.config.get('LEDGER_CLIENT_SECRET')}&scope=daml_ledger_api`,
           },
         );
-        const { access_token: token } = await tokenRes.json();
+        const token =
+          readStr(pick(await tokenRes.json(), 'access_token')) ?? '';
         const checkRes = await fetch(
           `${valUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encodeURIComponent(user.cantonPartyId)}`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
         let active = false;
         if (checkRes.ok) {
-          const data = await checkRes.json();
+          const data: unknown = await checkRes.json();
           active = Boolean(
-            data?.transfer_preapproval || data?.transfer_preapproval_contract_id || data?.active,
+            pick(data, 'transfer_preapproval') ||
+            pick(data, 'transfer_preapproval_contract_id') ||
+            pick(data, 'active'),
           );
         }
         // USDCx (token registry) preapproval — P2P one-step via template

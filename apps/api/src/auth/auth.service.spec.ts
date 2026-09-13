@@ -58,12 +58,12 @@ describe('AuthService — register / login / refresh', () => {
 
   const REAL_PASSWORD = 'SuperSecret123!';
 
-  beforeAll(async () => {
+  beforeAll(() => {
     process.env.JWT_ACCESS_SECRET = 'test-secret-for-hmac-32-chars-min!!';
     process.env.AUTH_REGISTER_SKIP_OTP = 'false';
   });
 
-  beforeEach(async () => {
+  beforeEach(() => {
     users = {
       findByEmail: jest.fn(),
       findById: jest.fn(),
@@ -77,7 +77,7 @@ describe('AuthService — register / login / refresh', () => {
       generateUniqueReferralCode: jest.fn().mockResolvedValue('ARIE123'),
       completeReferralForUser: jest.fn().mockResolvedValue(undefined),
       findReferrerByCode: jest.fn(),
-    } as unknown as { [K in keyof ReferralService]: jest.Mock };
+    };
     prisma = {
       refreshToken: {
         findUnique: jest.fn(),
@@ -85,7 +85,7 @@ describe('AuthService — register / login / refresh', () => {
         update: jest.fn().mockResolvedValue({}),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
-    } as unknown as typeof prisma;
+    };
     jwt = { signAsync: jest.fn().mockResolvedValue('access-token-1') };
     resend = { sendOtpEmail: jest.fn().mockResolvedValue(undefined) };
 
@@ -169,10 +169,17 @@ describe('AuthService — register / login / refresh', () => {
       expect(res.accessToken).toBe('access-token-1');
       expect(res.refreshToken).toMatch(/^[0-9a-f]{96}$/); // 48 bytes hex
       // Refresh token disimpan sebagai HASH sha256, bukan plaintext.
-      const storedHash = prisma.refreshToken.create.mock.calls[0][0]
-        .data.tokenHash as string;
+      // Argumen mock jest bertipe `any`; beri bentuk eksplisit agar pembacaan
+      // `.data.tokenHash` tetap type-safe.
+      const createMock = prisma.refreshToken.create as unknown as {
+        mock: { calls: Array<[{ data: { tokenHash: string } }]> };
+      };
+      const storedHash = createMock.mock.calls[0][0].data.tokenHash;
+      // Anotasi eksplisit: tipe kembalian `login` tidak ter-resolve sempurna di
+      // lint type-aware, dan `createHash.update` butuh BinaryLike yang jelas.
+      const issuedToken = res.refreshToken as string;
       expect(storedHash).toBe(
-        createHash('sha256').update(res.refreshToken).digest('hex'),
+        createHash('sha256').update(issuedToken).digest('hex'),
       );
       expect(storedHash).not.toBe(res.refreshToken);
     });
@@ -235,7 +242,7 @@ describe('AuthService — register / login / refresh', () => {
       expect(res.accessToken).toBe('access-token-2');
       expect(prisma.refreshToken.update).toHaveBeenCalledWith({
         where: { id: 'rt-1' },
-        data: { revokedAt: expect.any(Date) },
+        data: { revokedAt: expect.any(Date) as Date },
       });
       expect(prisma.refreshToken.create).toHaveBeenCalledTimes(1);
       // Refresh baru HARUS berbeda dari yang lama.

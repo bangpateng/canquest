@@ -26,6 +26,9 @@
  * diperlakukan sebagai transfer biasa (bukan ditebak).
  */
 import type { CantonUpdateEvent } from './canton-updates.service';
+// readStr: narrowing untuk field JSON ledger. Menggantikan `String(x ?? '')`
+// pada nilai `unknown` — objek tidak lagi ikut ter-stringify jadi "[object Object]".
+import { readStr } from './ledger-json';
 
 /** Kunci meta ledger yang dipakai. */
 export const LEDGER_META = {
@@ -438,9 +441,9 @@ function readHoldingOwnerAmount(c: Record<string, unknown>): {
     typeof amt === 'string'
       ? amt
       : typeof amt?.initialAmount === 'string'
-        ? (amt.initialAmount as string)
+        ? amt.initialAmount
         : typeof amt?.amount === 'string'
-          ? (amt.amount as string)
+          ? amt.amount
           : null;
   return { owner, amount };
 }
@@ -487,9 +490,9 @@ export function readLockMovement(
     for (const c of (ev.created ?? []) as unknown as Array<
       Record<string, unknown>
     >) {
-      const tpl = String(c.templateId ?? '');
+      const tpl = readStr(c.templateId) ?? '';
       if (!tpl.includes(':Splice.Amulet:Amulet')) continue;
-      if (transient.has(String(c.contractId ?? ''))) continue;
+      if (transient.has(readStr(c.contractId) ?? '')) continue;
       const { owner, amount } = readHoldingOwnerAmount(c);
       if (owner === party && amount) {
         return {
@@ -506,9 +509,9 @@ export function readLockMovement(
   for (const c of (ev.created ?? []) as unknown as Array<
       Record<string, unknown>
     >) {
-    const tpl = String(c.templateId ?? '');
+    const tpl = readStr(c.templateId) ?? '';
     if (!tpl.endsWith(':Splice.Amulet:LockedAmulet')) continue;
-    const cid = String(c.contractId ?? '');
+    const cid = readStr(c.contractId) ?? '';
     if (transient.has(cid)) continue;
     const { owner, amount } = readHoldingOwnerAmount(c);
     if (owner === party && amount) {

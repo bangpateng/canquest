@@ -401,7 +401,9 @@ export class QuestLedgerService implements OnModuleInit {
         const cur = stack.pop();
         if (!cur || typeof cur !== 'object') continue;
         if (Array.isArray(cur)) {
-          stack.push(...cur);
+          // Array.isArray menyempitkan ke any[] — sebarkan sebagai unknown[]
+          // supaya tidak ada nilai any yang menyusup ke stack.
+          for (const item of cur as unknown[]) stack.push(item);
           continue;
         }
         const obj = cur as Record<string, unknown>;
@@ -1888,7 +1890,9 @@ export class QuestLedgerService implements OnModuleInit {
         const cur = stack.pop();
         if (!cur || typeof cur !== 'object') continue;
         if (Array.isArray(cur)) {
-          stack.push(...cur);
+          // Array.isArray menyempitkan ke any[] — sebarkan sebagai unknown[]
+          // supaya tidak ada nilai any yang menyusup ke stack.
+          for (const item of cur as unknown[]) stack.push(item);
           continue;
         }
         const rec = cur as Record<string, unknown>;

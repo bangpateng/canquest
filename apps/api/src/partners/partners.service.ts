@@ -43,7 +43,9 @@ export interface PartnerDto {
 function parseJsonArray<T>(raw: string | null | undefined): T[] {
   if (!raw) return [];
   try {
-    const parsed = JSON.parse(raw);
+    // Elemen tidak divalidasi di sini — pemanggil yang tahu bentuk tipenya
+    // (kontrak penyimpanan). `unknown` menghindari `any` implisit dari JSON.parse.
+    const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch {
     return [];
@@ -167,8 +169,12 @@ export class PartnersService {
     let socialLinks: Array<{ platform: string; url: string }> = [];
     if (setting?.value) {
       try {
-        const parsed = JSON.parse(setting.value);
-        if (Array.isArray(parsed)) socialLinks = parsed;
+        // Bentuk entri tidak divalidasi di sini (perilaku lama dipertahankan);
+        // anotasi `unknown` + cast sempit hanya menggantikan `any` implisit.
+        const parsed: unknown = JSON.parse(setting.value);
+        if (Array.isArray(parsed)) {
+          socialLinks = parsed as Array<{ platform: string; url: string }>;
+        }
       } catch {
         socialLinks = [];
       }

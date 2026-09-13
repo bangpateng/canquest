@@ -6,6 +6,7 @@ import { CantonLedgerService } from '../canton-ledger.service';
 import { TokenInstrumentHelper, normalizeRewardToken } from '../token-instrument.helper';
 import { UsersService } from '../../users/users.service';
 import { hasRealWallet } from '../../common/wallet-policy';
+import { readStr } from '../ledger-json';
 import { RewardType } from '@prisma/client';
 import {
   V30RewardKindLabel,
@@ -497,7 +498,7 @@ export class ClaimOfferService {
         {
           ExerciseCommand: {
             templateId: v30ClaimTemplateId(this.config, 'ClaimOffer'),
-            contractId: draw.offerContractId!,
+            contractId: draw.offerContractId,
             choice: hasToken ? 'AcceptTokenClaim' : 'AcceptCodeClaim',
             choiceArgument,
           },
@@ -526,7 +527,7 @@ export class ClaimOfferService {
     meta: Record<string, unknown>,
     result: { updateId?: string } | undefined,
   ): Promise<void> {
-    const drawId = String(meta.winnerDrawId ?? '');
+    const drawId = readStr(meta.winnerDrawId) ?? '';
     if (!drawId) return;
     try {
       await this.syncReceiptFromLedger(drawId);

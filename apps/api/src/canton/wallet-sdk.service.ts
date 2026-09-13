@@ -49,7 +49,12 @@ export class CantonWalletSdkService {
     }
     if (!overrides.size) return;
     const orig = dns.lookup.bind(dns);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Monkey-patch `dns.lookup` supaya host tertentu (CANTON_DNS_OVERRIDES)
+    // diarahkan ke IP tetap. Pengecualian tipe di sini disengaja: `dns.lookup`
+    // punya overload (host, cb) / (host, opts, cb) yang tidak bisa ditulis ulang
+    // tanpa menduplikasi definisi Node — dan `any` membuat argumen diteruskan
+    // apa adanya, sehingga perilaku runtime tetap identik.
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
     (dns as any).lookup = (hostname: string, options: any, callback?: any) => {
       let cb = callback;
       let opts = options;
@@ -60,6 +65,7 @@ export class CantonWalletSdkService {
       const ip = overrides.get(hostname);
       return ip ? orig(ip, opts, cb) : orig(hostname, opts, cb);
     };
+    /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
     this.logger.log(`DNS pin aktif untuk ${overrides.size} host (CANTON_DNS_OVERRIDES)`);
   }
 
@@ -74,6 +80,9 @@ export class CantonWalletSdkService {
         // require() di output CJS — dynamic import biasa TIDAK bekerja.
         // new Function() mem-bypass compiler: string tidak di-analyze,
         // Node mengeksekusi import() ESM asli saat runtime.
+        // Pengecualian disengaja: satu-satunya cara memuat ESM dari output CJS.
+        // Input 100% literal milik kami sendiri (tanpa data eksternal).
+        // eslint-disable-next-line @typescript-eslint/no-implied-eval
         const loadSdk = new Function(
           'm',
           'return import(m)',
@@ -85,9 +94,9 @@ export class CantonWalletSdkService {
         // Logger redaksi: default SDK mencetak response (berisi access token).
         const quiet = new CustomLogAdapter((level: string, ctx: Record<string, unknown>, message?: string) => {
           if (level !== 'warn' && level !== 'error') return;
-          const safe = { ...ctx };
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          delete (safe as any).response;
+          const safe: Record<string, unknown> = { ...ctx };
+          // Field response bisa memuat access token — buang sebelum di-log.
+          delete safe.response;
           this.logger.warn(
             `[sdk:${level}] ${message ?? ''} ${JSON.stringify(safe).slice(0, 160)}`,
           );

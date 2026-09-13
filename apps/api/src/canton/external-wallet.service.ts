@@ -31,10 +31,25 @@ import { CantonWalletSdkService } from './wallet-sdk.service';
 
 const PENDING_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Kontrak MINIMAL prepared-object SDK yang benar-benar kita pakai.
+ *
+ * SDK mengembalikan objek kompleks bertipe longgar; menyimpannya sebagai `any`
+ * membuat setiap pemanggilan method di bawahnya kehilangan pemeriksaan tipe
+ * (dan memicu no-unsafe-*). Interface ini mendokumentasikan bagian yang kita
+ * andalkan saja — pemakaian runtime tidak berubah.
+ */
+interface PreparedExternalParty {
+  execute(
+    signatureB64: string,
+    opts: { grantUserRights: boolean },
+  ): Promise<{ partyId: string; publicKeyFingerprint: string }>;
+}
+
 interface PendingExternalRegistration {
   userId: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  prepared: any; // PreparedPartyCreationService — prepared-object SDK harus hidup antar panggilan
+  /** PreparedPartyCreationService — objek hidup antar panggilan prepare→complete. */
+  prepared: PreparedExternalParty;
   topology: {
     partyId: string;
     publicKeyFingerprint: string;

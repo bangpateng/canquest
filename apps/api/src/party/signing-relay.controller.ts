@@ -63,8 +63,10 @@ export class SigningRelayController {
 
   /** Clear stale pending transaction (stuck from failed signing attempt). */
   @Post('cancel')
-  async cancelPending(@Req() req: AuthedReq) {
+  cancelPending(@Req() req: AuthedReq): Promise<{ ok: boolean }> {
     this.relay.discard(req.user.userId);
-    return { ok: true };
+    // Tanpa `async` (tidak ada yang di-await) tapi Promise dipertahankan:
+    // metadata decorator Nest tetap `Promise`, sama seperti versi sebelumnya.
+    return Promise.resolve({ ok: true });
   }
 }

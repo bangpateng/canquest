@@ -313,7 +313,7 @@ function buildEventRows(ev: CantonUpdateEvent): BuiltRow[] {
       contractId: a.contractId ?? null,
       witnessParties: a.witnessParties ?? [],
       offset,
-      payload: { ...a } as unknown as Prisma.InputJsonValue,
+      payload: { ...a },
     });
   }
   for (const e of ev.exercised) {

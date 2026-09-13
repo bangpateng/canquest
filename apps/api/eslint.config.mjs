@@ -30,6 +30,18 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       "prettier/prettier": ["error", { endOfLine: "auto" }],
+      // Konvensi yang sudah dipakai di kodebase: parameter/variabel yang sengaja
+      // tidak dipakai dinamai dengan awalan "_" (mis. `_userId`, `_publicKeyHex`
+      // pada stub yang harus menjaga bentuk signature). Tanpa pola ini, eslint
+      // justru melaporkan placeholder yang memang disengaja itu sebagai error.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
     },
   },
 );
