@@ -500,6 +500,18 @@ export class SigningRelayService {
         if (lockRow?.lockedAmuletCid) {
           await this.lockProposals.onLockedAmuletUnlocked(lockRow.lockedAmuletCid);
         }
+      } catch (err) {
+        this.logger.error(
+          `unlock_cc bookkeeping gagal (lockId=${meta.lockId}): ${String(err).slice(0, 160)}`,
+        );
+        return;
+      }
+      // Baris history dipisah: WSS kini juga menulis CC_UNLOCK untuk unlock
+      // dana sendiri dengan kunci unik yang SAMA (userId, ledgerTxId=updateId).
+      // Kalau WSS menang balapan, insert ini kena P2002 — itu idempoten, BUKAN
+      // kegagalan (dulu tercatat sebagai ERROR palsu: logs/api-error.log
+      // 2026-09-13 09:20:03 lockId=cmtzhembk001vkh9pgedhp407).
+      try {
         await this.users.recordTransaction({
           userId: entry.userId,
           amountCc: meta.amountCc,
@@ -510,9 +522,16 @@ export class SigningRelayService {
           cantonUpdateId: result?.updateId,
         });
       } catch (err) {
-        this.logger.error(
-          `unlock_cc bookkeeping gagal (lockId=${meta.lockId}): ${String(err).slice(0, 160)}`,
-        );
+        const msg = String(err);
+        if (msg.includes('P2002') || msg.includes('Unique constraint')) {
+          this.logger.log(
+            `unlock_cc: baris history sudah ditulis WSS dengan updateId sama (idempoten) lockId=${meta.lockId}`,
+          );
+        } else {
+          this.logger.error(
+            `unlock_cc history gagal (lockId=${meta.lockId}): ${msg.slice(0, 160)}`,
+          );
+        }
       }
       return;
     }

@@ -520,3 +520,35 @@ export function readLockMovement(
   }
   return null;
 }
+
+/**
+ * Kredit yang merupakan HASIL UNLOCK dana sendiri — bukan penerimaan dari
+ * pihak lain.
+ *
+ * Kasus nyata (2026-09-13 07:20 @airplanestar): unlock 5 CC tulis di history
+ * sebagai `TRANSFER_IN`/"Receive" padahal dana itu milik party sendiri yang
+ * kembali dari lock. Penyebabnya WSS menulis label generik untuk SEMUA kredit
+ * CC; relay (pemilik label CC_UNLOCK) kalah balapan slot unik
+ * (userId, ledgerTxId=updateId) sehingga baris "Receive" menang permanen
+ * (`logs/api-error.log`: "unlock_cc bookkeeping gagal … P2002").
+ *
+ * Syarat KETAT supaya tidak salah label:
+ *   1. readLockMovement() mengenali gerakan unlock MILIK party ini, DAN
+ *   2. jumlah kredit di update ini PERSIS sama dengan jumlah unlock.
+ * Kalau ada kredit lain (mis. transfer masuk + unlock dalam satu update),
+ * syarat 2 gagal → update itu campuran, diperlakukan sebagai penerimaan biasa
+ * (label lama) — bukan Unlock.
+ */
+export function selfUnlockCredit(
+  ev: Pick<CantonUpdateEvent, 'created' | 'exercised' | 'archived'>,
+  party: string,
+  totalAmount: number,
+): LockMovement | null {
+  const movement = readLockMovement(ev, party);
+  if (!movement || movement.kind !== 'unlock') return null;
+  const amount = Number(movement.amount);
+  if (!Number.isFinite(amount)) return null;
+  const tolerance = Math.max(1e-9, Math.abs(totalAmount) * 1e-9);
+  if (Math.abs(amount - totalAmount) > tolerance) return null;
+  return movement;
+}

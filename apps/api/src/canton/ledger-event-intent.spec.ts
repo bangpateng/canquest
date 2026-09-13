@@ -14,6 +14,7 @@ import {
   isSelfFundsMovement,
   isOwnChangeCredit,
   readLockMovement,
+  selfUnlockCredit,
   LEDGER_META,
 } from './ledger-event-intent';
 import type { CantonUpdateEvent } from './canton-updates.service';
@@ -481,6 +482,152 @@ describe('readLockMovement (lock/unlock dana sendiri)', () => {
       PARTY,
     );
     expect(m).toBeNull();
+  });
+});
+
+describe('selfUnlockCredit — unlock dana sendiri, bukan Receive', () => {
+  const PARTY = USER;
+  const HOLD_IV = (owner: string, amount: string) => [
+    { viewValue: { owner, amount, instrumentId: { id: 'Amulet', admin: 'DSO::x' } } },
+  ];
+  /** Update unlock: exercise LockedAmulet_UnlockV2 + Amulet persisten milik party. */
+  const unlockEv = (amount: string, lockedCid = 'cid-locked') =>
+    ({
+      created: [
+        {
+          contractId: 'cid-amulet',
+          templateId: 'pkg:Splice.Amulet:Amulet',
+          createArgument: {},
+          interfaceViews: HOLD_IV(PARTY, amount),
+        },
+      ],
+      archived: [],
+      exercised: [
+        {
+          choice: 'LockedAmulet_UnlockV2',
+          contractId: lockedCid,
+          actingParties: [PARTY, 'DSO::x'],
+          choiceArgument: {},
+        },
+      ],
+    }) as never;
+
+  it('unlock 5 CC & satu-satunya kredit 5 CC → unlock (kasus airplanestar 2026-09-13)', () => {
+    expect(selfUnlockCredit(unlockEv('5.0000000000'), PARTY, 5)).toMatchObject({
+      kind: 'unlock',
+      amount: '5.0000000000',
+      lockedAmuletCid: 'cid-locked',
+    });
+  });
+
+  it('withdraw TransferInstruction (LockedAmulet_UnlockV2 oleh party) → unlock', () => {
+    expect(
+      selfUnlockCredit(
+        {
+          created: [
+            {
+              contractId: 'cid-amulet',
+              templateId: 'pkg:Splice.Amulet:Amulet',
+              createArgument: {},
+              interfaceViews: HOLD_IV(PARTY, '10.1000000000'),
+            },
+          ],
+          archived: [],
+          exercised: [
+            {
+              choice: 'TransferInstruction_Withdraw',
+              contractId: 'cid-ti',
+              actingParties: [PARTY],
+              choiceArgument: {},
+            },
+            {
+              choice: 'LockedAmulet_UnlockV2',
+              contractId: 'cid-locked',
+              actingParties: ['DSO::x', PARTY],
+              choiceArgument: {},
+            },
+          ],
+        } as never,
+        PARTY,
+        10.1,
+      ),
+    ).toMatchObject({ kind: 'unlock', amount: '10.1000000000' });
+  });
+
+  it('update CAMPURAN (unlock 5 + kredit lain 2) → null, tetap penerimaan biasa', () => {
+    expect(selfUnlockCredit(unlockEv('5.0000000000'), PARTY, 7)).toBeNull();
+  });
+
+  it('jumlah hampir sama tapi beda nyata (toleransi 1e-9 relatif) → null', () => {
+    expect(selfUnlockCredit(unlockEv('5.0000000000'), PARTY, 5.000001)).toBeNull();
+  });
+
+  it('transfer biasa tanpa unlock → null', () => {
+    expect(
+      selfUnlockCredit(
+        {
+          created: [
+            {
+              contractId: 'cid-amulet',
+              templateId: 'pkg:Splice.Amulet:Amulet',
+              createArgument: {},
+              interfaceViews: HOLD_IV(PARTY, '3.0000000000'),
+            },
+          ],
+          archived: [],
+          exercised: [
+            { choice: 'TransferFactory_Transfer', contractId: 'cid-t', actingParties: ['orang::x'], choiceArgument: {} },
+          ],
+        } as never,
+        PARTY,
+        3,
+      ),
+    ).toBeNull();
+  });
+
+  it('swap deposit (unlock + transfer keluar) → null, bukan Unlock', () => {
+    expect(
+      selfUnlockCredit(
+        {
+          created: [
+            {
+              contractId: 'cid-amulet',
+              templateId: 'pkg:Splice.Amulet:Amulet',
+              createArgument: {},
+              interfaceViews: HOLD_IV(PARTY, '10.4200000000'),
+            },
+          ],
+          archived: [],
+          exercised: [
+            {
+              choice: 'TransferInstruction_Accept',
+              contractId: 'cid-ti',
+              actingParties: ['oneswap-wallet::x'],
+              choiceArgument: {},
+            },
+            {
+              choice: 'LockedAmulet_UnlockV2',
+              contractId: 'cid-locked',
+              actingParties: ['DSO::x', PARTY],
+              choiceArgument: {},
+            },
+            {
+              choice: 'TransferFactory_Transfer',
+              actingParties: [PARTY],
+              choiceArgument: { transfer: { sender: PARTY, receiver: 'oneswap-wallet::x', amount: '10.42' } },
+            },
+          ],
+        } as never,
+        PARTY,
+        10.42,
+      ),
+    ).toBeNull();
+  });
+
+  it('event kosong → null', () => {
+    expect(
+      selfUnlockCredit({ created: [], archived: [], exercised: [] }, PARTY, 1),
+    ).toBeNull();
   });
 });
 

@@ -57,6 +57,7 @@ import {
   readSwapOutLeg,
   isSelfFundsMovement,
   isOwnChangeCredit,
+  selfUnlockCredit,
   type LedgerEventIntent,
 } from './ledger-event-intent';
 
@@ -269,7 +270,7 @@ export class BalanceEventHandlerService
           totalAmount,
           ev.updateId,
           intent,
-          ev.exercised,
+          ev,
         );
       }
 
@@ -444,18 +445,17 @@ export class BalanceEventHandlerService
     updateId: string,
     /** Intent ledger update ini (tx-kind/reason/sender) — pengganti matcher DB. */
     intent: LedgerEventIntent,
-    /** Exercised events update yang SAMA — untuk deteksi change output
-     *  sendiri (Fase C). Bila null, deteksi C dilewati (label generik). */
-    exercised?: Array<{
-      choice?: string;
-      actingParties?: string[];
-    }>,
+    /** Event update yang SAMA (created/exercised/archived) — untuk deteksi
+     *  change output sendiri (Fase C) dan gerakan unlock dana sendiri.
+     *  Bila null, kedua deteksi dilewati (label generik). */
+    ev?: Pick<CantonUpdateEvent, 'created' | 'exercised' | 'archived'> | null,
   ): Promise<void> {
     const user = await this.resolveUserByParty(ownerPartyId);
     if (!user) {
       // Owner bukan user Canquest (DSO, validator, fee, Cantex trading account).
       return;
     }
+    const exercised = ev?.exercised;
 
     // STEP 0: Guard replay — insert dedup row SEBELUM apply (fail-closed).
     // Resume dari checkpoint persist (restart API) me-replay event yang sudah
@@ -530,6 +530,21 @@ export class BalanceEventHandlerService
       return;
     }
 
+    // STEP 1c: UNLOCK DANA SENDIRI — bukan penerimaan.
+    // LockedAmulet_UnlockV2 / OwnerExpireLockV2 melepas dana party kembali ke
+    // party itu sendiri (mis. withdraw TransferInstruction, lock kedaluwarsa).
+    // Baris yang benar = CC_UNLOCK/"Unlock", bukan TRANSFER_IN/"Receive".
+    //
+    // Kenapa di sini dan bukan hanya di relay: relay (penulis CC_UNLOCK) dan
+    // WSS menulis dengan kunci unik SAMA (userId, ledgerTxId=updateId). Relay
+    // kalah balapan → baris "Receive" milik WSS menang PERMANEN, dan relay
+    // cuma bisa gagal P2002 (kasus nyata 2026-09-13 07:20 @airplanestar, lihat
+    // logs/api-error.log "unlock_cc bookkeeping gagal"). Dengan WSS menulis
+    // label yang sama, penulis mana pun yang menang menghasilkan label benar.
+    const unlockMovement = ev
+      ? selfUnlockCredit(ev, ownerPartyId, totalAmount)
+      : null;
+
     // STEP 2: Cek apakah controller sudah catat history row (anti duplikat row).
     // Skip insert + skip push transaction:new (anti duplikat badge notif).
     // TETAP push balance:changed di atas (sudah dilakukan di STEP 1).
@@ -561,17 +576,33 @@ export class BalanceEventHandlerService
 
     // STEP 3: Insert history row (kalau controller belum catat).
     // Idempotent via @@unique([userId, ledgerTxId]).
+    //
+    // Label: unlock dana sendiri (STEP 1c) → CC_UNLOCK/"Unlock". Sisa kasus =
+    // dana MASUK nyata dari pihak lain (sender ≠ owner) → TRANSFER_IN/"Receive";
+    // change milik pengirim sudah di-skip di STEP 1b.
+    const isSelfUnlock = unlockMovement !== null;
+    // referenceId baris CC_UNLOCK = CcLock.id (konvensi relay/controller) supaya
+    // penulis mana pun menghasilkan baris identik. Lock tidak ketemu (unlock dari
+    // wallet luar) → party sendiri, sama seperti self-movement lain.
+    let unlockRefId: string | null = null;
+    if (unlockMovement) {
+      const lockRow = unlockMovement.lockedAmuletCid
+        ? await this.prisma.ccLock.findUnique({
+            where: { lockedAmuletCid: unlockMovement.lockedAmuletCid },
+            select: { id: true },
+          })
+        : null;
+      unlockRefId = lockRow?.id ?? ownerPartyId;
+    }
     try {
       // senderPartyId / isSwapIn dihitung di STEP 1b (dipakai guard change).
-      // Di sini sisa kasus = dana MASUK nyata dari pihak lain (sender ≠ owner)
-      // → label 'Receive'. Change milik pengirim sudah di-skip di STEP 1b.
       await this.users.recordTransaction({
         userId: user.userId,
         amountCc: totalAmount,
         // KEPUTUSAN APP: hanya kaki KELUAR swap yang berlabel Swap. Delivery
         // masuk (termasuk dari escrow) = penerimaan biasa → TRANSFER_IN.
-        type: 'TRANSFER_IN',
-        description: 'Receive',
+        type: isSelfUnlock ? 'CC_UNLOCK' : 'TRANSFER_IN',
+        description: isSelfUnlock ? 'Unlock' : 'Receive',
         // ← pengirim; null bila eksternal/tidak dikenal (row TETAP tampil —
         //   self-reference malah menyembunyikan row via isSelfReferenceWssRow).
         // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
@@ -581,31 +612,35 @@ export class BalanceEventHandlerService
         // Kaki swap: ref = sender ledger (escrow) bila teridentifikasi.
         // Self-movement (unlock / lock kedaluwarsa): dana milik party sendiri →
         // ref = party itu sendiri supaya From/To menampilkan "You", bukan kosong.
-        referenceId:
-          senderPartyId ??
-          (isSelfFundsMovement(exercised, ownerPartyId) ? ownerPartyId : null),
+        referenceId: isSelfUnlock
+          ? unlockRefId
+          : (senderPartyId ??
+            (isSelfFundsMovement(exercised, ownerPartyId)
+              ? ownerPartyId
+              : null)),
         ledgerTxId: updateId,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
       });
       if (DEBUG_LEDGER) {
         this.logger.debug(
-          `BalanceEventHandler: +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)}`,
+          `BalanceEventHandler: +${totalAmount.toFixed(6)} CC (${isSelfUnlock ? 'CC_UNLOCK' : 'TRANSFER_IN'}) → @${user.username ?? user.userId.slice(0, 8)}`,
         );
       }
     } catch (err) {
       const errMsg = String(err);
       if (!errMsg.includes('P2002') && !errMsg.includes('Unique constraint')) {
         this.logger.warn(
-          `BalanceEventHandler: TRANSFER_IN record failed (balance already updated): ${errMsg}`,
+          `BalanceEventHandler: ${isSelfUnlock ? 'CC_UNLOCK' : 'TRANSFER_IN'} record failed (balance already updated): ${errMsg}`,
         );
       }
     }
 
     // 1x push notif per user per transaksi (BUKAN per event).
+    const rowType = isSelfUnlock ? 'CC_UNLOCK' : 'TRANSFER_IN';
     this.realtime.push(user.userId, 'balance:changed', null);
     this.realtime.push(user.userId, 'transaction:new', {
-      type: 'TRANSFER_IN',
+      type: rowType,
       source: 'wss',
     });
   }
