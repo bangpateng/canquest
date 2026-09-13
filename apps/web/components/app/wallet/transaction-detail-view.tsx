@@ -6,6 +6,27 @@ import { ArrowLeft } from "lucide-react";
 import { TransactionDetailContent } from "@/components/app/wallet/transaction-detail-content";
 import { useTransactionDetail } from "@/lib/hooks/use-transaction-detail";
 
+/**
+ * Detail offer yang MASIH hidup di ledger (belum di-accept/reject/withdraw).
+ * Kehadirannya menandakan baris ini "janji", bukan TX final: belum ada
+ * perpindahan dana, jadi UI menampilkan detail ledger offer — bukan receipt
+ * transaksi dengan link explorer.
+ *
+ * Instrument-agnostic: CC (Amulet) maupun token registry (USDCx, CBTC, …).
+ */
+export type PendingOfferDetail = {
+  contractId: string;
+  type: "transfer_offer" | "transfer_instruction";
+  sender: string;
+  receiver: string;
+  amount: string;
+  description: string;
+  expiresAt: string;
+  createdAt: string;
+  instrumentId: string;
+  instrumentAdmin: string;
+};
+
 export type TransactionDetail = {
   id: string;
   type: string;
@@ -55,6 +76,11 @@ export type TransactionDetail = {
   cancelledAmount?: string | null;
   /** Instrument id token yang dibatalkan (mis. "USDCx"). */
   cancelledInstrumentId?: string | null;
+  /** Detail offer yang masih hidup on-chain. Terisi = render UI detail offer
+   *  (bukan receipt TX). null = TX final / bukan offer. */
+  offer?: PendingOfferDetail | null;
+  /** Peran user pada offer: pengirim (Withdraw) atau penerima (Accept/Reject). */
+  offerRole?: "sender" | "receiver" | null;
 };
 
 

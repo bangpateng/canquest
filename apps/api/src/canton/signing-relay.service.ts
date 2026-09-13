@@ -19,6 +19,13 @@ import {
   looksLikeCantonPartyId,
   normalizeCantonPartyId,
 } from '../common/canton-party-id';
+// Narrowing untuk nilai JSON/SDK bertipe bebas (menggantikan akses `any`).
+import {
+  asRecord,
+  pick,
+  readNumOrUndefined,
+  readStr,
+} from './ledger-json';
 
 /**
  * SigningRelayService — relay tanda tangan transaksi user external (M3).
@@ -43,14 +50,23 @@ import {
 
 const PENDING_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Objek prepared-transaction SDK (hasil `sdk.ledger.prepare`), diambil dari
+ * return-type SDK sendiri supaya tidak bergantung pada nama tipe internalnya.
+ * Menyimpannya sebagai `any` membuat setiap pemakaian (mis. `.preparedPromise`)
+ * kehilangan pemeriksaan tipe.
+ */
+type PreparedSigningTransaction = ReturnType<
+  Awaited<ReturnType<CantonWalletSdkService['getSdk']>>['ledger']['prepare']
+>;
+
 interface PendingSigning {
   userId: string;
   flow: string;
   partyId: string;
   commandId: string;
   // PreparedTransaction SDK — objek hidup antar panggilan prepare→execute.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  prepared: any;
+  prepared: PreparedSigningTransaction;
   /** Meta khusus flow (amount, recipient, fee, dst.) — dipakai bookkeeping execute. */
   meta: Record<string, unknown>;
   createdAt: number;
@@ -160,7 +176,6 @@ export class SigningRelayService {
 
     const user = await this.requireExternalUser(userId);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const builders: Record<string, (u: typeof user, p: Record<string, unknown>) => Promise<BuiltFlow>> = {
       wallet_registration_accept: (u) => this.buildWalletRegistrationAccept(u),
       send_cc: (u, p) => this.buildSendCc(u, p),
@@ -300,7 +315,14 @@ export class SigningRelayService {
         }
       }
     }
-    throw lastErr ?? new Error('prepare failed');
+    // Selalu lempar Error: nilai non-Error (mis. objek/string dari SDK) dibungkus
+    // agar penangan di atasnya tetap punya pesan yang bisa dibaca. Untuk objek,
+    // ambil `message`-nya supaya diagnostik tidak jadi "[object Object]".
+    if (lastErr instanceof Error) throw lastErr;
+    if (lastErr == null) throw new Error('prepare failed');
+    const rec = asRecord(lastErr);
+    const msg = readStr(rec?.message) ?? readStr(lastErr) ?? '';
+    throw new Error(msg || 'prepare failed');
   }
 
   /**
@@ -737,6 +759,35 @@ export class SigningRelayService {
    * untuk PENERIMA + push notifikasi badge. Data diambil dari row SENDER
    * yang baru saja di-settle (amount, instrument, counterparty).
    */
+  /**
+   * Klaim atomik "sekali saja" untuk baris history PENERIMA.
+   *
+   * Kenapa WAJIB: WSS `applyTokenIncrement`/`applyCcIncrement` memproses accept
+   * yang SAMA dari stream ledger, hanya ~20ms setelah relay menulis. Guard
+   * "cek dulu, baru tulis" di kedua sisi tidak saling melihat (dua-duanya
+   * membaca sebelum salah satu menulis) → baris penerima lahir DOBEL alias
+   * receipt ganda di wallet. Klaim ini menang/kalah pada unique constraint,
+   * jadi hasilnya tidak lagi bergantung urutan.
+   *
+   * Scope sengaja TANPA instrumentAdmin: baris dari relay bisa menyimpan admin
+   * kosong (meta build lama tidak mengisi field itu) sedangkan baris WSS memakai
+   * admin asli — admin bukan pembeda identitas baris.
+   *
+   * Tanpa `updateId` tidak ada basis klaim → kembalikan true (perilaku lama).
+   */
+  private claimReceiverRow(
+    updateId: string | undefined,
+    receiverUserId: string,
+    scope: 'cc' | `tok:${string}`,
+  ): Promise<boolean> {
+    if (!updateId) return Promise.resolve(true);
+    return this.users.claimLedgerApply(
+      updateId,
+      receiverUserId,
+      `hist:${scope}`,
+    );
+  }
+
   private async recordReceiverAccept(
     transferInstructionCid: string,
     receiverUserId: string,
@@ -812,6 +863,12 @@ export class SigningRelayService {
         // senderCc.referenceId yang berisi party ID PENERIMA. Salah salin =
         // baris terfilter isSelfReferenceWssRow ("(You)→(You)") → received
         // tidak pernah tampil di Activity/notification badge.
+        if (!(await this.claimReceiverRow(updateId, receiverUserId, 'cc'))) {
+          this.logger.log(
+            `accept_offer receiver CC row dilewati — klaim diambil penulis lain (WSS) user=${receiverUserId.slice(0, 8)}… updateId=${updateId?.slice(0, 16) ?? 'n/a'}…`,
+          );
+          return;
+        }
         const senderUser = await this.users.findById(senderCc.userId);
         const senderPartyId = senderUser?.cantonPartyId ?? null;
         await this.users.recordTransaction({
@@ -830,6 +887,18 @@ export class SigningRelayService {
       } else if (senderToken) {
         // Token (USDCx dll) — record TOKEN_TRANSFER_IN utk receiver.
         // FIX yang sama: referenceId = party pengirim.
+        if (
+          !(await this.claimReceiverRow(
+            updateId,
+            receiverUserId,
+            `tok:${senderToken.instrumentId.toLowerCase()}`,
+          ))
+        ) {
+          this.logger.log(
+            `accept_offer receiver ${senderToken.instrumentId} row dilewati — klaim diambil penulis lain (WSS) user=${receiverUserId.slice(0, 8)}… updateId=${updateId?.slice(0, 16) ?? 'n/a'}…`,
+          );
+          return;
+        }
         const tokenSenderUser = await this.users.findById(senderToken.userId);
         const tokenSenderPartyId = tokenSenderUser?.cantonPartyId ?? null;
         await this.users.recordTokenTransaction({
@@ -845,7 +914,7 @@ export class SigningRelayService {
           status: 'COMPLETED',
         });
         this.logger.log(
-          `accept_offer receiver TOKEN_TRANSFER_IN recorded: user=${receiverUserId.slice(0, 8)} amount=${senderToken.amount} ${senderToken.instrumentId}`,
+          `accept_offer receiver TOKEN_TRANSFER_IN recorded: user=${receiverUserId.slice(0, 8)} amount=${senderToken.amount.toString()} ${senderToken.instrumentId}`,
         );
       } else if (offerDetail) {
         // FALLBACK (2026-09-04): row sender tidak ditemukan (offer lama yang
@@ -858,6 +927,18 @@ export class SigningRelayService {
           offerDetail.instrumentId &&
           offerDetail.instrumentId.toLowerCase() !== 'amulet';
         if (isTokenOffer) {
+          if (
+            !(await this.claimReceiverRow(
+              updateId,
+              receiverUserId,
+              `tok:${offerDetail.instrumentId.toLowerCase()}`,
+            ))
+          ) {
+            this.logger.log(
+              `accept_offer receiver ${offerDetail.instrumentId} row (fallback) dilewati — sudah diklaim penulis lain`,
+            );
+            return;
+          }
           await this.users.recordTokenTransaction({
             userId: receiverUserId,
             amount,
@@ -871,6 +952,12 @@ export class SigningRelayService {
             status: 'COMPLETED',
           });
         } else {
+          if (!(await this.claimReceiverRow(updateId, receiverUserId, 'cc'))) {
+            this.logger.log(
+              `accept_offer receiver CC row (fallback) dilewati — sudah diklaim penulis lain`,
+            );
+            return;
+          }
           await this.users.recordTransaction({
             userId: receiverUserId,
             amountCc: amount,
@@ -1226,7 +1313,7 @@ export class SigningRelayService {
 
           if (wupBuilt) {
             this.logger.log(
-              `send_cc ATOMIC batch ready (WUP): ${amount} CC → ${recipientLabel} + fee ${feeCc} CC (kind=${String(wupBuilt.meta?.transferKind ?? '?')})`,
+              `send_cc ATOMIC batch ready (WUP): ${amount} CC → ${recipientLabel} + fee ${feeCc} CC (kind=${readStr(wupBuilt.meta?.transferKind) ?? '?'})`,
             );
             return wupBuilt;
           }
@@ -1645,6 +1732,10 @@ export class SigningRelayService {
                 recipientLabel,
                 memo,
                 instrumentId,
+                // Wajib ada: bookkeeping sender/receiver memakai field ini
+                // untuk kolom instrumentAdmin (dulu kosong → baris penerima
+                // tak tertangkap dedup WSS yang cocokkan admin).
+                instrumentAdmin,
               },
               description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
             };
@@ -1680,6 +1771,7 @@ export class SigningRelayService {
                 recipientLabel,
                 memo,
                 instrumentId,
+                instrumentAdmin,
               },
               description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
               fallback: fallbackChain,
@@ -1688,7 +1780,7 @@ export class SigningRelayService {
 
           if (wupBuilt) {
             this.logger.log(
-              `send_token ATOMIC batch ready (WUP): ${amount} ${instrumentId} → ${recipientLabel} + fee ${feeCc} CC (kind=${String(wupBuilt.meta?.transferKind ?? '?')})`,
+              `send_token ATOMIC batch ready (WUP): ${amount} ${instrumentId} → ${recipientLabel} + fee ${feeCc} CC (kind=${readStr(wupBuilt.meta?.transferKind) ?? '?'})`,
             );
             return wupBuilt;
           }
@@ -1798,7 +1890,7 @@ export class SigningRelayService {
       disclosedContracts: built.disclosedContracts,
       commandId: built.commandId,
       meta: { lockId: lock.id, amountCc: lock.amountCc },
-      description: `Unlock ${lock.amountCc} CC`,
+      description: `Unlock ${lock.amountCc.toString()} CC`,
     };
   }
 
@@ -1885,7 +1977,9 @@ export class SigningRelayService {
    * lagi; toggle kini memakai /party/sign/execute standar + bookkeeping accept
    * di bawah). Dipertahankan hanya sebagai error jelas kalau ada client lama.
    */
-  async executePreapproval(
+  // Selalu throw → tidak butuh `async`; signature Promise dipertahankan
+  // supaya pemanggil lama (yang menunggu) tetap kompatibel.
+  executePreapproval(
     _userId: string,
     _signatureHex: string,
   ): Promise<{ transferPreapprovalCid: string; updateId?: string }> {
@@ -1925,9 +2019,14 @@ export class SigningRelayService {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `grant_type=client_credentials&client_id=${this.config.get('LEDGER_CLIENT_ID')}&client_secret=${this.config.get('LEDGER_CLIENT_SECRET')}&scope=daml_ledger_api`,
     });
-    const json = await res.json();
-    this.tokenCache = { token: json.access_token, exp: Date.now() + (json.expires_in - 30) * 1000 };
-    return json.access_token;
+    const json: unknown = await res.json();
+    const token = readStr(pick(json, 'access_token')) ?? '';
+    const expiresIn = readNumOrUndefined(pick(json, 'expires_in')) ?? 0;
+    this.tokenCache = {
+      token,
+      exp: Date.now() + (expiresIn - 30) * 1000,
+    };
+    return token;
   }
 
   private isSystemPartyId(partyId: string): boolean {    const candidates = [
@@ -1963,7 +2062,7 @@ export class SigningRelayService {
         const cur = stack.pop();
         if (!cur || typeof cur !== 'object') continue;
         if (Array.isArray(cur)) {
-          stack.push(...cur);
+          for (const item of cur as unknown[]) stack.push(item);
           continue;
         }
         const obj = cur as Record<string, unknown>;

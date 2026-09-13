@@ -148,7 +148,9 @@ function TxStatusBadge({ status }: { status?: TxItem["status"] }) {
         isPending ? "bg-amber-500/15 text-amber-600" : "bg-red-500/10 text-red-600",
       )}
     >
-      {isPending ? "Pending" : "Rejected"}
+      {/* "Pending" ambigu untuk offer — perjelas yang ditunggu adalah
+          persetujuan penerima, bukan transaksi yang sedang diproses. */}
+      {isPending ? "Awaiting acceptance" : "Rejected"}
     </span>
   );
 }
@@ -648,25 +650,36 @@ export function TransactionsView({
                            {txDisplayDescription(tx, t(TX_TYPE_KEYS[tx.type]))}
                          </td>
                          <td className="px-5 py-3.5 sm:px-6 sm:py-4">
-                          {(() => {
-                            // Tampilkan HANYA id on-chain real (update_id "1220…" / contract id).
-                            // Marker internal (fee/inbound-sync/unlock/preapproval/reward-) dan
-                            // null → tampilkan "View" generik, BUKAN id yang menyesatkan.
-                            const raw =
-                              tx.cantonUpdateId ?? tx.ledgerTxId ?? null;
-                            const looksReal =
-                              !!raw &&
-                              (raw.startsWith("1220") ||
-                                (raw.startsWith("00") && /^[0-9a-f]+$/.test(raw)));
-                            return (
-                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 font-mono text-xs font-medium text-canton">
-                                {looksReal
-                                  ? `${(raw as string).slice(0, 10)}\u2026`
-                                  : "View"}
-                              </span>
-                            );
-                          })()}
-                        </td>
+                          {tx.status === "PENDING" ? (
+                            // Offer belum di-accept: belum ada transaksi final
+                            // untuk ditelusuri, jadi jangan tampilkan id ledger
+                            // (id itu milik tx pembuatan offer dan di explorer
+                            // selalu terbaca "pending"). Arahkan ke detail offer.
+                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600">
+                              Offer detail
+                            </span>
+                          ) : (
+                            (() => {
+                              // Tampilkan HANYA id on-chain real (update_id "1220..." / contract id).
+                              // Marker internal (fee/inbound-sync/unlock/preapproval/reward-) dan
+                              // null → tampilkan "View" generik, BUKAN id yang menyesatkan.
+                              const raw =
+                                tx.cantonUpdateId ?? tx.ledgerTxId ?? null;
+                              const looksReal =
+                                !!raw &&
+                                (raw.startsWith("1220") ||
+                                  (raw.startsWith("00") &&
+                                    /^[0-9a-f]+$/.test(raw)));
+                              return (
+                                <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 font-mono text-xs font-medium text-canton">
+                                  {looksReal
+                                    ? `${(raw as string).slice(0, 10)}\u2026`
+                                    : "View"}
+                                </span>
+                              );
+                            })()
+                          )}
+                         </td>
                         <td className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-[var(--muted-foreground)]">
                           {date}
                         </td>

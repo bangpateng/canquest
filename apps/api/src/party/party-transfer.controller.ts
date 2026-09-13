@@ -87,7 +87,7 @@ export class PartyTransferController {
   @Post('send-cc')
   async sendCc(@Req() req: AuthedReq, @Body() body: SendCcDto) {
     const sender = await this.users.findById(req.user.userId);
-    
+
     // M5: custodial path removed — reject custodial users
     if (sender?.walletKind === 'custodial') {
       throw new BadRequestException(
@@ -349,24 +349,30 @@ export class PartyTransferController {
         cip56Result = legacy;
 
         if (legacy.ok) {
-          if (legacy.transferKind === 'direct') {
-            accepted = true;
-            transferMethod = 'direct';
-            ledgerTxId = legacy.updateId ?? undefined;
-            this.logger.log(
-              `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
-            );
-          } else if (legacy.transferKind === 'offer') {
+          // FAKTA mengalahkan label: adanya kontrak offer di tree = janji yang
+          // butuh accept penerima. Label `transferKind` dari registry pernah
+          // salah lapor ('direct' padahal hasilnya offer) → jangan dipakai
+          // sebagai penentu. Cabang lama yang bergantung padanya bisa tidak
+          // jalan sama sekali (accepted tetap false → baris sender tidak
+          // ditulis walau transfer on-chain sukses).
+          const legacyIsOffer = !!legacy.transferInstructionCid;
+          ledgerTxId = legacy.updateId ?? undefined;
+          if (legacyIsOffer) {
             // Receiver tidak punya TransferPreapproval aktif.
             // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
             // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
-            // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
             // contract_id (transferInstructionCid) disimpan di field terpisah di row.
-            ledgerTxId = legacy.updateId ?? undefined;
             transferMethod = 'offer_only';
             this.logger.log(
               `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
+                `instructionCid=${legacy.transferInstructionCid!.slice(0, 16)}... ` +
                 `— recipient must accept via Offers menu`,
+            );
+          } else {
+            accepted = true;
+            transferMethod = 'direct';
+            this.logger.log(
+              `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
             );
           }
         }
@@ -993,10 +999,19 @@ export class PartyTransferController {
             });
           if (batchResToken.ok && batchResToken.updateId) {
             atomicLedgerTxId = batchResToken.updateId;
+            // CID offer dari hasil batch — WAJIB disimpan: reconciler dan
+            // markTransferInstructionSettled dua-duanya match by CID, jadi baris
+            // tanpa CID macet PENDING selamanya (dulu di-hardcode null di sini).
+            const atomicOfferCid = batchResToken.transferInstructionCid ?? null;
+            const atomicIsOffer = !!atomicOfferCid;
             this.logger.log(
-              `Token transfer ATOMIC (BatchTransfer): ${sender.username} → ${recipientLabel} ${amount} ${instrumentId} + fee ${feeCc} CC (1 tx, ${transfersToken.length} legs)`,
+              `Token transfer ATOMIC (BatchTransfer): ${sender.username} → ${recipientLabel} ${amount} ${instrumentId} + fee ${feeCc} CC (1 tx, ${transfersToken.length} legs)` +
+                (atomicOfferCid
+                  ? ` instructionCid=${atomicOfferCid.slice(0, 16)}... (offer)`
+                  : ' (direct)'),
             );
-            // Record history (instrument-aware). Non-CC: offer (receiver accept manual).
+            // Record history (instrument-aware). Offer → PENDING (butuh accept
+            // penerima); direct (penerima preapproved) → COMPLETED.
             try {
               const row = await this.users.recordTokenTransaction({
                 userId: sender.id,
@@ -1009,8 +1024,8 @@ export class PartyTransferController {
                   normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId,
                 ledgerTxId: atomicLedgerTxId,
                 cantonUpdateId: atomicLedgerTxId,
-                status: 'PENDING',
-                transferInstructionCid: null,
+                status: atomicIsOffer ? 'PENDING' : 'COMPLETED',
+                transferInstructionCid: atomicOfferCid,
               });
               // fee record (CC, atomic = 1 tx dgn transfer)
               await this.users.recordTransaction({
@@ -1022,11 +1037,27 @@ export class PartyTransferController {
                 ledgerTxId: atomicLedgerTxId,
                 cantonUpdateId: atomicLedgerTxId,
               });
+              // Notifikasi instan ke penerima internal (mirror jalur legacy).
+              if (atomicIsOffer) {
+                try {
+                  const receiver =
+                    await this.users.findByPartyId(recipientPartyId);
+                  if (receiver) {
+                    this.realtime.push(receiver.id, 'offer:new', null);
+                  }
+                } catch (pushErr) {
+                  this.logger.warn(
+                    `offer:new push (atomic token) gagal: ${String(pushErr)}`,
+                  );
+                }
+              }
               return {
                 ok: true,
-                message: `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee). Recipient may need to accept via Offers menu.`,
+                message: atomicIsOffer
+                  ? `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee). Recipient must accept via Offers menu.`
+                  : `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee).`,
                 ledgerTxId: atomicLedgerTxId,
-                transferInstructionCid: null,
+                transferInstructionCid: atomicOfferCid,
                 transactionId: row.id,
                 feeCollected: true,
                 feeLedgerTxId: atomicLedgerTxId,
@@ -1039,7 +1070,7 @@ export class PartyTransferController {
                 ok: true,
                 message: `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee). History record pending.`,
                 ledgerTxId: atomicLedgerTxId,
-                transferInstructionCid: null,
+                transferInstructionCid: atomicOfferCid,
                 transactionId: undefined,
                 feeCollected: true,
                 feeLedgerTxId: atomicLedgerTxId,
@@ -1087,15 +1118,20 @@ export class PartyTransferController {
       const transferInstructionCid =
         cip56Result.transferInstructionCid ?? undefined;
 
-      // Untuk non-CC, transferKind hampir pasti "offer" (no preapproval).
-      // Offer dibuat = transfer utama SUDAH submitted on-chain → fee applicable.
+      // FAKTA mengalahkan label: adanya kontrak offer di tree = janji yang masih
+      // butuh accept penerima (dana belum pindah). Label `transferKind` dari
+      // registry pernah salah lapor 'direct' pada kasus nyata (penerima tanpa
+      // preapproval), jadi jangan dipakai sebagai penentu status — hanya untuk log.
+      const isOffer = !!transferInstructionCid;
+
+      // Transfer sudah di-submit on-chain → fee (kalau ada) memang layak ditagih.
       const submitted =
         cip56Result.transferKind === 'offer' ||
         cip56Result.transferKind === 'direct';
 
       this.logger.log(
         `send-token OK: ${sender.username} → ${recipientLabel} ${amount} ${instrumentId} ` +
-          `kind=${cip56Result.transferKind}` +
+          `kind=${cip56Result.transferKind}${isOffer ? ' (offer)' : ' (direct)'}` +
           (transferInstructionCid
             ? ` instructionCid=${transferInstructionCid.slice(0, 16)}...`
             : '') +
@@ -1118,7 +1154,9 @@ export class PartyTransferController {
             normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId,
           ledgerTxId: ledgerTxId ?? transferInstructionCid,
           cantonUpdateId: ledgerTxId ?? undefined,
-          status: 'PENDING', // offer belum di-accept receiver
+          // Offer → PENDING (janji, belum ada perpindahan dana final).
+          // Direct (penerima punya preapproval) → COMPLETED, tanpa UI offer.
+          status: isOffer ? 'PENDING' : 'COMPLETED',
           transferInstructionCid: transferInstructionCid ?? null,
         });
         transactionId = row.id;
@@ -1202,7 +1240,7 @@ export class PartyTransferController {
       // yang default OFF). Dengan push SSE offer:new, frontend refresh list
       // offer + badge notif instan. Receiver eksternal (bukan user CanQuest)
       // tidak punya userId → skip.
-      if (cip56Result.transferKind === 'offer') {
+      if (isOffer) {
         try {
           const receiver = await this.users.findByPartyId(recipientPartyId);
           if (receiver) {
@@ -1227,15 +1265,14 @@ export class PartyTransferController {
         feeCollected,
         transferKind: cip56Result.transferKind,
         transferInstructionCid,
-        offerPending: cip56Result.transferKind === 'offer',
+        offerPending: isOffer,
         // Prefix "tok-" wajib: detail endpoint /transactions/:id pakai prefix untuk
         // bedakan TokenTransaction vs CcTransaction. Tanpa prefix, dicari di tabel CC
         // → "Transaction not found" saat modal receipt dibuka langsung.
         transactionId: transactionId ? `tok-${transactionId}` : undefined,
-        message:
-          cip56Result.transferKind === 'offer'
-            ? `Sent ${amount} ${instrumentId} to ${recipientLabel}. Recipient must accept via Offers menu. Offer ID: ${transferInstructionCid?.slice(0, 20) ?? ledgerTxId?.slice(0, 20) ?? '?'}…`
-            : `Sent ${amount} ${instrumentId} to ${recipientLabel}.`,
+        message: isOffer
+          ? `Sent ${amount} ${instrumentId} to ${recipientLabel}. Recipient must accept via Offers menu. Offer ID: ${transferInstructionCid?.slice(0, 20) ?? ledgerTxId?.slice(0, 20) ?? '?'}...`
+          : `Sent ${amount} ${instrumentId} to ${recipientLabel}.`,
       };
     } finally {
       // Fund-safety: wajib release lock di SEMUA jalur keluar.

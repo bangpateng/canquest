@@ -725,14 +725,20 @@ export class BalanceEventHandlerService
     // Skip push transaction:new (anti duplikat badge notif) — controller sudah push.
     // Balance increment di STEP 1 tetap jalan (wajib).
     // Cek mencakup format LEGACY `wss:` agar row lama (pre-fix) tetap dikenali.
-    // L60 (scope instrumen): cek dibatasi instrumentId+instrumentAdmin yang
-    // SAMA (case-insensitive) — satu updateId multi-instrumen adalah gerakan
-    // legit berbeda dan masing-masing berhak atas barisnya sendiri.
+    // L60 (scope instrumen): cek dibatasi instrumentId yang SAMA (case-insensitive)
+    // — satu updateId multi-instrumen adalah gerakan legit berbeda dan
+    // masing-masing berhak atas barisnya sendiri.
+    //
+    // instrumentAdmin SENGAJA tidak ikut dicocokkan: baris dari signing relay bisa
+    // menyimpan admin kosong (meta build-nya dulu tidak mengisi field itu)
+    // sementara baris WSS memakai admin asli. Pencocokan admin eksak membuat cek
+    // ini tidak pernah melihat baris relay → baris penerima lahir DOBEL (kasus
+    // nyata 2026-09-12). Identitas baris = (user, update, instrumen); admin bukan
+    // pembeda.
     const existing = await this.prisma.tokenTransaction.findFirst({
       where: {
         userId: tk.userId,
         instrumentId: { equals: tk.instrumentId, mode: 'insensitive' },
-        instrumentAdmin: { equals: tk.instrumentAdmin, mode: 'insensitive' },
         OR: [
           { ledgerTxId: updateId },
           { ledgerTxId: `wss:${updateId}` },
@@ -745,6 +751,25 @@ export class BalanceEventHandlerService
       if (DEBUG_LEDGER) {
         this.logger.debug(
           `BalanceEventHandler: skip history insert ${tk.instrumentId} +${tk.amount} untuk @${tk.username ?? tk.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
+        );
+      }
+      return;
+    }
+
+    // STEP 2b: KLAIM ATOMIK sebelum menulis. Cek di atas bersifat "baca dulu"
+    // sehingga bisa kalah balapan dengan signing relay yang memproses accept
+    // dari request yang sama (relay menulis ~20ms setelah WSS membaca). Klaim
+    // ini menang/kalah secara atomik pada unique constraint, jadi hanya SATU
+    // penulis yang lolos — berapa pun urutan dan waktunya.
+    const claimed = await this.users.claimLedgerApply(
+      updateId,
+      tk.userId,
+      `hist:tok:${tk.instrumentId.toLowerCase()}`,
+    );
+    if (!claimed) {
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: skip history insert ${tk.instrumentId} untuk @${tk.username ?? tk.userId.slice(0, 8)} — klaim diambil penulis lain (updateId=${updateId.slice(0, 16)}…)`,
         );
       }
       return;
@@ -1377,7 +1402,7 @@ export class BalanceEventHandlerService
         const s = matched[0];
         await this.prisma.swapTransaction.updateMany({
           where: { id: s.id, ccLedgerTxId: null },
-          data: { ccLedgerTxId: ev.updateId! },
+          data: { ccLedgerTxId: ev.updateId },
         });
         // Juga tempel ke baris SWAP_OUT synthetic yang belum ber-link.
         await this.prisma.ccTransaction.updateMany({
@@ -1387,7 +1412,7 @@ export class BalanceEventHandlerService
             cantonUpdateId: null,
             createdAt: { gte: since },
           },
-          data: { cantonUpdateId: ev.updateId! },
+          data: { cantonUpdateId: ev.updateId },
         });
         await this.prisma.tokenTransaction.updateMany({
           where: {
@@ -1396,7 +1421,7 @@ export class BalanceEventHandlerService
             cantonUpdateId: null,
             createdAt: { gte: since },
           },
-          data: { cantonUpdateId: ev.updateId! },
+          data: { cantonUpdateId: ev.updateId },
         });
       }
     } catch (err) {
@@ -1541,8 +1566,12 @@ export class BalanceEventHandlerService
     if (
       this.processedUpdates.size >= BalanceEventHandlerService.PROCESSED_MAX
     ) {
-      const first = this.processedUpdates.values().next().value;
-      if (first) this.processedUpdates.delete(first);
+      // Buang yang paling lama (Set mempertahankan urutan insert). Iterasi
+      // berhenti setelah satu elemen, jadi aman menghapus saat loop.
+      for (const oldest of this.processedUpdates) {
+        this.processedUpdates.delete(oldest);
+        break;
+      }
     }
   }
 
@@ -1555,26 +1584,17 @@ export class BalanceEventHandlerService
    * ATAU DB error → caller WAJIB skip apply. Fail-closed: saldo miss sekali
    * (dikoreksi reconciler) jauh lebih aman daripada double-credit.
    */
-  private async tryMarkBalanceApplied(
+  /**
+   * Klaim "sekali saja" untuk apply saldo. Delegasi ke UsersService supaya
+   * HANYA ADA SATU implementasi klaim atomik di codebase — dipakai juga oleh
+   * signing relay untuk baris history penerima (lihat claimLedgerApply).
+   */
+  private tryMarkBalanceApplied(
     updateId: string,
     userId: string,
     scope: string,
   ): Promise<boolean> {
-    try {
-      await this.prisma.wssBalanceApplied.create({
-        data: { updateId, userId, scope },
-      });
-      return true;
-    } catch (err) {
-      const errMsg = String(err);
-      if (errMsg.includes('P2002') || errMsg.includes('Unique constraint')) {
-        return false; // replay — sudah pernah di-apply
-      }
-      this.logger.warn(
-        `BalanceEventHandler: WssBalanceApplied create failed (${scope}): ${errMsg}`,
-      );
-      return false; // DB bermasalah — skip apply (fail-closed)
-    }
+    return this.users.claimLedgerApply(updateId, userId, scope);
   }
   /**
    * Ekspose ekstraksi holding murni untuk tool forensik (replay/reconstruct)

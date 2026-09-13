@@ -14,6 +14,32 @@ export type LedgerEventSummary = {
   templateId: string;
 };
 
+/**
+ * Detail offer yang MASIH hidup di ACS ledger (belum di-accept/reject/withdraw).
+ *
+ * Dipakai UI untuk membedakan "janji" (offer pending — belum ada perpindahan
+ * dana final, jadi bukan TX) dari "fakta" (TX final setelah accept). Sumbernya
+ * ACS on-chain lewat queryPendingOffers, bukan tabel history — jadi baris DB
+ * yang statusnya PENDING tapi offer-nya sudah dikonsumsi akan tampil sebagai
+ * TX biasa (self-healing terhadap drift DB ↔ ledger).
+ *
+ * Instrument-agnostic: CC (Amulet) maupun token registry (USDCx, CBTC, …)
+ * memakai bentuk yang sama.
+ */
+export type PendingOfferInfo = {
+  contractId: string;
+  type: 'transfer_offer' | 'transfer_instruction';
+  sender: string;
+  receiver: string;
+  amount: string;
+  description: string;
+  /** Batas waktu penerima boleh accept (executeBefore) — ISO string. */
+  expiresAt: string;
+  createdAt: string;
+  instrumentId: string;
+  instrumentAdmin: string;
+};
+
 export type TransactionDetailResponse = {
   id: string;
   type: string;
@@ -52,6 +78,13 @@ export type TransactionDetailResponse = {
   cancelledAmount?: string | null;
   /** Instrument id token yang dibatalkan (mis. "USDCx"). */
   cancelledInstrumentId?: string | null;
+  /** Terisi HANYA bila baris masih PENDING dan offer-nya masih hidup di ACS
+   *  ledger. Kehadirannya = UI harus render detail offer (bukan receipt TX),
+   *  karena belum ada perpindahan dana final. null = TX final / non-offer. */
+  offer?: PendingOfferInfo | null;
+  /** Peran user pada offer pending: pengirim (bisa Withdraw) atau penerima
+   *  (bisa Accept/Reject). null bila offer tidak ada / party tidak cocok. */
+  offerRole?: 'sender' | 'receiver' | null;
 };
 
 /**
@@ -158,6 +191,95 @@ export class TransactionDetailService {
     return false;
   }
 
+  /**
+   * Pilih id ledger paling representatif dari sepasang kolom history.
+   *
+   * `cantonUpdateId` DIUTAMAKAN karena di-flip saat settle: setelah offer
+   * di-accept, markTransferInstructionSettled menstamp kolom itu dengan update
+   * ACCEPT, sementara `ledgerTxId` tetap menyimpan update CREATE-OFFER (kapan
+   * offer dibuat, saat itu statusnya masih pending). Memakai ledgerTxId lebih
+   * dulu membuat baris "Send" yang sudah settle terus menunjuk tx offer lama —
+   * di explorer tampil sebagai TransferPendingReceiverAcceptance selamanya.
+   *
+   * Fallback ke ledgerTxId bila cantonUpdateId kosong, supaya row lama
+   * (pra-backfill) tetap punya identitas. Id sintetis ("swap:…",
+   * "inbound-sync:…") ditolak oleh resolveExplorerId di hilir — jadi aman
+   * dikembalikan apa adanya di sini.
+   */
+  private pickLedgerId(
+    ledgerTxId: string | null | undefined,
+    cantonUpdateId: string | null | undefined,
+  ): string | null {
+    const update = cantonUpdateId?.trim();
+    const ledger = ledgerTxId?.trim();
+    return update || ledger || null;
+  }
+
+  /**
+   * Lampirkan detail offer yang MASIH hidup di ACS ledger untuk baris PENDING.
+   *
+   * Sengaja menanyakan ledger, bukan mempercayai kolom status DB: kalau offer
+   * sudah dikonsumsi (baris DB telat ter-flip), lookup gagal → `offer: null`,
+   * sehingga UI merender TX biasa alih-alih "pending selamanya". Ini juga yang
+   * membuat perilaku seragam lintas instrumen (CC/Amulet maupun token registry)
+   * — queryPendingOffers sudah instrument-aware.
+   *
+   * Non-fatal: kegagalan ledger tidak boleh menggagalkan pembukaan detail.
+   */
+  private async attachPendingOffer(params: {
+    status: string | null | undefined;
+    transferInstructionCid: string | null | undefined;
+    partyId: string | null | undefined;
+  }): Promise<{
+    offer: PendingOfferInfo | null;
+    offerRole: 'sender' | 'receiver' | null;
+  }> {
+    const { status, transferInstructionCid, partyId } = params;
+    if (status !== 'PENDING' || !transferInstructionCid || !partyId) {
+      return { offer: null, offerRole: null };
+    }
+    try {
+      const found = await this.ledger.lookupOfferDetailBothDirections(
+        transferInstructionCid,
+        partyId,
+      );
+      if (!found) return { offer: null, offerRole: null };
+      const offer: PendingOfferInfo = {
+        contractId: found.contractId,
+        type: found.type,
+        sender: found.sender,
+        receiver: found.receiver,
+        amount: found.amount,
+        description: found.description,
+        expiresAt: found.expiresAt ?? '',
+        createdAt: found.createdAt ?? '',
+        instrumentId: found.instrumentId,
+        instrumentAdmin: found.instrumentAdmin,
+      };
+      return {
+        offer,
+        offerRole: this.resolveOfferRole(found.sender, found.receiver, partyId),
+      };
+    } catch (err) {
+      this.logger.warn(
+        `attachPendingOffer failed cid=${transferInstructionCid.slice(0, 16)}...: ${String(err)}`,
+      );
+      return { offer: null, offerRole: null };
+    }
+  }
+
+  /** Peran user pada offer: pengirim atau penerima (case-insensitive party id). */
+  private resolveOfferRole(
+    sender: string,
+    receiver: string,
+    partyId: string,
+  ): 'sender' | 'receiver' | null {
+    const own = partyId.trim().toLowerCase();
+    if (sender.trim().toLowerCase() === own) return 'sender';
+    if (receiver.trim().toLowerCase() === own) return 'receiver';
+    return null;
+  }
+
   /** Resolve ledger updateId for a contract and persist on CcTransaction. */
   async backfillUpdateId(
     ccTransactionId: string,
@@ -230,8 +352,10 @@ export class TransactionDetailService {
       }
     }
 
-    // Event/update id untuk link explorer Modo.
-    const rawId = tx.ledgerTxId ?? cantonUpdateId ?? null;
+    // Event/update id untuk link explorer Modo. Preferensi: cantonUpdateId
+    // (di-stamp saat settle = update ACCEPT) sebelum ledgerTxId (update
+    // create-offer) — lihat pickLedgerId.
+    const rawId = this.pickLedgerId(tx.ledgerTxId, cantonUpdateId);
     const internalMarker = isInternalTxMarker(rawId);
     const eventId = internalMarker
       ? null
@@ -246,6 +370,22 @@ export class TransactionDetailService {
       tx.type === 'SWAP_OUT'
         ? await this.users.resolveTransferCounterparty(tx.referenceId)
         : tx.referenceId;
+
+    // Offer pending → detail ledger khusus (bukan receipt TX). null = TX final.
+    const { offer, offerRole } = await this.attachPendingOffer({
+      status: tx.status,
+      transferInstructionCid: tx.transferInstructionCid,
+      partyId: user?.cantonPartyId,
+    });
+    // Fee platform untuk token: baris fee ditulis di CcTransaction (fee selalu
+    // CC, nominal sama dengan leg Amulet di batch yang sama). Hanya relevan
+    // bagi pengirim — penerima tidak membayar apa pun.
+    const platformFeeMicroCc =
+      offerRole === 'sender'
+        ? ((
+            await this.findLinkedPlatformFee(tx.userId, tx.createdAt)
+          )?.amountMicroCc.toString() ?? null)
+        : null;
 
     return {
       id: `tok-${tx.id}`,
@@ -275,6 +415,9 @@ export class TransactionDetailService {
         ? tx.cancelledAmount.toString()
         : null,
       cancelledInstrumentId: tx.instrumentId,
+      platformFeeMicroCc,
+      offer,
+      offerRole,
     };
   }
 
@@ -298,7 +441,17 @@ export class TransactionDetailService {
     }
 
     let cantonUpdateId = tx.cantonUpdateId;
-    if (!cantonUpdateId && tx.ledgerTxId && user?.cantonPartyId) {
+    // Lazy-fill updateId dari contract id HANYA bila ledgerTxId memang contract
+    // id. Baris offer (dan sebagian transfer) menyimpan updateId asli di
+    // ledgerTxId — me-resolve-nya sebagai contract akan menghasilkan lookup
+    // sia-sia / nilai salah lalu menimpa cantonUpdateId yang sudah benar.
+    const ledgerLooksLikeUpdateId = tx.ledgerTxId?.trim().startsWith('1220');
+    if (
+      !cantonUpdateId &&
+      tx.ledgerTxId &&
+      !ledgerLooksLikeUpdateId &&
+      user?.cantonPartyId
+    ) {
       cantonUpdateId = await this.ledger.findUpdateIdForContract(
         tx.ledgerTxId,
         user.cantonPartyId,
@@ -336,19 +489,30 @@ export class TransactionDetailService {
         ? await this.users.resolveTransferCounterparty(tx.referenceId)
         : null;
 
+    // Offer pending → detail ledger khusus (bukan receipt TX). null = TX final.
+    const { offer, offerRole } = await this.attachPendingOffer({
+      status: tx.status,
+      transferInstructionCid: tx.transferInstructionCid,
+      partyId: user?.cantonPartyId,
+    });
+
     // Platform fee — ditampilkan di modal detail. Sumber nilai:
     //   1. Transfer (TRANSFER_OUT): cari fee row terkait via findLinkedPlatformFee.
     //      Kalau tidak ketemu, fallback ke env TRANSACTION_FEE_CC.
     //   2. Lainnya (termasuk Swap): null. Swap OneSwap tidak punya platform fee
     //      dapp terpisah — fee OneSwap native (networkFeeIn/platformFee/lpFee)
     //      sudah terbungkus di amount, tidak ditampilkan sebagai platform fee.
+    // Saat offer masih PENDING, fee hanya relevan bagi pengirim: penerima tidak
+    // membayar apa pun, dan menampilkan nominal di sisi penerima menyesatkan.
     let platformFeeMicroCc: string | null = null;
-    if (tx.type === 'TRANSFER_OUT') {
+    if (tx.type === 'TRANSFER_OUT' && offerRole !== 'receiver') {
       const feeRow = await this.findLinkedPlatformFee(tx.userId, tx.createdAt);
       if (feeRow) {
         platformFeeMicroCc = feeRow.amountMicroCc.toString();
-      } else {
-        // Fallback: env default (mis. 5 CC).
+      } else if (!offer) {
+        // Fallback: env default (mis. 5 CC). Hanya untuk TX final — pada offer
+        // pending baris fee sudah pasti tertulis bersamaan (satu batch), jadi
+        // ketidakhadirannya berarti data belum sinkron, bukan estimasi.
         const feeCc = Number(
           this.config.get<string>('TRANSACTION_FEE_CC') ?? '0',
         );
@@ -358,11 +522,10 @@ export class TransactionDetailService {
       }
     }
 
-    // Event/update id untuk link explorer Modo (cc.modo.link). Preferensi
-    // ledgerTxId (biasanya = update_id transaksi, format "1220…") — itu yang
-    // cocok untuk link explorer. cantonUpdateId bisa berupa contract id (format
-    // beda) → jangan dipakai utama.
-    const rawId = tx.ledgerTxId ?? cantonUpdateId ?? null;
+    // Event/update id untuk link explorer. Preferensi cantonUpdateId (di-stamp
+    // saat settle = update ACCEPT) sebelum ledgerTxId (update create-offer) —
+    // lihat pickLedgerId.
+    const rawId = this.pickLedgerId(tx.ledgerTxId, cantonUpdateId);
     const internalMarker = isInternalTxMarker(rawId);
     // Marker internal (fee/inbound-sync/unlock/preapproval:disable/reward-) TIDAK
     // di-resolve ke link explorer (bukan on-chain tx real) → eventId null.
@@ -395,6 +558,8 @@ export class TransactionDetailService {
         ? tx.cancelledAmountCc.toString()
         : null,
       cancelledInstrumentId: tx.cancelledInstrumentId,
+      offer,
+      offerRole,
     };
   }
 

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Ban, Check, Copy, ExternalLink, Lock, LockOpen, Zap } from "lucide-react";
 
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
+import { OfferDetailContent } from "@/components/app/wallet/offer-detail-content";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useTokenPrices } from "@/lib/hooks/use-token-prices";
 import { tokenPriceKey } from "@/components/app/earn/cc-usd-value";
@@ -145,6 +146,20 @@ export function TransactionDetailContent({
   }
 
   if (!detail) return null;
+
+  // Baris ini adalah JANJI, bukan TX: offer masih hidup di ledger (belum
+  // di-accept). Dana belum berpindah, jadi receipt transaksi (dengan tx id +
+  // link explorer) tidak berlaku — tampilkan detail ledger offer. Begitu
+  // di-accept, baris ter-flip COMPLETED → offer null → receipt normal.
+  if (detail.status === "PENDING" && detail.offer) {
+    return (
+      <OfferDetailContent
+        detail={detail}
+        offer={detail.offer}
+        compact={compact}
+      />
+    );
+  }
 
   const ccAmt = microCcToCc(detail.amountMicroCc);
   const isOut = detail.type === "TRANSFER_OUT";
@@ -376,6 +391,19 @@ export function TransactionDetailContent({
             </ReceiptField>
           ) : null}
 
+          {/* Jejak audit untuk transfer yang lahir sebagai offer: TX final
+              (Tx ID di bawah) menunjuk update ACCEPT, sedangkan baris ini
+              menyimpan update CREATE-OFFER. Berguna untuk menelusuri kapan
+              offer dibuat. Untuk transfer langsung kedua id sama → disembunyikan
+              supaya tidak menduplikasi Tx ID. */}
+          {detail.status !== "PENDING" &&
+          detail.ledgerContractId &&
+          detail.ledgerContractId !== detail.cantonUpdateId ? (
+            <ReceiptField label="Offer tx" mono>
+              <span>{truncateMiddle(detail.ledgerContractId)}</span>
+            </ReceiptField>
+          ) : null}
+
           <ReceiptField label={t("transactions.when")}>
             {new Date(detail.createdAt).toLocaleString()}
           </ReceiptField>
@@ -399,12 +427,12 @@ export function TransactionDetailContent({
                     <Check className="h-3 w-3 shrink-0" />
                   )}
                   {detail.status === "PENDING"
-                    ? "Pending"
+                    ? "Awaiting acceptance"
                     : detail.status === "REJECTED"
                       ? "Rejected"
                       : detail.onChainSettled
                         ? "Completed"
-                        : "Pending"}
+                        : "Awaiting acceptance"}
                 </span>
               );
             })()}

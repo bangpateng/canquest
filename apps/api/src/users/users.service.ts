@@ -652,6 +652,55 @@ export class UsersService {
     return tx;
   }
 
+  /**
+   * Klaim ATOMIK "sekali saja" untuk sebuah update ledger.
+   *
+   * Dipakai mencegah DUA penulis mencatat fakta yang sama dari satu update
+   * ledger. Kasus nyata (2026-09-12): baris `TOKEN_TRANSFER_IN` penerima ditulis
+   * dua kali untuk satu accept — signing relay (jalur request, langsung) dan WSS
+   * `applyTokenIncrement` (jalur stream, ~20ms kemudian). Keduanya "cek dulu,
+   * baru tulis", jadi cek mereka saling tidak melihat dan dua baris lahir
+   * (receipt ganda di wallet penerima).
+   *
+   * Klaim ini MENANG atau KALAH secara atomik: `create` bertabrakan pada
+   * `@@unique([updateId, userId, scope])` (tabel WssBalanceApplied) → yang kalah
+   * menerima P2002 dan tidak menulis apa pun. Karena itu balapan tidak lagi
+   * bergantung pada urutan baca-tulis.
+   *
+   * `scope` memisahkan jenis klaim, mis.:
+   *   - `hist:cc`                     → baris history TRANSFER_IN (CC)
+   *   - `hist:tok:<instrument-lower>`  → baris history TOKEN_TRANSFER_IN
+   *   Sengaja TANPA instrumentAdmin: admin bisa kosong di satu penulis dan
+   *   terisi di penulis lain (itu justru akar duplikatnya), sementara identitas
+   *   barisnya sama.
+   *
+   * Idempoten terhadap replay: panggilan kedua dengan updateId sama → false.
+   * Fail-closed: error DB selain P2002 → false (lebih baik tidak menulis
+   * daripada menulis ganda).
+   */
+  async claimLedgerApply(
+    updateId: string,
+    userId: string,
+    scope: string,
+  ): Promise<boolean> {
+    if (!updateId || !userId || !scope) return false;
+    try {
+      await this.prisma.wssBalanceApplied.create({
+        data: { updateId, userId, scope },
+      });
+      return true;
+    } catch (err) {
+      const msg = String(err);
+      if (msg.includes('P2002') || msg.includes('Unique constraint')) {
+        return false; // sudah diklaim penulis lain / replay
+      }
+      this.logger.warn(
+        `claimLedgerApply gagal (${scope}, updateId=${updateId.slice(0, 16)}…): ${msg}`,
+      );
+      return false;
+    }
+  }
+
   private resolveQuestIdForTransaction(tx: {
     type: CcTransactionType;
     description: string;

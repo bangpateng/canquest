@@ -14,6 +14,38 @@ import {
 } from '../common/canton-party-id';
 import { DEBUG_LEDGER } from '../common/debug-flags';
 import { ProxyCacheService } from './proxy-cache.service';
+import { extractTransferInstructionCid } from './offer-tree-cid';
+import {
+  asRecord,
+  pick,
+  readAcsCreatedEvents,
+  readNumOrUndefined,
+  readStr,
+  readStrArray,
+  readStrOr,
+} from './ledger-json';
+
+/**
+ * Satu kontrak offer yang MASIH hidup di ACS ledger (belum di-accept/reject/
+ * withdraw). Instrument-agnostic: CC (Amulet) maupun token registry (USDCx,
+ * CBTC, ...) memakai bentuk yang sama — pembeda hanya instrumentId/Admin.
+ */
+export type PendingOfferDetail = {
+  type: 'transfer_offer' | 'transfer_instruction';
+  contractId: string;
+  sender: string;
+  receiver: string;
+  amount: string;
+  description: string;
+  /** Batas waktu penerima boleh accept (executeBefore) — ISO string, '' bila tak ada. */
+  expiresAt: string;
+  /** Kapan offer diminta (requestedAt) — ISO string, '' bila tak ada. */
+  createdAt: string;
+  /** Instrument id offer (mis. "Amulet" untuk CC, "USDCx" untuk token non-CC). */
+  instrumentId: string;
+  /** Admin party instrument (mis. "DSO::1220..."). Kosong untuk legacy. */
+  instrumentAdmin: string;
+};
 
 /**
  * HTTP client for the Canton JSON Ledger API v2.
@@ -770,21 +802,11 @@ export class CantonLedgerService {
 
     if (ok) {
       let updateId: string | null = null;
-      let transferInstructionCid: string | null = null;
-      try {
-        // updateId nested di transactionTree.updateId (bukan root) — lihat
-        // extractUpdateIdFromTree. parsed dipakai untuk extract contract id offer.
-        const parsed = JSON.parse(text);
-        updateId = extractUpdateIdFromTree(text);
-        // If transferKind = "offer", extract the TransferInstruction contract ID
-        // from the CreatedEvent tree for the receiver to accept later
-        if (registry.transferKind === 'offer') {
-          transferInstructionCid = extractCreatedContractId(text);
-        }
-        void parsed; // dipertahankan untuk debugging masa depan bila perlu
-      } catch {
-        /* ignore */
-      }
+      // CID offer dibaca dari FAKTA tree, bukan label registry.transferKind
+      // (label bisa salah lapor 'direct' padahal hasilnya offer — lihat
+      // extractTransferInstructionCid). null = memang transfer langsung.
+      const transferInstructionCid = extractTransferInstructionCid(text);
+      updateId = extractUpdateIdFromTree(text);
 
       this.logger.log(
         `TransferFactory_Transfer OK: kind=${registry.transferKind} ` +
@@ -1059,10 +1081,8 @@ export class CantonLedgerService {
 
     if (ok) {
       const updateId = extractUpdateIdFromTree(text);
-      let transferInstructionCid: string | null = null;
-      if (registry.transferKind === 'offer') {
-        transferInstructionCid = extractCreatedContractId(text);
-      }
+      // CID offer dari fakta tree (bukan label transferKind).
+      const transferInstructionCid = extractTransferInstructionCid(text);
       this.logger.log(
         `Proxy transfer OK: kind=${registry.transferKind} ` +
           `updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
@@ -1322,10 +1342,8 @@ export class CantonLedgerService {
 
     if (ok) {
       const updateId = extractUpdateIdFromTree(text);
-      let transferInstructionCid: string | null = null;
-      if (registry.transferKind === 'offer') {
-        transferInstructionCid = extractCreatedContractId(text);
-      }
+      // CID offer dari fakta tree (bukan label transferKind).
+      const transferInstructionCid = extractTransferInstructionCid(text);
       this.logger.log(
         `Proxy batch transfer OK: kind=${registry.transferKind} ` +
           `updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
@@ -1616,10 +1634,9 @@ export class CantonLedgerService {
 
     if (ok) {
       const updateId = extractUpdateIdFromTree(text);
-      let transferInstructionCid: string | null = null;
-      if (lastTransferKind === 'offer') {
-        transferInstructionCid = extractCreatedContractId(text);
-      }
+      // CID offer dari fakta tree (bukan label lastTransferKind — registry
+      // pernah lapor 'direct' padahal hasilnya offer, kasus nyata 2026-09-12).
+      const transferInstructionCid = extractTransferInstructionCid(text);
       this.logger.log(
         `Proxy batch transfer (multi) OK: kind=${lastTransferKind} ` +
           `updateId=${updateId?.slice(0, 16) ?? 'unknown'} legs=${transferCalls.length}`,
@@ -3096,7 +3113,9 @@ export class CantonLedgerService {
         );
         return null;
       }
-      const data = await res.json();
+      // `res.json()` bertipe `any` — anotasikan `unknown` supaya pembacaan
+      // field-nya lewat helper narrowing (bukan akses bebas).
+      const data: unknown = await res.json();
 
       // collect every embedded contract { template_id, contract_id, created_event_blob, payload? }
       const found: Array<{
@@ -3110,31 +3129,22 @@ export class CantonLedgerService {
       const walk = (n: unknown, seen = new Set<unknown>()): void => {
         if (!n || typeof n !== 'object' || seen.has(n)) return;
         seen.add(n);
-        const o = n as Record<string, any>;
+        const o = n as Record<string, unknown>;
         if (
           typeof o.contract_id === 'string' &&
           typeof o.template_id === 'string' &&
           typeof o.created_event_blob === 'string'
         ) {
-          const payload = o.payload ?? {};
+          const payload = asRecord(o.payload);
           found.push({
             contractId: o.contract_id,
             templateId: o.template_id,
             blob: o.created_event_blob,
-            round:
-              payload?.round?.number != null
-                ? Number(payload.round.number)
-                : undefined,
-            opensAt:
-              typeof payload?.opensAt === 'string'
-                ? payload.opensAt
-                : undefined,
+            round: readNumOrUndefined(pick(payload, 'round', 'number')),
+            opensAt: readStr(pick(payload, 'opensAt')) ?? undefined,
             // Harga CC (Amulet) USD — dari OpenMiningRound.payload.amuletPrice.
             // Bisa berupa string numeric atau number; parse aman.
-            amuletPrice:
-              payload?.amuletPrice != null
-                ? Number(payload.amuletPrice)
-                : undefined,
+            amuletPrice: readNumOrUndefined(payload?.['amuletPrice']),
           });
         }
         for (const k of Object.keys(o)) walk(o[k], seen);
@@ -3162,10 +3172,10 @@ export class CantonLedgerService {
       const usable = open.filter(
         (c) => !c.opensAt || Date.parse(c.opensAt) <= now,
       );
-      const pick = (usable.length ? usable : open).sort(
+      const bestRound = (usable.length ? usable : open).sort(
         (a, b) => (b.round ?? 0) - (a.round ?? 0),
       )[0];
-      return pick ?? null;
+      return bestRound ?? null;
     } catch (err) {
       this.logger.warn(`scan-proxy /${seg} error: ${String(err)}`);
       return null;
@@ -4548,27 +4558,7 @@ export class CantonLedgerService {
      * outgoing → skip bila sender !== partyId.
      */
     direction: 'incoming' | 'outgoing' = 'incoming',
-  ): Promise<
-    Array<{
-      type: 'transfer_offer' | 'transfer_instruction';
-      contractId: string;
-      sender: string;
-      receiver: string;
-      amount: string;
-      description: string;
-      expiresAt: string;
-      createdAt: string;
-      /**
-       * Instrument id offer ini (mis. "Amulet" untuk CC, "USDCX" untuk token
-       * non-CC). Default "Amulet" untuk backward-compat (legacy CC offers +
-       * TransferOffer lama yang tidak punya field instrument). Dipakai UI untuk
-       * tampilkan label token yang benar, bukan hardcoded "CC".
-       */
-      instrumentId: string;
-      /** Admin party instrument (mis. "DSO::1220..."). Kosong untuk legacy. */
-      instrumentAdmin: string;
-    }>
-  > {
+  ): Promise<PendingOfferDetail[]> {
     const isOutgoing = direction === 'outgoing';
     let offset: number | string = 0;
     try {
@@ -4612,18 +4602,7 @@ export class CantonLedgerService {
       this.logger.warn(`queryPendingOffers error: ${String(err)}`);
     }
 
-    const offers: Array<{
-      type: 'transfer_offer' | 'transfer_instruction';
-      contractId: string;
-      sender: string;
-      receiver: string;
-      amount: string;
-      description: string;
-      expiresAt: string;
-      createdAt: string;
-      instrumentId: string;
-      instrumentAdmin: string;
-    }> = [];
+    const offers: PendingOfferDetail[] = [];
 
     for (const entry of allContracts) {
       if (!entry || typeof entry !== 'object') continue;
@@ -4846,16 +4825,7 @@ export class CantonLedgerService {
   async lookupOfferDetail(
     cid: string,
     partyId: string,
-  ): Promise<{
-    type: 'transfer_offer' | 'transfer_instruction';
-    contractId: string;
-    sender: string;
-    receiver: string;
-    amount: string;
-    description: string;
-    instrumentId: string;
-    instrumentAdmin: string;
-  } | null> {
+  ): Promise<PendingOfferDetail | null> {
     try {
       const offers = await this.queryPendingOffers(partyId);
       return offers.find((o) => o.contractId === cid) ?? null;
@@ -4877,16 +4847,7 @@ export class CantonLedgerService {
   async lookupOfferDetailBothDirections(
     cid: string,
     partyId: string,
-  ): Promise<{
-    type: 'transfer_offer' | 'transfer_instruction';
-    contractId: string;
-    sender: string;
-    receiver: string;
-    amount: string;
-    description: string;
-    instrumentId: string;
-    instrumentAdmin: string;
-  } | null> {
+  ): Promise<PendingOfferDetail | null> {
     try {
       const incoming = await this.queryPendingOffers(partyId, 'incoming');
       const found = incoming.find((o) => o.contractId === cid);
@@ -5042,7 +5003,7 @@ export class CantonLedgerService {
           contractId?: string;
         };
         const contractId =
-          parsed.contractId ?? extractCreatedContractId(text) ?? null;
+          parsed.contractId ?? extractFirstCreatedContractId(text) ?? null;
         return {
           ok: true,
           contractId,
@@ -5982,14 +5943,22 @@ export class CantonLedgerService {
         this.logger.warn(`fetchContractsForDisclosure ${res.status}`);
         return [];
       }
-      const arr = (await res.json()) as any[];
-      const out: Array<{ templateId: string; contractId: string; createdEventBlob: string }> = [];
-      for (const e of Array.isArray(arr) ? arr : []) {
-        const ce = e?.contractEntry?.JsActiveContract?.createdEvent;
-        if (!ce || !want.has(ce.contractId)) continue;
-        const blob = ce.createdEventBlob ?? ce.created_event_blob ?? ce.blob;
-        if (typeof ce.templateId === 'string' && typeof blob === 'string' && blob) {
-          out.push({ templateId: ce.templateId, contractId: ce.contractId, createdEventBlob: blob });
+      const out: Array<{
+        templateId: string;
+        contractId: string;
+        createdEventBlob: string;
+      }> = [];
+      for (const ce of readAcsCreatedEvents(await res.json())) {
+        const contractId = readStr(ce.contractId);
+        if (!contractId || !want.has(contractId)) continue;
+        // Ledger memakai camelCase; dua nama lain dipertahankan untuk
+        // kompatibilitas bentuk lama/alternatif.
+        const blob = readStr(
+          ce.createdEventBlob ?? ce.created_event_blob ?? ce.blob,
+        );
+        const templateId = readStr(ce.templateId);
+        if (templateId && blob) {
+          out.push({ templateId, contractId, createdEventBlob: blob });
         }
       }
       return out;
@@ -6188,16 +6157,20 @@ export class CantonLedgerService {
         this.logger.warn(`queryContractsByTemplate ${res.status}`);
         return [];
       }
-      const arr = (await res.json()) as any[];
-      const out: Array<{ contractId: string; payload: Record<string, unknown> }> = [];
+      const out: Array<{
+        contractId: string;
+        payload: Record<string, unknown>;
+      }> = [];
       const suffix = `:${templateId.split(':').slice(-2).join(':')}`;
-      for (const e of Array.isArray(arr) ? arr : []) {
-        const ce = e?.contractEntry?.JsActiveContract?.createdEvent;
-        if (!ce || typeof ce.templateId !== 'string') continue;
-        if (ce.templateId !== templateId && !ce.templateId.endsWith(suffix)) continue;
+      for (const ce of readAcsCreatedEvents(await res.json())) {
+        const tpl = readStr(ce.templateId);
+        if (!tpl) continue;
+        if (tpl !== templateId && !tpl.endsWith(suffix)) continue;
+        const contractId = readStr(ce.contractId);
+        if (!contractId) continue;
         out.push({
-          contractId: ce.contractId,
-          payload: (ce.createArgument ?? {}) as Record<string, unknown>,
+          contractId,
+          payload: asRecord(ce.createArgument) ?? {},
         });
       }
       return out;
@@ -6262,23 +6235,21 @@ export class CantonLedgerService {
         this.logger.warn(`findLockedAmulets ${res.status}`);
         return [];
       }
-      const arr = (await res.json()) as any[];
-      for (const e of Array.isArray(arr) ? arr : []) {
-        const ce = e?.contractEntry?.JsActiveContract?.createdEvent;
-        if (!ce || typeof ce.templateId !== 'string') continue;
-        if (!ce.templateId.endsWith(':Splice.Amulet:LockedAmulet')) continue;
-        const arg = ce.createArgument ?? {};
-        const amtRaw = arg.amulet?.amount?.initialAmount ?? '0';
+      for (const ce of readAcsCreatedEvents(await res.json())) {
+        const tpl = readStr(ce.templateId);
+        if (!tpl || !tpl.endsWith(':Splice.Amulet:LockedAmulet')) continue;
+        const contractId = readStr(ce.contractId);
+        if (!contractId) continue;
+        const arg = asRecord(ce.createArgument);
+        const amtRaw =
+          pick(arg, 'amulet', 'amount', 'initialAmount') ?? '0';
         out.push({
-          contractId: ce.contractId,
-          templateId: ce.templateId,
-          amount: parseFloat(typeof amtRaw === 'string' ? amtRaw : '0') || 0,
-          expiresAt: arg.lock?.expiresAt ?? '',
-          holders: Array.isArray(arg.lock?.holders) ? arg.lock.holders : [],
-          optContext:
-            typeof arg.lock?.optContext === 'string' && arg.lock.optContext
-              ? arg.lock.optContext
-              : null,
+          contractId,
+          templateId: tpl,
+          amount: parseFloat(readStr(amtRaw) ?? '0') || 0,
+          expiresAt: readStrOr(pick(arg, 'lock', 'expiresAt')),
+          holders: readStrArray(pick(arg, 'lock', 'holders')),
+          optContext: readStrOr(pick(arg, 'lock', 'optContext')) || null,
         });
       }
     } catch (err) {
@@ -6457,8 +6428,12 @@ export type LedgerStreamEvent = {
   };
 };
 
-/** Extract first CreatedEvent contract id from submit-and-wait JSON response. */
-function extractCreatedContractId(responseText: string): string | null {
+/**
+ * Ambil contract id pertama dari tree created event — untuk `createContract`
+ * generik (template apa pun, bukan offer). Pencarian offer yang spesifik
+ * template ada di extractTransferInstructionCid.
+ */
+function extractFirstCreatedContractId(responseText: string): string | null {
   try {
     const parsed = JSON.parse(responseText) as Record<string, unknown>;
     if (typeof parsed.contractId === 'string' && parsed.contractId) {

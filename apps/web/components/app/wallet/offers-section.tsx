@@ -9,10 +9,7 @@ import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { ArrowDownLeft, ArrowUpRight, Check, X, Clock, Undo2 } from "lucide-react";
 import { queryKeys } from "@/lib/queries/query-keys";
 import { displayName } from "@/components/app/wallet/token-logo";
-import { useTransactionStatus } from "@/lib/tx/transaction-status";
-import { useMe } from "@/lib/hooks/use-me";
-import { signRelayTransaction } from "@/lib/wallet/sign-relay";
-import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
+import { useOfferActions } from "@/lib/wallet/use-offer-actions";
 
 export interface OfferItem {
   type: "transfer_offer" | "transfer_instruction";
@@ -229,155 +226,34 @@ export function OffersModal({
   onSentRefresh,
 }: OffersModalProps) {
   const [activeTab, setActiveTab] = useState<"incoming" | "sent">("incoming");
-  const [processingAction, setProcessingAction] = useState<{
-    id: string;
-    action: "accept" | "reject" | "withdraw";
-  } | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // M3b: user external (non-custodial) → aksi offer di-sign di browser.
-  const { me } = useMe();
-  const isExternalWallet = me?.walletKind === "external";
-  const { prompt: promptPassphrase, passphraseModal } = usePassphrasePrompt();
-  const tx = useTransactionStatus();
-
-  // Eksekusi aksi offer dengan status modal standar (Sign → Broadcast →
-  // Success / Failed). Dipanggil dari klik tombol Accept/Reject/Withdraw.
-  const runOfferAction = useCallback(
-    async (action: "accept" | "reject" | "withdraw", offer: OfferItem) => {
-      const token = displayName(offer.instrumentId ?? "Amulet");
-      const amountText = `${formatAmount(offer)} ${token}`;
-      const labels = {
-        accept: { verb: "Accept", title: "Transfer accepted", subtitle: `${token} added to your wallet.` },
-        reject: { verb: "Reject", title: "Transfer rejected", subtitle: `Returned to sender.` },
-        withdraw: { verb: "Withdraw", title: "Transfer cancelled", subtitle: `${token} returned to your wallet.` },
-      } as const;
-      const subText =
-        action === "withdraw"
-          ? `to ${receiverDisplay(offer)}`
-          : `from ${senderDisplay(offer)}`;
-
-      setProcessingAction({ id: offer.contractId, action });
-      setSuccessMsg(null);
-      // Modal status hanya SETELAH sign.
-      try {
-        // M3b: external → tanda tangan di browser (TransferInstruction).
-        if (isExternalWallet) {
-          await signRelayTransaction(
-            action === "accept"
-              ? "accept_offer"
-              : action === "reject"
-                ? "reject_offer"
-                : "withdraw_offer",
-            { contractId: offer.contractId },
-            {
-              onWalletLocked: () =>
-                promptPassphrase(`${labels[action].verb} ${amountText}`),
-            },
-          );
-          if (action === "withdraw") {
-            removeOfferLocally(setSentOffers, offer.contractId);
-          } else {
-            removeOfferLocally(setOffers, offer.contractId);
-          }
-          setSuccessMsg(
-            action === "accept"
-              ? `Transfer accepted — ${token} added to your wallet.`
-              : action === "reject"
-                ? `Transfer rejected — ${token} returned to sender.`
-                : `Transfer cancelled — ${token} returned to your wallet.`,
-          );
-          if (action === "withdraw") onSentRefresh?.();
-          else onRefresh?.();
-          tx.succeed({
-            amountText,
-            title: labels[action].title,
-            subtitle: labels[action].subtitle,
-            meta: [
-              { label: "Amount", value: amountText },
-              {
-                label: action === "withdraw" ? "To" : "From",
-                value: action === "withdraw" ? receiverDisplay(offer) : senderDisplay(offer),
-                mono: true,
-              },
-              { label: "Network", value: "Canton" },
-            ],
-          });
-          return;
-        }
-        tx.startBroadcast({
-          amountText,
-          subText,
-          title: labels[action].title,
-          subtitle: labels[action].subtitle,
-          accentBg: "bg-[var(--primary)]/15",
-          accentText: "text-canton",
-        });
-        const endpoint =
-          action === "accept"
-            ? "/api/party/offers/accept"
-            : action === "reject"
-              ? "/api/party/offers/reject"
-              : "/api/party/transfer-instruction/withdraw";
-        const res = await fetch(endpoint, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            action === "withdraw"
-              ? { transferInstructionCid: offer.contractId }
-              : {
-                  contractId: offer.contractId,
-                  type: offer.type || "transfer_offer",
-                },
-          ),
-        });
-        const data = (await res.json()) as { ok?: boolean; message?: string };
-        if (res.ok && data.ok) {
-          if (action === "withdraw") {
-            removeOfferLocally(setSentOffers, offer.contractId);
-          } else {
-            removeOfferLocally(setOffers, offer.contractId);
-          }
-          setSuccessMsg(
-            data.message ??
-              (action === "accept"
-                ? `Transfer accepted — ${token} added to your wallet.`
-                : action === "reject"
-                  ? `Transfer rejected — ${token} returned to sender.`
-                  : `Transfer cancelled — ${token} returned to your wallet.`),
-          );
-          if (action === "withdraw") onSentRefresh?.();
-          else onRefresh?.();
-          tx.succeed({
-            amountText,
-            title: labels[action].title,
-            subtitle: labels[action].subtitle,
-            meta: [
-              { label: "Amount", value: amountText },
-              {
-                label: action === "withdraw" ? "To" : "From",
-                value: action === "withdraw" ? receiverDisplay(offer) : senderDisplay(offer),
-                mono: true,
-              },
-              { label: "Network", value: "Canton" },
-            ],
-          });
+  // Aksi Accept/Reject/Withdraw dipegang hook bersama — logika tanda tangan yang
+  // sama dipakai detail offer (lib/wallet/use-offer-actions). Di sini tinggal
+  // menyambungkan efek lokal: optimistic-remove + pesan sukses + refresh list.
+  const { run: runOfferAction, processing: processingAction, passphraseModal } =
+    useOfferActions({
+      onSuccess: (action, contractId) => {
+        if (action === "withdraw") {
+          removeOfferLocally(setSentOffers, contractId);
+          onSentRefresh?.();
         } else {
-          const msg = data.message ?? `Failed to ${action} transfer.`;
-          tx.fail(msg);
+          removeOfferLocally(setOffers, contractId);
+          onRefresh?.();
         }
-      } catch (err) {
-        tx.fail(
-          err instanceof Error && err.message
-            ? err.message
-            : "Network error. Check your connection and try again.",
-        );
-      } finally {
-        setProcessingAction(null);
-      }
+      },
+    });
+
+  // Adapter untuk tombol di list: jalankan aksi, lalu tampilkan pesan sukses
+  // inline di modal. Efek list (remove + refresh) sudah ditangani hook lewat
+  // onSuccess di atas.
+  const handleOfferAction = useCallback(
+    async (action: "accept" | "reject" | "withdraw", offer: OfferItem) => {
+      setSuccessMsg(null);
+      const outcome = await runOfferAction(action, offer);
+      if (outcome) setSuccessMsg(outcome.message);
     },
-    [setOffers, setSentOffers, onRefresh, onSentRefresh, isExternalWallet, promptPassphrase, tx],
+    [runOfferAction],
   );
 
   // Esc to close.
@@ -554,7 +430,7 @@ export function OffersModal({
                         <button
                           type="button"
                           disabled={isBusy}
-                          onClick={() => void runOfferAction("accept", offer)}
+                          onClick={() => void handleOfferAction("accept", offer)}
                           className={cn(
                             buttonVariants({ variant: "secondary", size: "sm" }),
                             "flex-1 justify-center gap-1.5 text-green-600 hover:text-green-300 border-green-500/20 hover:border-green-500/40",
@@ -570,7 +446,7 @@ export function OffersModal({
                         <button
                           type="button"
                           disabled={isBusy}
-                          onClick={() => void runOfferAction("reject", offer)}
+                          onClick={() => void handleOfferAction("reject", offer)}
                           className={cn(
                             buttonVariants({ variant: "secondary", size: "sm" }),
                             "flex-1 justify-center gap-1.5 text-red-600 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
@@ -655,7 +531,7 @@ export function OffersModal({
                       <button
                         type="button"
                         disabled={isWithdrawing}
-                        onClick={() => void runOfferAction("withdraw", offer)}
+                        onClick={() => void handleOfferAction("withdraw", offer)}
                         className={cn(
                           buttonVariants({ variant: "secondary", size: "sm" }),
                           "flex-1 justify-center gap-1.5 text-red-600 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
