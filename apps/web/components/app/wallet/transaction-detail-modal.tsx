@@ -63,10 +63,10 @@ export function TransactionDetailModal({
         className="relative z-10 my-auto flex w-full min-w-0 max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] max-w-md flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-xl sm:max-h-[min(90vh,90dvh)]"
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-6 py-5">
-          <div className="flex min-w-0 items-start gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             {loading || !detail ? (
               <span
-                className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
                 aria-hidden
               >
                 <Loader2 className="h-5 w-5 spin" />
@@ -74,7 +74,7 @@ export function TransactionDetailModal({
             ) : (
               <span
                 className={cn(
-                  "mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                   txIconBg(detail.type as TxType),
                 )}
                 aria-hidden
@@ -83,8 +83,10 @@ export function TransactionDetailModal({
               </span>
             )}
             <div className="min-w-0">
-              <h2 className="text-xl font-bold text-[var(--foreground)]">{headerTitle}</h2>
-              <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">{headerSubtitle}</p>
+              <h2 className="text-xl font-bold leading-10 text-[var(--foreground)]">{headerTitle}</h2>
+              {headerSubtitle ? (
+                <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">{headerSubtitle}</p>
+              ) : null}
             </div>
           </div>
           <button
