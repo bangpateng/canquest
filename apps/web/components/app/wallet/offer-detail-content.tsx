@@ -155,10 +155,6 @@ export function OfferDetailContent({
     ? `${amount.toFixed(4)} ${token}`
     : token;
   const remaining = expiryText(offer.expiresAt ?? "");
-  // Fee dibayar pengirim saat offer dibuat (satu batch dengan transfer).
-  const feeCc = detail.platformFeeMicroCc
-    ? Math.abs(Number(detail.platformFeeMicroCc)) / 1_000_000
-    : 0;
 
   const { run, processing, passphraseModal } = useOfferActions();
   const [message, setMessage] = useState<string | null>(null);
@@ -245,14 +241,6 @@ export function OfferDetailContent({
                 <Clock className="h-3.5 w-3.5 shrink-0" />
                 {remaining}
               </span>
-            </Field>
-          ) : null}
-
-          {/* Fee hangus saat offer dibuat — penerima tidak membayar apa pun,
-              jadi baris ini hanya relevan bagi pengirim. */}
-          {isSender && feeCc > 0 ? (
-            <Field label="Platform fee">
-              {`${feeCc.toFixed(4)} CC (paid)`}
             </Field>
           ) : null}
 
