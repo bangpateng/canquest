@@ -7,6 +7,7 @@ import {
   type LedgerStreamEvent,
 } from './canton-ledger.service';
 import { isPlatformFeeTransaction } from '../users/cc-transaction-visibility';
+import { normalizeStoredEnvelope } from './ledger-envelope';
 
 export type LedgerEventSummary = {
   kind: 'created' | 'archived';
@@ -317,6 +318,50 @@ export class TransactionDetailService {
     return this.getCcDetailForUser(userId, ccId);
   }
 
+  /**
+   * Muat event on-chain untuk bagian "On-chain events" di detail TX.
+   *
+   * SUMBER UTAMA = raw layer (LedgerUpdate.envelope, persistensi WSS): lengkap
+   * untuk SETIAP update yang pernah di-ingest, tanpa jendela waktu. Fallback =
+   * Ledger API `/v2/updates/transactions` yang hanya melihat `lookback` offset
+   * terakhir (±1-2 jam) — tx yang lebih lama PASTI miss dan bagian on-chain
+   * events tampil kosong (kasus: detail lock/unlock @airplanestar dibuka
+   * beberapa jam setelah tx, section-nya hilang total padahal tx-nya final).
+   */
+  private async loadOnChainEvents(
+    updateId: string,
+    partyId: string,
+  ): Promise<{ events: LedgerStreamEvent[] } | null> {
+    const raw = await this.prisma.ledgerUpdate.findUnique({
+      where: { updateId },
+      select: { envelope: true },
+    });
+    if (raw) {
+      const env = normalizeStoredEnvelope(raw.envelope);
+      const events: LedgerStreamEvent[] = [];
+      for (const c of env.created) {
+        if (!c.contractId) continue;
+        events.push({
+          created: {
+            contractId: c.contractId,
+            templateId: c.templateId,
+          },
+        } as LedgerStreamEvent);
+      }
+      for (const a of env.archived) {
+        if (!a.contractId) continue;
+        events.push({
+          archived: {
+            contractId: a.contractId,
+            templateId: a.templateId,
+          },
+        } as LedgerStreamEvent);
+      }
+      return { events };
+    }
+    return this.ledger.fetchTransactionByUpdateId(updateId, partyId);
+  }
+
   /** Detail untuk transaksi token non-CC (TokenTransaction). */
   private async getTokenDetailForUser(
     userId: string,
@@ -341,7 +386,7 @@ export class TransactionDetailService {
     let ledgerFetchError: string | null = null;
 
     if (cantonUpdateId && user?.cantonPartyId) {
-      const onChain = await this.ledger.fetchTransactionByUpdateId(
+      const onChain = await this.loadOnChainEvents(
         cantonUpdateId,
         user.cantonPartyId,
       );
@@ -468,7 +513,7 @@ export class TransactionDetailService {
     let ledgerFetchError: string | null = null;
 
     if (cantonUpdateId && user?.cantonPartyId) {
-      const onChain = await this.ledger.fetchTransactionByUpdateId(
+      const onChain = await this.loadOnChainEvents(
         cantonUpdateId,
         user.cantonPartyId,
       );

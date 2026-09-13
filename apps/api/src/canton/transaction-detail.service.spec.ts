@@ -24,6 +24,7 @@ type Mocks = {
     ccTransaction: { findFirst: jest.Mock; update: jest.Mock };
     tokenTransaction: { findFirst: jest.Mock };
     user: { findUnique: jest.Mock };
+    ledgerUpdate: { findUnique: jest.Mock };
   };
 };
 
@@ -43,6 +44,9 @@ function makeService(): Mocks {
     ccTransaction: { findFirst: jest.fn(), update: jest.fn() },
     tokenTransaction: { findFirst: jest.fn() },
     user: { findUnique: jest.fn() },
+    // Raw layer: sumber utama event on-chain di detail (ledger API hanya
+    // fallback lookback). Default null = tx tidak ada di raw layer.
+    ledgerUpdate: { findUnique: jest.fn().mockResolvedValue(null) },
   };
   const users = {
     resolveTransferCounterparty: jest.fn().mockResolvedValue(null),
