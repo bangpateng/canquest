@@ -15,6 +15,7 @@ import {
   isOwnChangeCredit,
   readLockMovement,
   selfUnlockCredit,
+  pickIncomingMemo,
   LEDGER_META,
 } from './ledger-event-intent';
 import type { CantonUpdateEvent } from './canton-updates.service';
@@ -725,5 +726,60 @@ describe('isOwnChangeCredit — change pengirim bukan penerimaan (regresi Send h
         exercised: [{ choice: 'AmuletRules_Transfer', actingParties: [PL] }],
       }),
     ).toBe(true);
+  });
+});
+
+describe('pickIncomingMemo — memo penerima dari reason on-chain', () => {
+  const RECEIVER = 'canquest-user-7fd3df003453';
+  const base = {
+    receiverPartyHint: RECEIVER,
+    receiverUsername: 'airplanestar',
+  };
+
+  it('memo asli pengirim → dipakai', () => {
+    expect(
+      pickIncomingMemo({ reasons: ['untuk kopi'], ...base }),
+    ).toBe('untuk kopi');
+  });
+
+  it('fallback otomatis "Send to <hint penerima>" → null (bukan memo)', () => {
+    expect(
+      pickIncomingMemo({
+        reasons: ['holders released lock', 'Send to canquest-user-7fd3df003453'],
+        ...base,
+      }),
+    ).toBeNull();
+  });
+
+  it('fallback versi @username → null', () => {
+    expect(
+      pickIncomingMemo({ reasons: ['Send to @airplanestar'], ...base }),
+    ).toBeNull();
+  });
+
+  it('reason sistem lock & swap & fee → null', () => {
+    expect(
+      pickIncomingMemo({ reasons: ['holders released lock'], ...base }),
+    ).toBeNull();
+    expect(
+      pickIncomingMemo({ reasons: ['Swap 10.42 CC → USDCx (OneSwap esc_x)'], ...base }),
+    ).toBeNull();
+    expect(
+      pickIncomingMemo({ reasons: ['Platform fee: @amel'], ...base }),
+    ).toBeNull();
+  });
+
+  it('reasons kosong/undefined → null', () => {
+    expect(pickIncomingMemo({ reasons: [], ...base })).toBeNull();
+    expect(pickIncomingMemo({ reasons: undefined, ...base })).toBeNull();
+  });
+
+  it('memo dicampur reason sistem → memo tetap terpilih', () => {
+    expect(
+      pickIncomingMemo({
+        reasons: ['holders released lock', 'bayar kopi'],
+        ...base,
+      }),
+    ).toBe('bayar kopi');
   });
 });

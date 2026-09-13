@@ -552,3 +552,53 @@ export function selfUnlockCredit(
   if (Math.abs(amount - totalAmount) > tolerance) return null;
   return movement;
 }
+
+/**
+ * Pilih MEMO pengirim dari reason on-chain, untuk baris PENERIMA (leg-in).
+ *
+ * Memo transfer dikirim on-chain sebagai `reason` (`memo || "Send to <label>"`
+ * — lihat signing-relay buildFactoryTransfer legs). Di update ACCEPT, reason
+ * itu terbaca WSS lewat `intent.reasons` (meta transferLegSides pada event
+ * EventLog_HoldingsChange / TransferRule_TwoStepTransfer — terverifikasi raw
+ * layer untuk CC maupun USDC).
+ *
+ * Filter ketat — reason berikut BUKAN memo:
+ *   - reason sistem lock: "holders released lock", "lock expired", dst.
+ *   - reason kaki swap ("Swap X → Y …") — swap punya label sendiri.
+ *   - reason leg fee ("Platform fee …").
+ *   - fallback otomatis pengirim saat memo kosong: "Send to <label penerima>"
+ *     (label = party hint ATAU @username — sama dengan signing-relay).
+ * Tidak ada kandidat → null (pemanggil pakai label generik seperti sekarang).
+ */
+export function pickIncomingMemo(params: {
+  reasons: ReadonlyArray<string>;
+  /** Party penerima (pemilik holding) — untuk mengenali fallback "Send to <hint>". */
+  receiverPartyHint?: string | null;
+  /** Username penerima — fallback versi "@username". */
+  receiverUsername?: string | null;
+}): string | null {
+  const hint = params.receiverPartyHint?.split('::')[0]?.trim().toLowerCase();
+  const uname = params.receiverUsername?.replace(/^@/, '').trim().toLowerCase();
+  for (const raw of params.reasons ?? []) {
+    const reason = raw?.trim();
+    if (!reason) continue;
+    const lower = reason.toLowerCase();
+    if (
+      lower === 'holders released lock' ||
+      lower === 'lock expired' ||
+      lower === 'owner released expired lock'
+    ) {
+      continue;
+    }
+    if (lower.startsWith('swap ')) continue;
+    if (lower.startsWith('platform fee')) continue;
+    if (lower.startsWith('send to ')) {
+      const target = reason.slice(8).trim().toLowerCase();
+      if (!target) continue;
+      if (hint && target === hint) continue;
+      if (uname && (target === uname || target === `@${uname}`)) continue;
+    }
+    return reason;
+  }
+  return null;
+}

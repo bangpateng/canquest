@@ -58,6 +58,7 @@ import {
   isSelfFundsMovement,
   isOwnChangeCredit,
   selfUnlockCredit,
+  pickIncomingMemo,
   type LedgerEventIntent,
 } from './ledger-event-intent';
 
@@ -216,6 +217,8 @@ export class BalanceEventHandlerService
         {
           userId: string;
           username: string | null;
+          /** Party pemilik holding — untuk filter fallback memo "Send to <diri>". */
+          ownerPartyId: string | null;
           instrumentId: string;
           instrumentAdmin: string;
           amount: number;
@@ -631,13 +634,24 @@ export class BalanceEventHandlerService
     }
     try {
       // senderPartyId / isSwapIn dihitung di STEP 1b (dipakai guard change).
+      // MEMO penerima: reason on-chain (`memo || "Send to <label>"`) dibaca
+      // dari intent.reasons — filter ketat di pickIncomingMemo (buang reason
+      // sistem/swap/fee/fallback "Send to <diri sendiri>"). Tanpa memo →
+      // label generik seperti sebelumnya.
+      const incomingMemo = isSelfUnlock
+        ? null
+        : pickIncomingMemo({
+            reasons: intent.reasons,
+            receiverPartyHint: ownerPartyId.split('::')[0] || null,
+            receiverUsername: user.username,
+          });
       await this.users.recordTransaction({
         userId: user.userId,
         amountCc: totalAmount,
         // KEPUTUSAN APP: hanya kaki KELUAR swap yang berlabel Swap. Delivery
         // masuk (termasuk dari escrow) = penerimaan biasa → TRANSFER_IN.
         type: isSelfUnlock ? 'CC_UNLOCK' : 'TRANSFER_IN',
-        description: isSelfUnlock ? 'Unlock' : 'Receive',
+        description: isSelfUnlock ? 'Unlock' : (incomingMemo ?? 'Receive'),
         // ← pengirim; null bila eksternal/tidak dikenal (row TETAP tampil —
         //   self-reference malah menyembunyikan row via isSelfReferenceWssRow).
         // IDENTITY (fix double-history 2026-09-07): ledgerTxId = updateId ASLI
@@ -853,6 +867,7 @@ export class BalanceEventHandlerService
     tk: {
       userId: string;
       username: string | null;
+      ownerPartyId?: string | null;
       instrumentId: string;
       instrumentAdmin: string;
       amount: number;
@@ -1008,13 +1023,21 @@ export class BalanceEventHandlerService
       // delivery masuk (termasuk dari escrow) = penerimaan biasa.
       void hasSwapMarker;
 
+      // MEMO penerima (parity dengan path CC): reason on-chain
+      // (`memo || "Send to <label>"`) → description; tanpa memo → label
+      // generik seperti sebelumnya.
+      const incomingMemo = pickIncomingMemo({
+        reasons: intent.reasons,
+        receiverPartyHint: tk.ownerPartyId?.split('::')[0] || null,
+        receiverUsername: tk.username,
+      });
       await this.users.recordTokenTransaction({
         userId: tk.userId,
         amount: tk.amount,
         instrumentId: tk.instrumentId,
         instrumentAdmin: tk.instrumentAdmin,
         type: 'TOKEN_TRANSFER_IN',
-        description: 'Receive',
+        description: incomingMemo ?? 'Receive',
         // null bila pengirim eksternal — row tetap tampil (jangan self-reference).
         // IDENTITY (fix double-history 2026-09-07): basis = updateId ASLI
         // tanpa prefix `wss:` — parity dengan path CC + controller-side.
@@ -1116,6 +1139,7 @@ export class BalanceEventHandlerService
       {
         userId: string;
         username: string | null;
+        ownerPartyId: string | null;
         instrumentId: string;
         instrumentAdmin: string;
         amount: number;
@@ -1220,6 +1244,7 @@ export class BalanceEventHandlerService
       tokenByOwnerKey.set(key, {
         userId: resolvedUser.userId,
         username: resolvedUser.username,
+        ownerPartyId: resolvedParty ?? null,
         instrumentId,
         instrumentAdmin,
         amount,

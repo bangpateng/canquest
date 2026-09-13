@@ -385,6 +385,25 @@ export function TransactionDetailContent({
             </ReceiptField>
           ) : null}
 
+          {/* Memo transfer peer (CC maupun token) — berlaku utk pengirim &
+              penerima. Sumber: description baris (memo yang diketik pengirim,
+              dibawa on-chain sebagai reason dan di-capture WSS utk leg-in).
+              Deskripsi teknis (hasil inbound-sync / fee) BUKAN memo. */}
+          {(() => {
+            const desc = detail.description?.trim() ?? "";
+            const isPeerTransfer = isOut || isIn || isTokenTransfer;
+            const isTechnical =
+              !desc ||
+              /^received .*\bon-chain\b/i.test(desc) ||
+              /^received .*from @/i.test(desc) ||
+              /^platform fee\b/i.test(desc);
+            return isPeerTransfer && !isTechnical ? (
+              <ReceiptField label="Memo">
+                <span className="break-words">{desc}</span>
+              </ReceiptField>
+            ) : null;
+          })()}
+
           {roundDisplay ? (
             <ReceiptField label="Round">
               <span className="tabular-nums">#{roundDisplay}</span>
