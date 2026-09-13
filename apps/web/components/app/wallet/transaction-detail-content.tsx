@@ -14,11 +14,6 @@ import { txTypeLabel } from "@/lib/canton/tx-labels";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 
-function shortTemplate(templateId: string): string {
-  const parts = templateId.split(":");
-  return parts.length >= 2 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : templateId;
-}
-
 /** True when two Canton party IDs refer to the same wallet. */
 function partyIdsEqual(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false;
@@ -268,10 +263,6 @@ export function TransactionDetailContent({
       ? detail.usdEstimate
       : liveUsd;
 
-  // For on-chain transfers the fields already show everything — hide the
-  // separate "On-chain events" block so the modal fits without scrolling.
-  const showLedgerEvents = !isTransfer && detail.ledgerEvents.length > 0;
-
   return (
     <>
       <div
@@ -509,32 +500,6 @@ export function TransactionDetailContent({
           })() : null}
         </dl>
       </div>
-
-      {showLedgerEvents ? (
-        <div
-          className={cn(
-            "w-full min-w-0 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)]",
-            compact ? "mt-4 p-5" : "mt-5 p-8",
-          )}
-        >
-          <h3 className="text-base font-bold text-[var(--foreground)]">On-chain events</h3>
-          <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">
-            Contract lifecycle visible to your wallet.
-          </p>
-          <ul className="mt-4 divide-y divide-[var(--border)]">
-            {detail.ledgerEvents.map((ev, i) => (
-              <li key={`${ev.contractId}-${i}`} className="py-3">
-                <p className="text-base font-semibold capitalize text-[var(--foreground)]">{ev.kind}</p>
-                <p className="mt-1 font-mono text-sm font-medium text-[var(--muted-foreground)]">
-                  {shortTemplate(ev.templateId)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : !isTransfer && detail.ledgerFetchError ? (
-        <p className="mt-4 text-sm font-medium text-[var(--muted-foreground)]">{detail.ledgerFetchError}</p>
-      ) : null}
     </>
   );
 }

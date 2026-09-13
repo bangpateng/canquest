@@ -2,12 +2,8 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
-import {
-  CantonLedgerService,
-  type LedgerStreamEvent,
-} from './canton-ledger.service';
+import { CantonLedgerService } from './canton-ledger.service';
 import { isPlatformFeeTransaction } from '../users/cc-transaction-visibility';
-import { normalizeStoredEnvelope } from './ledger-envelope';
 
 export type LedgerEventSummary = {
   kind: 'created' | 'archived';
@@ -318,50 +314,6 @@ export class TransactionDetailService {
     return this.getCcDetailForUser(userId, ccId);
   }
 
-  /**
-   * Muat event on-chain untuk bagian "On-chain events" di detail TX.
-   *
-   * SUMBER UTAMA = raw layer (LedgerUpdate.envelope, persistensi WSS): lengkap
-   * untuk SETIAP update yang pernah di-ingest, tanpa jendela waktu. Fallback =
-   * Ledger API `/v2/updates/transactions` yang hanya melihat `lookback` offset
-   * terakhir (±1-2 jam) — tx yang lebih lama PASTI miss dan bagian on-chain
-   * events tampil kosong (kasus: detail lock/unlock @airplanestar dibuka
-   * beberapa jam setelah tx, section-nya hilang total padahal tx-nya final).
-   */
-  private async loadOnChainEvents(
-    updateId: string,
-    partyId: string,
-  ): Promise<{ events: LedgerStreamEvent[] } | null> {
-    const raw = await this.prisma.ledgerUpdate.findUnique({
-      where: { updateId },
-      select: { envelope: true },
-    });
-    if (raw) {
-      const env = normalizeStoredEnvelope(raw.envelope);
-      const events: LedgerStreamEvent[] = [];
-      for (const c of env.created) {
-        if (!c.contractId) continue;
-        events.push({
-          created: {
-            contractId: c.contractId,
-            templateId: c.templateId,
-          },
-        } as LedgerStreamEvent);
-      }
-      for (const a of env.archived) {
-        if (!a.contractId) continue;
-        events.push({
-          archived: {
-            contractId: a.contractId,
-            templateId: a.templateId,
-          },
-        } as LedgerStreamEvent);
-      }
-      return { events };
-    }
-    return this.ledger.fetchTransactionByUpdateId(updateId, partyId);
-  }
-
   /** Detail untuk transaksi token non-CC (TokenTransaction). */
   private async getTokenDetailForUser(
     userId: string,
@@ -382,20 +334,13 @@ export class TransactionDetailService {
     }
 
     const cantonUpdateId = tx.cantonUpdateId;
-    let ledgerEvents: LedgerEventSummary[] = [];
-    let ledgerFetchError: string | null = null;
+    const ledgerEvents: LedgerEventSummary[] = [];
+    const ledgerFetchError: string | null = null;
 
-    if (cantonUpdateId && user?.cantonPartyId) {
-      const onChain = await this.loadOnChainEvents(
-        cantonUpdateId,
-        user.cantonPartyId,
-      );
-      if (onChain) {
-        ledgerEvents = summarizeLedgerEvents(onChain.events);
-      } else {
-        ledgerFetchError = '';
-      }
-    }
+    // Panel "On-chain events" dihapus dari UI (keputusan owner 2026-09-13);
+    // field respons dipertahankan (kosong) demi kompatibilitas kontrak API.
+    void cantonUpdateId;
+    void user?.cantonPartyId;
 
     // Event/update id untuk link explorer Modo. Preferensi: cantonUpdateId
     // (di-stamp saat settle = update ACCEPT) sebelum ledgerTxId (update
@@ -509,20 +454,13 @@ export class TransactionDetailService {
       }
     }
 
-    let ledgerEvents: LedgerEventSummary[] = [];
-    let ledgerFetchError: string | null = null;
+    const ledgerEvents: LedgerEventSummary[] = [];
+    const ledgerFetchError: string | null = null;
 
-    if (cantonUpdateId && user?.cantonPartyId) {
-      const onChain = await this.loadOnChainEvents(
-        cantonUpdateId,
-        user.cantonPartyId,
-      );
-      if (onChain) {
-        ledgerEvents = summarizeLedgerEvents(onChain.events);
-      } else {
-        ledgerFetchError = '';
-      }
-    }
+    // Panel "On-chain events" dihapus dari UI (keputusan owner 2026-09-13);
+    // field respons dipertahankan (kosong) demi kompatibilitas kontrak API.
+    void cantonUpdateId;
+    void user?.cantonPartyId;
 
     // Counterparty untuk baris pergerakan (transfer ATAU kaki swap): referenceId
     // menyimpan party lawan (escrow OneSwap untuk swap, party peer untuk transfer).
@@ -636,27 +574,4 @@ export class TransactionDetailService {
       return null;
     }
   }
-}
-
-function summarizeLedgerEvents(
-  events: LedgerStreamEvent[],
-): LedgerEventSummary[] {
-  const out: LedgerEventSummary[] = [];
-  for (const event of events) {
-    if (event.created?.contractId) {
-      out.push({
-        kind: 'created',
-        contractId: event.created.contractId,
-        templateId: event.created.templateId,
-      });
-    }
-    if (event.archived?.contractId) {
-      out.push({
-        kind: 'archived',
-        contractId: event.archived.contractId,
-        templateId: event.archived.templateId,
-      });
-    }
-  }
-  return out;
 }
