@@ -204,7 +204,13 @@ export class BalanceEventHandlerService
       // ── 1. AGGREGATE created Amulet events per owner ─────────────────────
       // Sum semua initialAmount Amulet yang owner-nya sama dalam 1 updateId.
       // Lalu apply 1x increment per user (bukan per event).
-      const ccByOwner = new Map<string, number>(); // partyId → totalAmount
+      // holdings = rincian per contractId (untuk isi holdingCache, supaya saat
+      // Amulet ini dikonsumsi nanti balance CC bisa diturunkan — sama polanya
+      // dengan token di applyTokenIncrement).
+      const ccByOwner = new Map<
+        string,
+        { total: number; holdings: Array<{ contractId: string; amount: number }> }
+      >(); // partyId → total + rincian holding
       const tokenByOwnerKey = new Map<
         string,
         {
@@ -242,10 +248,15 @@ export class BalanceEventHandlerService
           if (!amountStr) continue;
           const amount = parseFloat(amountStr);
           if (!Number.isFinite(amount) || amount <= 0) continue;
-          ccByOwner.set(
-            ownerPartyId,
-            (ccByOwner.get(ownerPartyId) ?? 0) + amount,
-          );
+          const entry = ccByOwner.get(ownerPartyId) ?? {
+            total: 0,
+            holdings: [],
+          };
+          entry.total += amount;
+          if (c.contractId) {
+            entry.holdings.push({ contractId: c.contractId, amount });
+          }
+          ccByOwner.set(ownerPartyId, entry);
         } else if (this.isTokenHoldingTemplate(template)) {
           // Token non-CC (mis. USDCx = `Utility.Registry.Holding.V0.Holding:Holding`)
           // — aggregate by owner+instrument.
@@ -264,15 +275,21 @@ export class BalanceEventHandlerService
       // Pengirim dari metadata ledger (splice.../sender) — bukan lookup DB.
       // Escrow/validator tak punya baris DB; ledger-lah yang tahu siapa
       // pengirimnya. Ambigu → null (jujur), bukan tebakan.
-      for (const [ownerPartyId, totalAmount] of ccByOwner) {
+      for (const [ownerPartyId, agg] of ccByOwner) {
         await this.applyCcIncrement(
           ownerPartyId,
-          totalAmount,
+          agg.total,
           ev.updateId,
           intent,
           ev,
+          agg.holdings,
         );
       }
+
+      // ── 1d. Konsumsi holding CC → balance TURUN (lock/send/swap keluar) ──
+      // Dijalankan SETELAH kredit supaya cache holding yang baru dibuat di
+      // update ini sudah terisi sebelum cid-nya dicek.
+      await this.applyCcConsumption(ev, transient);
 
       // ── 2b. Accept-side flip: untuk setiap Accept di update ini, flip
       // baris PENDING SENDER (ditulis controller saat offer dibuat) jadi
@@ -449,6 +466,10 @@ export class BalanceEventHandlerService
      *  change output sendiri (Fase C) dan gerakan unlock dana sendiri.
      *  Bila null, kedua deteksi dilewati (label generik). */
     ev?: Pick<CantonUpdateEvent, 'created' | 'exercised' | 'archived'> | null,
+    /** Rincian holding Amulet yang menyumbang ke totalAmount — dipakai mengisi
+     *  holdingCache supaya saat Amulet ini dikonsumsi (archive) balance CC
+     *  diturunkan. Tanpa ini, "available for tx" tidak pernah turun. */
+    holdings?: Array<{ contractId: string; amount: number }>,
   ): Promise<void> {
     const user = await this.resolveUserByParty(ownerPartyId);
     if (!user) {
@@ -494,6 +515,20 @@ export class BalanceEventHandlerService
       }
       // Push realtime balance:changed (UI refresh wallet).
       this.realtime.push(user.userId, 'balance:changed', null);
+
+      // Isi holdingCache per contractId (pola sama dengan token). Saat Amulet
+      // ini dikonsumsi (archive) — lock masuk LockedAmulet, send, swap keluar —
+      // handler tahu owner+amount PERSIS-nya dan bisa menurunkan balance CC.
+      // Saldo yang ditampilkan = CC yang benar-benar bisa dipakai untuk tx;
+      // dana terkunci tidak ikut (tidak bisa swap/kirim).
+      for (const h of holdings ?? []) {
+        this.putHoldingCache(h.contractId, {
+          userId: user.userId,
+          instrumentId: 'CC',
+          instrumentAdmin: '',
+          amount: h.amount,
+        });
+      }
     } catch (err) {
       this.logger.warn(
         `BalanceEventHandler: CcBalance increment failed for user=${user.userId.slice(0, 8)}… amount=${totalAmount} CC: ${String(err)}`,
@@ -643,6 +678,155 @@ export class BalanceEventHandlerService
       type: rowType,
       source: 'wss',
     });
+  }
+
+  /**
+   * Konsumsi holding CC (Amulet di-archive) → balance TURUN seketika.
+   *
+   * Saldo yang ditampilkan wallet = CC yang benar-benar bisa dipakai untuk
+   * transaksi. Dana yang masuk lock (LockedAmulet), dikirim, atau di-swap
+   * tidak bisa dipakai → Amulet-nya dikonsumsi di ledger → saldo harus turun
+   * sebesar amount Amulet yang dikonsumsi. Tanpa ini, kredit change di
+   * applyCcIncrement berjalan sendirian dan saldo justru NAIK saat user lock
+   * (kasus nyata @airplanestar 2026-09-13 07:57: lock 5 CC, saldo +4.73 CC ≈
+   * +2 USD, karena hanya change yang terhitung).
+   *
+   * Bentuk wire produksi (terverifikasi raw layer, 19.010 event): konsumsi
+   * kontrak TIDAK pernah datang sebagai ArchivedEvent (0 baris) — selalu
+   * sebagai ExercisedEvent choice `Archive` pada template kontrak itu sendiri.
+   * Maka sumber di sini = exercised Archive + ev.archived (kalau suatu saat
+   * feed mengirimnya).
+   *
+   * Amount sumber kebenaran:
+   *   1. holdingCache (diisi saat Amulet di-credit — owner+amount persis),
+   *   2. fallback: raw layer `LedgerEvent` created event cid itu (owner +
+   *      initialAmount) — persistent, tidak hilang saat restart.
+   * Cache/lookup miss → skip (reconcile on-chain yang membetulkan); TIDAK
+   * pernah menebak. Idempoten lintas replay via claim scope 'ccout'.
+   */
+  private async applyCcConsumption(
+    ev: Pick<CantonUpdateEvent, 'updateId' | 'archived' | 'exercised'>,
+    transient: ReadonlySet<string>,
+  ): Promise<void> {
+    const updateId = ev.updateId;
+    if (!updateId) return;
+
+    // Kumpulkan Amulet yang DIKONSUMSI di update ini (dedup per cid — event
+    // yang sama bisa muncul di top-level DAN child tree).
+    const consumed = new Map<
+      string,
+      { witnessParties?: string[] }
+    >();
+    const addConsumed = (
+      cid: string | undefined,
+      templateId: string | undefined,
+      witnessParties?: string[],
+    ): void => {
+      if (!cid) return;
+      if (!(templateId || '').includes(':Splice.Amulet:Amulet')) return;
+      if (!consumed.has(cid)) consumed.set(cid, { witnessParties });
+    };
+    for (const a of ev.archived ?? []) {
+      addConsumed(a.contractId, a.templateId, a.witnessParties);
+    }
+    for (const ex of ev.exercised ?? []) {
+      if (ex.choice !== 'Archive') continue;
+      addConsumed(ex.contractId, ex.templateId, ex.witnessParties);
+    }
+    if (consumed.size === 0) return;
+
+    // Agregat per user: cid transien (dibuat + dikonsumsi di update yang sama)
+    // adalah nilai netto nol — credit-nya sudah di-skip di applyCcIncrement,
+    // jadi decrement-nya juga harus di-skip.
+    const byUser = new Map<
+      string,
+      { username: string | null; total: number }
+    >();
+    const miss: string[] = [];
+    for (const [cid] of consumed) {
+      if (transient.has(cid)) continue;
+      const cached = this.holdingCache.get(cid);
+      if (cached) {
+        this.holdingCache.delete(cid);
+        const entry = byUser.get(cached.userId) ?? {
+          username: null,
+          total: 0,
+        };
+        entry.total += cached.amount;
+        byUser.set(cached.userId, entry);
+        continue;
+      }
+      miss.push(cid);
+    }
+
+    // Cache miss → amount dari raw layer (created event cid itu). Ini nutup
+    // holding yang dibuat sebelum handler start / sebelum cache ada.
+    for (const cid of miss) {
+      const row = await this.prisma.ledgerEvent.findFirst({
+        where: { contractId: cid, eventType: 'created' },
+        select: { payload: true },
+      });
+      const args =
+        (row?.payload as Record<string, unknown> | undefined)
+          ?.createArgument as Record<string, unknown> | undefined;
+      const owner = typeof args?.owner === 'string' ? args.owner : null;
+      const amt = args?.amount as Record<string, unknown> | undefined;
+      const amountStr =
+        typeof amt?.initialAmount === 'string'
+          ? amt.initialAmount
+          : typeof amt?.amount === 'string'
+            ? amt.amount
+            : typeof args?.amount === 'string'
+              ? args.amount
+              : null;
+      if (!owner || !amountStr) {
+        if (DEBUG_LEDGER) {
+          this.logger.debug(
+            `BalanceEventHandler: konsumsi cid=${cid.slice(0, 12)}… tanpa amount (raw layer tidak punya created event) — skip, reconcile yang betulkan`,
+          );
+        }
+        continue;
+      }
+      const amount = parseFloat(amountStr);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const user = await this.resolveUserByParty(owner);
+      if (!user) continue; // bukan user CanQuest (DSO/escrow/fee)
+      const entry = byUser.get(user.userId) ?? {
+        username: user.username,
+        total: 0,
+      };
+      entry.total += amount;
+      byUser.set(user.userId, entry);
+    }
+    if (byUser.size === 0) return;
+
+    for (const [userId, agg] of byUser) {
+      // Idempoten: replay (reconnect/restart) tidak boleh decrement dua kali.
+      const claimed = await this.tryMarkBalanceApplied(
+        updateId,
+        userId,
+        'ccout',
+      );
+      if (!claimed) continue;
+      const delta = BigInt(Math.round(agg.total * 1_000_000));
+      try {
+        await this.prisma.ccBalance.upsert({
+          where: { userId },
+          create: { userId, balanceMicroCc: 0n },
+          update: { balanceMicroCc: { decrement: delta } },
+        });
+        if (DEBUG_LEDGER) {
+          this.logger.debug(
+            `BalanceEventHandler: CcBalance -${agg.total.toFixed(6)} CC (Amulet dikonsumsi, updateId=${updateId.slice(0, 16)}…) → user=${userId.slice(0, 8)}…`,
+          );
+        }
+        this.realtime.push(userId, 'balance:changed', null);
+      } catch (err) {
+        this.logger.warn(
+          `BalanceEventHandler: CC decrement failed (updateId=${updateId.slice(0, 16)}…, user=${userId.slice(0, 8)}…): ${String(err)}`,
+        );
+      }
+    }
   }
 
   /**
@@ -1272,7 +1456,9 @@ export class BalanceEventHandlerService
    * — satu-satunya sumber decrement token = handler ini baca holdingCache).
    *
    * Untuk Amulet (CC): hanya push realtime (frontend refetch), outflow tracking
-   * via CcInboundSyncService polling (CC punya reconciler sendiri).
+   * via applyCcConsumption() (baca di bawah — decrement CC jalan di sana, bukan
+   * di sini, karena feed /v2/updates produksi TIDAK mengirim ArchivedEvent;
+   * 0 dari 19.010 event di raw layer).
    */
   private async handleArchivedEvent(a: {
     contractId: string;
