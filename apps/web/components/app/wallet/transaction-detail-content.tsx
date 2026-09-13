@@ -401,19 +401,6 @@ export function TransactionDetailContent({
             </ReceiptField>
           ) : null}
 
-          {/* Jejak audit untuk transfer yang lahir sebagai offer: TX final
-              (Tx ID di bawah) menunjuk update ACCEPT, sedangkan baris ini
-              menyimpan update CREATE-OFFER. Berguna untuk menelusuri kapan
-              offer dibuat. Untuk transfer langsung kedua id sama → disembunyikan
-              supaya tidak menduplikasi Tx ID. */}
-          {detail.status !== "PENDING" &&
-          detail.ledgerContractId &&
-          detail.ledgerContractId !== detail.cantonUpdateId ? (
-            <ReceiptField label="Offer tx" mono>
-              <span>{truncateMiddle(detail.ledgerContractId)}</span>
-            </ReceiptField>
-          ) : null}
-
           <ReceiptField label={t("transactions.when")}>
             {new Date(detail.createdAt).toLocaleString()}
           </ReceiptField>
