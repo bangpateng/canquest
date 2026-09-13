@@ -794,9 +794,7 @@ export class R2StorageService implements OnModuleInit {
       return true;
     } catch (err) {
       const detail = this.formatS3Error(err);
-      this.logger.warn(
-        `R2 delete failed for ecosystem/${filename}: ${detail}`,
-      );
+      this.logger.warn(`R2 delete failed for ecosystem/${filename}: ${detail}`);
       return false;
     }
   }

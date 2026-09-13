@@ -27,7 +27,9 @@ export class WalletInviteCodeService {
   }
 
   private get dailyLimit(): number {
-    const n = Number(this.config.get<string>('WALLET_DAILY_ALLOCATION_LIMIT') ?? '50');
+    const n = Number(
+      this.config.get<string>('WALLET_DAILY_ALLOCATION_LIMIT') ?? '50',
+    );
     return Number.isFinite(n) && n > 0 ? Math.floor(n) : 50;
   }
 
@@ -100,7 +102,8 @@ export class WalletInviteCodeService {
     });
     if (won.count === 0) {
       throw new BadRequestException({
-        message: 'This wallet invite code is temporarily in use. Try again in a few minutes.',
+        message:
+          'This wallet invite code is temporarily in use. Try again in a few minutes.',
         code: 'WALLET_INVITE_RESERVED',
       });
     }

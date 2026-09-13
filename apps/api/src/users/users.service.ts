@@ -436,7 +436,10 @@ export class UsersService {
     // Bersihkan saldo token legacy (era custodial) — CantexTokenBalance tidak
     // di-sync on-chain. Tanpa ini, user upgrade menampilkan USDCx "hantu".
     await this.prisma.cantexTokenBalance
-      .updateMany({ where: { userId, balance: { gt: 0 } }, data: { balance: 0 } })
+      .updateMany({
+        where: { userId, balance: { gt: 0 } },
+        data: { balance: 0 },
+      })
       .catch(() => {});
     try {
       return await this.prisma.user.update({

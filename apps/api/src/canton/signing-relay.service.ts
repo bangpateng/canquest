@@ -20,12 +20,7 @@ import {
   normalizeCantonPartyId,
 } from '../common/canton-party-id';
 // Narrowing untuk nilai JSON/SDK bertipe bebas (menggantikan akses `any`).
-import {
-  asRecord,
-  pick,
-  readNumOrUndefined,
-  readStr,
-} from './ledger-json';
+import { asRecord, pick, readNumOrUndefined, readStr } from './ledger-json';
 
 /**
  * SigningRelayService — relay tanda tangan transaksi user external (M3).
@@ -124,7 +119,9 @@ export class SigningRelayService {
   }
 
   private get packagePrefix(): string {
-    return this.config.get<string>('CANTON_DAML_PACKAGE_NAME') || '#canquest-v29';
+    return (
+      this.config.get<string>('CANTON_DAML_PACKAGE_NAME') || '#canquest-v29'
+    );
   }
 
   private sweepExpired(): void {
@@ -143,7 +140,9 @@ export class SigningRelayService {
     const user = await this.users.findById(userId);
     if (!user) throw new BadRequestException('User not found');
     if (!hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet yet — complete onboarding first.');
+      throw new BadRequestException(
+        'No wallet yet — complete onboarding first.',
+      );
     }
     if (user.walletKind && user.walletKind !== 'external') {
       throw new BadRequestException(
@@ -176,7 +175,10 @@ export class SigningRelayService {
 
     const user = await this.requireExternalUser(userId);
 
-    const builders: Record<string, (u: typeof user, p: Record<string, unknown>) => Promise<BuiltFlow>> = {
+    const builders: Record<
+      string,
+      (u: typeof user, p: Record<string, unknown>) => Promise<BuiltFlow>
+    > = {
       wallet_registration_accept: (u) => this.buildWalletRegistrationAccept(u),
       send_cc: (u, p) => this.buildSendCc(u, p),
       send_token: (u, p) => this.buildSendToken(u, p),
@@ -195,8 +197,10 @@ export class SigningRelayService {
       // SATU ExerciseCommand per submission (batas external party — node
       // produksi juga menolak multi-command). Otoritas rewardSender pada
       // Accept* diwarisi dari signatory ClaimOffer, BUKAN actAs tambahan.
-      accept_claim_offer: (u, p) => this.claimOffers.buildAcceptClaimOffer(u.userId, p),
-      accept_lock_proposal: (u, p) => this.lockProposals.buildAcceptLockProposal(u.userId, p),
+      accept_claim_offer: (u, p) =>
+        this.claimOffers.buildAcceptClaimOffer(u.userId, p),
+      accept_lock_proposal: (u, p) =>
+        this.lockProposals.buildAcceptLockProposal(u.userId, p),
       // NOTE: preapproval_enable/disable TIDAK dibuat utk user external —
       // terbukti MainNet (spike-m3c): AmuletRules_CreateTransferPreapproval
       // mewajibkan co-authorizer provider; interactive submission hanya
@@ -241,7 +245,12 @@ export class SigningRelayService {
       partyId?: string;
       fallback?: BuiltFlow;
     },
-  ): Promise<{ flow: string; hash: string; commandId: string; description: string }> {
+  ): Promise<{
+    flow: string;
+    hash: string;
+    commandId: string;
+    description: string;
+  }> {
     this.sweepExpired();
     if (this.pending.has(userId)) {
       throw new BadRequestException(
@@ -449,7 +458,8 @@ export class SigningRelayService {
         const match = locks.find(
           (l) =>
             l.expiresAt &&
-            Math.abs(Date.parse(l.expiresAt) - Date.parse(meta.expiresAt)) < 5000,
+            Math.abs(Date.parse(l.expiresAt) - Date.parse(meta.expiresAt)) <
+              5000,
         );
         const lockedAt = new Date();
         const lockRow = await this.prisma.ccLock.create({
@@ -498,7 +508,9 @@ export class SigningRelayService {
         // v30: lock campaign (holders=[validator]) ter-unlock → catat di
         // LockProposalRecord supaya eligibility/job tidak stale.
         if (lockRow?.lockedAmuletCid) {
-          await this.lockProposals.onLockedAmuletUnlocked(lockRow.lockedAmuletCid);
+          await this.lockProposals.onLockedAmuletUnlocked(
+            lockRow.lockedAmuletCid,
+          );
         }
       } catch (err) {
         this.logger.error(
@@ -544,7 +556,11 @@ export class SigningRelayService {
 
     // ── v30: AcceptLock — verifikasi holders=[validator] dari ledger ───────
     if (entry.flow === 'accept_lock_proposal') {
-      await this.lockProposals.onAcceptExecuted(entry.userId, entry.meta, result);
+      await this.lockProposals.onAcceptExecuted(
+        entry.userId,
+        entry.meta,
+        result,
+      );
       return;
     }
 
@@ -586,164 +602,123 @@ export class SigningRelayService {
     }
 
     if (entry.flow === 'send_cc' || entry.flow === 'send_token') {
-    const meta = entry.meta as {
-      amount: number;
-      feeCc: number;
-      feeParty: string;
-      atomicFee?: boolean;
-      transferKind?: string;
-      recipientPartyId: string;
-      recipientLabel: string;
-      memo: string;
-      // send_token: instrument spesifik (USDCx dll) — masuk TokenTransaction.
-      instrumentId?: string;
-      instrumentAdmin?: string;
-    };
-    const updateId = result?.updateId;
-    const metaSaysOffer = meta.transferKind === 'offer';
-    const isToken = entry.flow === 'send_token' && !!meta.instrumentId;
+      const meta = entry.meta as {
+        amount: number;
+        feeCc: number;
+        feeParty: string;
+        atomicFee?: boolean;
+        transferKind?: string;
+        recipientPartyId: string;
+        recipientLabel: string;
+        memo: string;
+        // send_token: instrument spesifik (USDCx dll) — masuk TokenTransaction.
+        instrumentId?: string;
+        instrumentAdmin?: string;
+      };
+      const updateId = result?.updateId;
+      const metaSaysOffer = meta.transferKind === 'offer';
+      const isToken = entry.flow === 'send_token' && !!meta.instrumentId;
 
-    // OFFER path: deteksi dari FAKTA on-chain, bukan meta build-time.
-    // Builder WUP batch pernah salah lapor kind='direct' padahal penerima tanpa
-    // preapproval (hasil nyata = offer), dan path legacy membuang transferKind
-    // sama sekali. Tanpa CID benar: baris sender tidak bisa di-flip saat accept
-    // & recordReceiverAccept tidak menemukan sender → penerima tidak dapat
-    // TRANSFER_IN/notifikasi (bug 2026-09-04).
-    let transferInstructionCid: string | null = null;
-    try {
-      await new Promise((r) => setTimeout(r, 1500)); // ACS index settle
-      const receiverOffers = await this.ledger.queryPendingOffers(
-        meta.recipientPartyId,
-        'incoming',
-      );
-      // Exclude cid yang sudah tercatat (dua offer sejumlah sama tidak saling
-      // salah-match). Window 3 hari — umur offer cuma 24 jam.
-      const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-      const [takenCc, takenTok] = await Promise.all([
-        this.prisma.ccTransaction.findMany({
-          where: { transferInstructionCid: { not: null }, createdAt: { gte: since } },
-          select: { transferInstructionCid: true },
-        }),
-        this.prisma.tokenTransaction.findMany({
-          where: { transferInstructionCid: { not: null }, createdAt: { gte: since } },
-          select: { transferInstructionCid: true },
-        }),
-      ]);
-      const taken = new Set(
-        [...takenCc, ...takenTok]
-          .map((r) => r.transferInstructionCid)
-          .filter((c): c is string => !!c),
-      );
-      const match = receiverOffers.find(
-        (o) =>
-          !taken.has(o.contractId) &&
-          Math.abs(parseFloat(o.amount) - meta.amount) < 1e-6,
-      );
-      transferInstructionCid = match?.contractId ?? null;
-    } catch {
-      /* best-effort — tanpa CID, status tetap PENDING tapi tidak auto-flip */
-    }
-    // Fakta menang atas meta: offer pending ditemukan → ini OFFER apa pun kata
-    // meta.transferKind. Tidak ditemukan + meta bilang offer → PENDING tanpa
-    // cid (perilaku lama). Tidak ditemukan + direct → COMPLETED.
-    const isOffer =
-      transferInstructionCid !== null || metaSaysOffer;
-
-    try {
-      if (isToken) {
-        // ── TOKEN (USDCx dll) → TokenTransaction dgn instrument benar ──
-        await this.users.recordTokenTransaction({
-          userId: entry.userId,
-          amount: meta.amount,
-          instrumentId: meta.instrumentId!,
-          instrumentAdmin: meta.instrumentAdmin ?? '',
-          type: 'TOKEN_TRANSFER_OUT',
-          description: meta.memo,
-          referenceId: meta.recipientPartyId,
-          ledgerTxId: updateId,
-          cantonUpdateId: updateId,
-          status: isOffer ? 'PENDING' : 'COMPLETED',
-          transferInstructionCid,
-        });
-      } else {
-        // ── CC (Amulet) → CcTransaction ──
-        await this.users.recordTransaction({
-          userId: entry.userId,
-          amountCc: meta.amount,
-          type: 'TRANSFER_OUT',
-          description: meta.memo,
-          counterparty: meta.recipientPartyId,
-          ledgerTxId: updateId,
-          cantonUpdateId: updateId,
-          status: isOffer ? 'PENDING' : 'COMPLETED',
-          transferInstructionCid,
-        });
-      }
-      if (isOffer) {
-        this.logger.log(
-          `${entry.flow} OFFER → ${isToken ? 'TOKEN_' : ''}TRANSFER_OUT PENDING user=${entry.userId.slice(0, 8)}… amount=${meta.amount}${isToken ? ` ${meta.instrumentId}` : ''} → ${meta.recipientLabel} cid=${transferInstructionCid?.slice(0, 14) ?? '?'}`,
-        );
-      }
-    } catch (err) {
-      this.logger.error(
-        `⚠️ AUDIT-TRAIL LOSS: relay send_cc SUCCEEDED on-chain (updateId=${updateId ?? 'n/a'}) ` +
-          `user=${entry.userId} amount=${meta.amount} ` +
-          `recipient=${meta.recipientPartyId} — DB record gagal: ${String(err).slice(0, 160)}`,
-      );
-    }
-
-    // ── Fee leg ──────────────────────────────────────────────────────────
-    // ATOMIC (v32): fee sudah settle DI DALAM transaksi yang di-sign user
-    // (WalletUserProxy_BatchTransfer multi-leg) → cukup catat history dengan
-    // updateId yang sama. Tidak ada submit terpisah.
-    if (meta.atomicFee) {
-      if (meta.feeCc > 0) {
-        await this.users
-          .recordTransaction({
-            userId: entry.userId,
-            amountCc: meta.feeCc,
-            type: 'TRANSFER_OUT',
-            description: `Platform fee (transfer to ${meta.recipientLabel})`,
-            referenceId: `fee:${normalizeCantonPartyId(meta.feeParty) ?? meta.feeParty}`,
-            // Atomic = SATU updateId untuk dua leg → constraint unik
-            // (userId, ledgerTxId) akan bentrok dengan baris transfer utama.
-            // Baris fee tampil tanpa ledgerTxId; tautan on-chain tetap utuh
-            // via cantonUpdateId (indexed, non-unik).
-            cantonUpdateId: updateId ?? undefined,
-          })
-          .catch((feeRecErr) => {
-            this.logger.warn(
-              `Atomic fee history record failed (fee settled on-chain): ${String(feeRecErr).slice(0, 120)}`,
-            );
-          });
-        this.logger.log(
-          `Atomic fee settled in-tx: ${meta.feeCc} CC → ${meta.feeParty.split('::')[0]} (updateId=${updateId?.slice(0, 16) ?? 'n/a'})`,
-        );
-      }
-      return;
-    }
-
-    // LEGACY: kumpulkan via jalur CUSTODIAL (operator sign) — interactive
-    // submission tidak support multi-command. Fee hanya dicatat di history
-    // BILA benar-benar terkumpul (party external sering menolak submit
-    // custodial: NO_SYNCHRONIZER_ON_WHICH_ALL_SUBMITTERS_CAN_SUBMIT).
-    if (meta.feeCc > 0 && meta.feeParty) {
+      // OFFER path: deteksi dari FAKTA on-chain, bukan meta build-time.
+      // Builder WUP batch pernah salah lapor kind='direct' padahal penerima tanpa
+      // preapproval (hasil nyata = offer), dan path legacy membuang transferKind
+      // sama sekali. Tanpa CID benar: baris sender tidak bisa di-flip saat accept
+      // & recordReceiverAccept tidak menemukan sender → penerima tidak dapat
+      // TRANSFER_IN/notifikasi (bug 2026-09-04).
+      let transferInstructionCid: string | null = null;
       try {
-        const senderOnChain = await this.splice.resolveOnChainPartyId(
-          entry.partyId,
+        await new Promise((r) => setTimeout(r, 1500)); // ACS index settle
+        const receiverOffers = await this.ledger.queryPendingOffers(
+          meta.recipientPartyId,
+          'incoming',
         );
-        const feePartyOnChain =
-          await this.splice.resolveOnChainPartyId(meta.feeParty);
-        const feeResult = await this.ledger.executeTransferFactoryTransfer({
-          senderPartyId: senderOnChain,
-          receiverPartyId: feePartyOnChain,
-          amountCc: meta.feeCc,
-          description: `Platform fee: ${meta.recipientLabel} (relay)`,
-        });
-        if (feeResult.ok) {
+        // Exclude cid yang sudah tercatat (dua offer sejumlah sama tidak saling
+        // salah-match). Window 3 hari — umur offer cuma 24 jam.
+        const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+        const [takenCc, takenTok] = await Promise.all([
+          this.prisma.ccTransaction.findMany({
+            where: {
+              transferInstructionCid: { not: null },
+              createdAt: { gte: since },
+            },
+            select: { transferInstructionCid: true },
+          }),
+          this.prisma.tokenTransaction.findMany({
+            where: {
+              transferInstructionCid: { not: null },
+              createdAt: { gte: since },
+            },
+            select: { transferInstructionCid: true },
+          }),
+        ]);
+        const taken = new Set(
+          [...takenCc, ...takenTok]
+            .map((r) => r.transferInstructionCid)
+            .filter((c): c is string => !!c),
+        );
+        const match = receiverOffers.find(
+          (o) =>
+            !taken.has(o.contractId) &&
+            Math.abs(parseFloat(o.amount) - meta.amount) < 1e-6,
+        );
+        transferInstructionCid = match?.contractId ?? null;
+      } catch {
+        /* best-effort — tanpa CID, status tetap PENDING tapi tidak auto-flip */
+      }
+      // Fakta menang atas meta: offer pending ditemukan → ini OFFER apa pun kata
+      // meta.transferKind. Tidak ditemukan + meta bilang offer → PENDING tanpa
+      // cid (perilaku lama). Tidak ditemukan + direct → COMPLETED.
+      const isOffer = transferInstructionCid !== null || metaSaysOffer;
+
+      try {
+        if (isToken) {
+          // ── TOKEN (USDCx dll) → TokenTransaction dgn instrument benar ──
+          await this.users.recordTokenTransaction({
+            userId: entry.userId,
+            amount: meta.amount,
+            instrumentId: meta.instrumentId!,
+            instrumentAdmin: meta.instrumentAdmin ?? '',
+            type: 'TOKEN_TRANSFER_OUT',
+            description: meta.memo,
+            referenceId: meta.recipientPartyId,
+            ledgerTxId: updateId,
+            cantonUpdateId: updateId,
+            status: isOffer ? 'PENDING' : 'COMPLETED',
+            transferInstructionCid,
+          });
+        } else {
+          // ── CC (Amulet) → CcTransaction ──
+          await this.users.recordTransaction({
+            userId: entry.userId,
+            amountCc: meta.amount,
+            type: 'TRANSFER_OUT',
+            description: meta.memo,
+            counterparty: meta.recipientPartyId,
+            ledgerTxId: updateId,
+            cantonUpdateId: updateId,
+            status: isOffer ? 'PENDING' : 'COMPLETED',
+            transferInstructionCid,
+          });
+        }
+        if (isOffer) {
           this.logger.log(
-            `Fee collected post-relay: ${meta.feeCc} CC from ${entry.partyId.split('::')[0]} → ${meta.feeParty.split('::')[0]}`,
+            `${entry.flow} OFFER → ${isToken ? 'TOKEN_' : ''}TRANSFER_OUT PENDING user=${entry.userId.slice(0, 8)}… amount=${meta.amount}${isToken ? ` ${meta.instrumentId}` : ''} → ${meta.recipientLabel} cid=${transferInstructionCid?.slice(0, 14) ?? '?'}`,
           );
+        }
+      } catch (err) {
+        this.logger.error(
+          `⚠️ AUDIT-TRAIL LOSS: relay send_cc SUCCEEDED on-chain (updateId=${updateId ?? 'n/a'}) ` +
+            `user=${entry.userId} amount=${meta.amount} ` +
+            `recipient=${meta.recipientPartyId} — DB record gagal: ${String(err).slice(0, 160)}`,
+        );
+      }
+
+      // ── Fee leg ──────────────────────────────────────────────────────────
+      // ATOMIC (v32): fee sudah settle DI DALAM transaksi yang di-sign user
+      // (WalletUserProxy_BatchTransfer multi-leg) → cukup catat history dengan
+      // updateId yang sama. Tidak ada submit terpisah.
+      if (meta.atomicFee) {
+        if (meta.feeCc > 0) {
           await this.users
             .recordTransaction({
               userId: entry.userId,
@@ -751,25 +726,72 @@ export class SigningRelayService {
               type: 'TRANSFER_OUT',
               description: `Platform fee (transfer to ${meta.recipientLabel})`,
               referenceId: `fee:${normalizeCantonPartyId(meta.feeParty) ?? meta.feeParty}`,
-              ledgerTxId: feeResult.updateId ?? undefined,
-              cantonUpdateId: feeResult.updateId ?? undefined,
+              // Atomic = SATU updateId untuk dua leg → constraint unik
+              // (userId, ledgerTxId) akan bentrok dengan baris transfer utama.
+              // Baris fee tampil tanpa ledgerTxId; tautan on-chain tetap utuh
+              // via cantonUpdateId (indexed, non-unik).
+              cantonUpdateId: updateId ?? undefined,
             })
             .catch((feeRecErr) => {
               this.logger.warn(
-                `Fee history record failed (fee already collected): ${String(feeRecErr).slice(0, 120)}`,
+                `Atomic fee history record failed (fee settled on-chain): ${String(feeRecErr).slice(0, 120)}`,
               );
             });
-        } else {
-          this.logger.warn(
-            `Fee collection post-relay failed (non-fatal): ${feeResult.error ?? 'unknown'}`,
+          this.logger.log(
+            `Atomic fee settled in-tx: ${meta.feeCc} CC → ${meta.feeParty.split('::')[0]} (updateId=${updateId?.slice(0, 16) ?? 'n/a'})`,
           );
         }
-      } catch (feeErr) {
-        this.logger.warn(
-          `Fee collection post-relay error (non-fatal): ${String(feeErr).slice(0, 120)}`,
-        );
+        return;
       }
-    }
+
+      // LEGACY: kumpulkan via jalur CUSTODIAL (operator sign) — interactive
+      // submission tidak support multi-command. Fee hanya dicatat di history
+      // BILA benar-benar terkumpul (party external sering menolak submit
+      // custodial: NO_SYNCHRONIZER_ON_WHICH_ALL_SUBMITTERS_CAN_SUBMIT).
+      if (meta.feeCc > 0 && meta.feeParty) {
+        try {
+          const senderOnChain = await this.splice.resolveOnChainPartyId(
+            entry.partyId,
+          );
+          const feePartyOnChain = await this.splice.resolveOnChainPartyId(
+            meta.feeParty,
+          );
+          const feeResult = await this.ledger.executeTransferFactoryTransfer({
+            senderPartyId: senderOnChain,
+            receiverPartyId: feePartyOnChain,
+            amountCc: meta.feeCc,
+            description: `Platform fee: ${meta.recipientLabel} (relay)`,
+          });
+          if (feeResult.ok) {
+            this.logger.log(
+              `Fee collected post-relay: ${meta.feeCc} CC from ${entry.partyId.split('::')[0]} → ${meta.feeParty.split('::')[0]}`,
+            );
+            await this.users
+              .recordTransaction({
+                userId: entry.userId,
+                amountCc: meta.feeCc,
+                type: 'TRANSFER_OUT',
+                description: `Platform fee (transfer to ${meta.recipientLabel})`,
+                referenceId: `fee:${normalizeCantonPartyId(meta.feeParty) ?? meta.feeParty}`,
+                ledgerTxId: feeResult.updateId ?? undefined,
+                cantonUpdateId: feeResult.updateId ?? undefined,
+              })
+              .catch((feeRecErr) => {
+                this.logger.warn(
+                  `Fee history record failed (fee already collected): ${String(feeRecErr).slice(0, 120)}`,
+                );
+              });
+          } else {
+            this.logger.warn(
+              `Fee collection post-relay failed (non-fatal): ${feeResult.error ?? 'unknown'}`,
+            );
+          }
+        } catch (feeErr) {
+          this.logger.warn(
+            `Fee collection post-relay error (non-fatal): ${String(feeErr).slice(0, 120)}`,
+          );
+        }
+      }
     } // end if send_cc
   }
 
@@ -1080,7 +1102,8 @@ export class SigningRelayService {
     let recipientLabel: string;
     if (looksLikeCantonPartyId(to)) {
       const normalized = normalizeCantonPartyId(to);
-      if (!normalized) throw new BadRequestException('Invalid Party ID format.');
+      if (!normalized)
+        throw new BadRequestException('Invalid Party ID format.');
       if (cantonPartyIdsEqual(normalized, user.partyId)) {
         throw new BadRequestException('You cannot send to yourself.');
       }
@@ -1191,9 +1214,7 @@ export class SigningRelayService {
       return {
         commands: [main.command],
         disclosedContracts: main.disclosedContracts,
-        commandId: clientNonce
-          ? main.commandId.replace(/^tf-/, '')
-          : undefined,
+        commandId: clientNonce ? main.commandId.replace(/^tf-/, '') : undefined,
         meta: {
           amount,
           feeCc,
@@ -1292,9 +1313,7 @@ export class SigningRelayService {
               description: `Send ${amount} CC to ${recipientLabel}`,
             };
           } else {
-            this.logger.warn(
-              `send_cc atomic WUP build failed: ${batch.error}`,
-            );
+            this.logger.warn(`send_cc atomic WUP build failed: ${batch.error}`);
           }
 
           if (multi) {
@@ -1408,9 +1427,7 @@ export class SigningRelayService {
     const senderOnChain = await this.splice.resolveOnChainPartyId(user.partyId);
     const existing = await this.ledger.findRegistryPreapproval(senderOnChain);
     if (existing) {
-      throw new BadRequestException(
-        'USDCx instant receive is already active.',
-      );
+      throw new BadRequestException('USDCx instant receive is already active.');
     }
     const instrumentAdmin =
       this.config.get<string>('CANTON_USDCX_INSTRUMENT_ADMIN')?.trim() ||
@@ -1654,9 +1671,7 @@ export class SigningRelayService {
       return {
         commands: [main.command],
         disclosedContracts: main.disclosedContracts,
-        commandId: clientNonce
-          ? main.commandId.replace(/^tf-/, '')
-          : undefined,
+        commandId: clientNonce ? main.commandId.replace(/^tf-/, '') : undefined,
         meta: {
           amount,
           feeCc,
@@ -1882,7 +1897,8 @@ export class SigningRelayService {
     user: { userId: string; partyId: string; username: string | null },
     params: Record<string, unknown>,
   ): Promise<BuiltFlow> {
-    const lockId = typeof params.lockId === 'string' ? params.lockId.trim() : '';
+    const lockId =
+      typeof params.lockId === 'string' ? params.lockId.trim() : '';
     if (!lockId) throw new BadRequestException('lockId is required.');
 
     const lock = await this.prisma.ccLock.findFirst({
@@ -1947,12 +1963,15 @@ export class SigningRelayService {
     const provider =
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
     const dso = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ?? '';
-    if (!provider) throw new BadRequestException('CANTON_VALIDATOR_PARTY_ID not set');
+    if (!provider)
+      throw new BadRequestException('CANTON_VALIDATOR_PARTY_ID not set');
     if (!dso) throw new BadRequestException('CANTON_DSO_PARTY_ID not set');
 
     // Idempoten: preapproval sudah aktif → tidak ada yang perlu di-sign.
     try {
-      const pa = await this.ledger.getTransferPreapprovalAuthoritative(user.partyId);
+      const pa = await this.ledger.getTransferPreapprovalAuthoritative(
+        user.partyId,
+      );
       if (pa.active) {
         this.logger.log(
           `prepare preapproval: already enabled on-chain, user=${userId.slice(0, 8)}…`,
@@ -1984,11 +2003,19 @@ export class SigningRelayService {
       },
     };
 
-    return this.prepareWithCommands(userId, 'preapproval_create_proposal', [command], {
-      commandId: `v30-pa-propose-${createHash('sha256').update(user.partyId + Date.now()).digest('hex').slice(0, 24)}`,
-      description: 'Enable instant receive (90 days)',
-      partyId: user.partyId,
-    });
+    return this.prepareWithCommands(
+      userId,
+      'preapproval_create_proposal',
+      [command],
+      {
+        commandId: `v30-pa-propose-${createHash('sha256')
+          .update(user.partyId + Date.now())
+          .digest('hex')
+          .slice(0, 24)}`,
+        description: 'Enable instant receive (90 days)',
+        partyId: user.partyId,
+      },
+    );
   }
 
   /**
@@ -2016,13 +2043,18 @@ export class SigningRelayService {
     const user = await this.requireExternalUser(userId);
     const provider =
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
-    if (!provider) throw new BadRequestException('CANTON_VALIDATOR_PARTY_ID not set');
+    if (!provider)
+      throw new BadRequestException('CANTON_VALIDATOR_PARTY_ID not set');
 
     // Jalur LEDGER (pengganti validator-API DELETE — bebas ValidatorRight):
     // operator (provider) berhak cancel TransferPreapproval.
-    const res = await this.ledger.cancelTransferPreapprovalViaLedger(user.partyId);
+    const res = await this.ledger.cancelTransferPreapprovalViaLedger(
+      user.partyId,
+    );
     if (res.ok || res.error?.includes('tidak ditemukan')) {
-      this.logger.log(`preapproval disabled (ledger) user=${userId.slice(0, 8)}…`);
+      this.logger.log(
+        `preapproval disabled (ledger) user=${userId.slice(0, 8)}…`,
+      );
       return { ok: true };
     }
     throw new BadRequestException(`Disable failed: ${res.error ?? 'unknown'}`);
@@ -2030,14 +2062,18 @@ export class SigningRelayService {
 
   private tokenCache: { token: string; exp: number } | null = null;
   private async getValidatorToken(): Promise<string> {
-    if (this.tokenCache && Date.now() < this.tokenCache.exp) return this.tokenCache.token;
+    if (this.tokenCache && Date.now() < this.tokenCache.exp)
+      return this.tokenCache.token;
     const keycloakUrl = this.config.get<string>('KEYCLOAK_URL');
     const realm = this.config.get<string>('KEYCLOAK_REALM');
-    const res = await fetch(`${keycloakUrl}/realms/${realm}/protocol/openid-connect/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=client_credentials&client_id=${this.config.get('LEDGER_CLIENT_ID')}&client_secret=${this.config.get('LEDGER_CLIENT_SECRET')}&scope=daml_ledger_api`,
-    });
+    const res = await fetch(
+      `${keycloakUrl}/realms/${realm}/protocol/openid-connect/token`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `grant_type=client_credentials&client_id=${this.config.get('LEDGER_CLIENT_ID')}&client_secret=${this.config.get('LEDGER_CLIENT_SECRET')}&scope=daml_ledger_api`,
+      },
+    );
     const json: unknown = await res.json();
     const token = readStr(pick(json, 'access_token')) ?? '';
     const expiresIn = readNumOrUndefined(pick(json, 'expires_in')) ?? 0;
@@ -2048,7 +2084,8 @@ export class SigningRelayService {
     return token;
   }
 
-  private isSystemPartyId(partyId: string): boolean {    const candidates = [
+  private isSystemPartyId(partyId: string): boolean {
+    const candidates = [
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID'),
       this.config.get<string>('CANTON_APP_PROVIDER_PARTY_ID'),
       this.config.get<string>('CANTON_REWARD_PARTY_ID'),

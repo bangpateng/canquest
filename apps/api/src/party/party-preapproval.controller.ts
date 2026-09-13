@@ -1,13 +1,7 @@
 /** TransferPreapproval status — endpoint publik-auth utk user external. */
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
-import {
-  Controller,
-  Get,
-  Logger,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Logger, Req, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { UsersService } from '../users/users.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
@@ -50,7 +44,9 @@ export class PartyPreapprovalController {
     // terlihat lewat lookup custodial lama.
     if (user.walletKind === 'external') {
       try {
-        const valUrl = (this.config.get<string>('CANTON_VALIDATOR_URL') ?? '').replace(/\/$/, '');
+        const valUrl = (
+          this.config.get<string>('CANTON_VALIDATOR_URL') ?? ''
+        ).replace(/\/$/, '');
         const keycloakUrl = this.config.get<string>('KEYCLOAK_URL');
         const realm = this.config.get<string>('KEYCLOAK_REALM');
         const tokenRes = await fetch(

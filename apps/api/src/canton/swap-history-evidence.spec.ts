@@ -14,7 +14,8 @@ function deriveSenderHint(
   escrows: string[],
 ): string | null {
   if (candidates.length === 0) return null;
-  if (escrows.length === 0) return candidates.length === 1 ? candidates[0] : null;
+  if (escrows.length === 0)
+    return candidates.length === 1 ? candidates[0] : null;
   const set = new Set(escrows);
   for (const c of candidates) {
     if (set.has(c)) return c;
@@ -65,7 +66,11 @@ describe('swap history evidence fixes (L60 A/B/C)', () => {
     // Kasus nyata 1220a4ff: first-match kena auth0 yang salah.
     expect(
       deriveSenderHint(
-        ['auth0_007c6643538f2eadd3e573dd05b9::12205bcc', ESCROW, 'decentralized-usdc-interchain-rep::12208115'],
+        [
+          'auth0_007c6643538f2eadd3e573dd05b9::12205bcc',
+          ESCROW,
+          'decentralized-usdc-interchain-rep::12208115',
+        ],
         [ESCROW],
       ),
     ).toBe(ESCROW);
@@ -92,8 +97,15 @@ describe('swap history evidence fixes (L60 A/B/C)', () => {
     // cid offer tetap terdeteksi sebagai penanda rantai audit.
     const cid = detectOfferCid(
       [
-        { contractId: 'cid-hold', templateId: 'pkg:Utility.Registry.Holding.V0.Holding:Holding' },
-        { contractId: 'cid-offer', templateId: 'pkg:Utility.Registry.App.V0.Model.Transfer:TransferOffer' },
+        {
+          contractId: 'cid-hold',
+          templateId: 'pkg:Utility.Registry.Holding.V0.Holding:Holding',
+        },
+        {
+          contractId: 'cid-offer',
+          templateId:
+            'pkg:Utility.Registry.App.V0.Model.Transfer:TransferOffer',
+        },
       ],
       ['AllocationFactory_TransferInternal'],
     );
@@ -120,16 +132,36 @@ describe('swap history evidence fixes (L60 A/B/C)', () => {
 
   it('C: self-change hanya bila sender null + self acted transfer', () => {
     expect(
-      ccDescription({ isSwapIn: false, refundMatch: false, senderNull: true, selfActed: true }),
+      ccDescription({
+        isSwapIn: false,
+        refundMatch: false,
+        senderNull: true,
+        selfActed: true,
+      }),
     ).toBe('change');
     expect(
-      ccDescription({ isSwapIn: false, refundMatch: false, senderNull: true, selfActed: false }),
+      ccDescription({
+        isSwapIn: false,
+        refundMatch: false,
+        senderNull: true,
+        selfActed: false,
+      }),
     ).toBe('received');
     expect(
-      ccDescription({ isSwapIn: false, refundMatch: false, senderNull: false, selfActed: true }),
+      ccDescription({
+        isSwapIn: false,
+        refundMatch: false,
+        senderNull: false,
+        selfActed: true,
+      }),
     ).toBe('received');
     expect(
-      ccDescription({ isSwapIn: true, refundMatch: false, senderNull: true, selfActed: true }),
+      ccDescription({
+        isSwapIn: true,
+        refundMatch: false,
+        senderNull: true,
+        selfActed: true,
+      }),
     ).toBe('swap');
   });
 

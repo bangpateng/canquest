@@ -35,13 +35,19 @@ describe('ledger raw ingest (L60)', () => {
           nodeId: 3,
           contractId: 'cid-output',
           templateId: 'hash:Splice.Amulet:Amulet',
-          createArgument: { owner: 'karel::1220', amount: { initialAmount: '4.22' } },
+          createArgument: {
+            owner: 'karel::1220',
+            amount: { initialAmount: '4.22' },
+          },
         },
         {
           nodeId: 4,
           contractId: 'cid-change',
           templateId: 'hash:Splice.Amulet:Amulet',
-          createArgument: { owner: 'karel::1220', amount: { initialAmount: '49.98' } },
+          createArgument: {
+            owner: 'karel::1220',
+            amount: { initialAmount: '49.98' },
+          },
         },
       ],
     });
@@ -94,7 +100,8 @@ describe('ledger raw ingest (L60)', () => {
       exercised: [
         {
           contractId: 'cid-factory',
-          templateId: 'pkg:Splice.Api.Token.TransferInstructionV1:TransferFactory',
+          templateId:
+            'pkg:Splice.Api.Token.TransferInstructionV1:TransferFactory',
           choice: 'TransferFactory_Transfer',
           choiceArgument: {},
         },
@@ -185,7 +192,11 @@ describe('ledger raw ingest (L60)', () => {
         offset: 424242,
         offsetKnown: true,
         created: [
-          { contractId: 'c1', templateId: 'hash:Splice.Amulet:Amulet', createArgument: {} },
+          {
+            contractId: 'c1',
+            templateId: 'hash:Splice.Amulet:Amulet',
+            createArgument: {},
+          },
         ],
         exercised: [
           {
@@ -209,18 +220,30 @@ describe('ledger raw ingest (L60)', () => {
         offset: 999,
         offsetKnown: false,
         created: [
-          { contractId: 'c1', templateId: 'hash:Splice.Amulet:Amulet', createArgument: {} },
+          {
+            contractId: 'c1',
+            templateId: 'hash:Splice.Amulet:Amulet',
+            createArgument: {},
+          },
         ],
       }),
     );
     expect(rows[0].offset).toBeNull();
-    expect(resolveRawOffset(baseEvent({ offset: 999, offsetKnown: undefined }))).toBeNull();
+    expect(
+      resolveRawOffset(baseEvent({ offset: 999, offsetKnown: undefined })),
+    ).toBeNull();
   });
 
   it('R10: resolveRawOffset — wire valid → BigInt; non-finite/negatif → null', () => {
-    expect(resolveRawOffset(baseEvent({ offset: 819747, offsetKnown: true }))).toBe(819747n);
-    expect(resolveRawOffset(baseEvent({ offset: NaN, offsetKnown: true }))).toBeNull();
-    expect(resolveRawOffset(baseEvent({ offset: -1, offsetKnown: true }))).toBeNull();
+    expect(
+      resolveRawOffset(baseEvent({ offset: 819747, offsetKnown: true })),
+    ).toBe(819747n);
+    expect(
+      resolveRawOffset(baseEvent({ offset: NaN, offsetKnown: true })),
+    ).toBeNull();
+    expect(
+      resolveRawOffset(baseEvent({ offset: -1, offsetKnown: true })),
+    ).toBeNull();
   });
 
   it('R7: filter produksi = 7 InterfaceFilter views + wildcard, verbose, LEDGER_EFFECTS', () => {

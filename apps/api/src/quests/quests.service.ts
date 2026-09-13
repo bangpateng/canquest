@@ -2767,14 +2767,16 @@ export class QuestsService {
         // RAFFLE: eligibility WAJIB per-event — lock campaign lain tidak berlaku
         // (spesifikasi owner: 1 event 1 lock; CampaignEligibilityLedger per quest).
         if (model.requiresLock) {
-          const eligible = await this.prisma.campaignEligibilityLedger.findFirst({
-            where: { questId, userId, status: 'ELIGIBLE' },
-            select: { id: true },
-          });
+          const eligible =
+            await this.prisma.campaignEligibilityLedger.findFirst({
+              where: { questId, userId, status: 'ELIGIBLE' },
+              select: { id: true },
+            });
           if (!eligible) {
             return {
               ok: false,
-              message: 'Lock CC for THIS event first — locks from other events don\'t count.',
+              message:
+                "Lock CC for THIS event first — locks from other events don't count.",
               rewardCc: 0,
               inviteCode: null,
               rewardStatus: await this.getQuestRewardStatus(userId, questId),
@@ -2935,7 +2937,16 @@ export class QuestsService {
    */
   private async submitV30Fcfs(
     userId: string,
-    quest: { id: string; rewardCc: number; rewardToken: string; rewardType: string; maxWinners: number | null; startsAt: Date | null; endsAt: Date | null; entryGateMode: string | null },
+    quest: {
+      id: string;
+      rewardCc: number;
+      rewardToken: string;
+      rewardType: string;
+      maxWinners: number | null;
+      startsAt: Date | null;
+      endsAt: Date | null;
+      entryGateMode: string | null;
+    },
   ) {
     const fail = async (message: string) => ({
       ok: false,
@@ -2947,8 +2958,10 @@ export class QuestsService {
     });
 
     const now = new Date();
-    if (quest.startsAt && quest.startsAt > now) return await fail('Quest has not started yet');
-    if (quest.endsAt && quest.endsAt < now) return await fail('Quest has ended');
+    if (quest.startsAt && quest.startsAt > now)
+      return await fail('Quest has not started yet');
+    if (quest.endsAt && quest.endsAt < now)
+      return await fail('Quest has ended');
 
     // Celah bypass: cabang v30 di atas early-return melewati pemeriksaan
     // tugas jalur umum — wajib cek di sini juga (tidak ada slot tanpa tugas).
@@ -2964,12 +2977,16 @@ export class QuestsService {
         select: { id: true },
       });
       if (!eligible) {
-        return await fail('Lock CC first to join this campaign (not eligible yet).');
+        return await fail(
+          'Lock CC first to join this campaign (not eligible yet).',
+        );
       }
     }
 
     // Kuota FCFS.
-    const drawn = await this.prisma.winnerDraw.count({ where: { questId: quest.id } });
+    const drawn = await this.prisma.winnerDraw.count({
+      where: { questId: quest.id },
+    });
     if (quest.maxWinners != null && drawn >= quest.maxWinners) {
       return await fail('FCFS slots are full — all winners already secured.');
     }
@@ -2986,7 +3003,11 @@ export class QuestsService {
           ccAmount: model.reward === 'CODE' ? 0 : quest.rewardCc || 0,
           rewardToken: quest.rewardToken,
           rewardVariant:
-            model.reward === 'CODE' ? 'CODE' : model.reward === 'TOKEN_AND_CODE' ? null : 'CC',
+            model.reward === 'CODE'
+              ? 'CODE'
+              : model.reward === 'TOKEN_AND_CODE'
+                ? null
+                : 'CC',
           fcfsClaimLockedAt: now,
         },
       });
@@ -3016,7 +3037,10 @@ export class QuestsService {
     // slot (sweep T2/backoff mencoba ulang); user tetap bisa muat ulang.
     let offerError: string | null = null;
     try {
-      const made = await this.claimOffers.createOfferForWinner(quest.id, userId);
+      const made = await this.claimOffers.createOfferForWinner(
+        quest.id,
+        userId,
+      );
       if (!made.ok && made.skipped !== 'exists') {
         offerError = made.error ?? 'offer pending';
         this.logger.warn(
@@ -3032,7 +3056,9 @@ export class QuestsService {
     // event selesai"). Status ENDED; unlock peserta tetap di T2 (expiresAt
     // tertanam on-chain — panduan: buat FCFS berdurasi 1–2 hari).
     if (slotCreated && quest.maxWinners != null) {
-      const taken = await this.prisma.winnerDraw.count({ where: { questId: quest.id } });
+      const taken = await this.prisma.winnerDraw.count({
+        where: { questId: quest.id },
+      });
       if (taken >= quest.maxWinners) {
         await this.prisma.quest
           .update({ where: { id: quest.id }, data: { status: 'ENDED' } })
@@ -3495,15 +3521,11 @@ export class QuestsService {
       }
       const allDone = await this.areAllTasksVerified(userId, questId);
       if (!allDone) {
-        throw new BadRequestException(
-          'Complete all missions before claiming.',
-        );
+        throw new BadRequestException('Complete all missions before claiming.');
       }
       feeCc = resolveClaimFeeCc(quest) ?? 3;
     } else if (claimType === 'draw_cc' || claimType === 'cc_code_raffle') {
-      if (
-        claimType === 'draw_cc' && !this.requiresDrawCcClaim(quest)
-      ) {
+      if (claimType === 'draw_cc' && !this.requiresDrawCcClaim(quest)) {
         throw new BadRequestException(
           'This campaign does not use raffle CC claim.',
         );
@@ -3908,10 +3930,12 @@ export class QuestsService {
       // DAN reward ke instrumen Amulet → quest token langsung jalur fallback
       // (fee terpisah + delivery token, jalur produktif lama), bukan gagal
       // di Settle lalu jatuh ke fallback dengan receipt nyangkut PRE_SETTLE.
-      if (this.useAtomicSettle &&
+      if (
+        this.useAtomicSettle &&
         claimSessionId &&
         rewardToken === 'CC' &&
-        params.walletKind !== 'external') {
+        params.walletKind !== 'external'
+      ) {
         // ATOMIC PATH (DAML v22/v23 Settle)
         const { updateId } = await this.settleAndRecord({
           drawId: reservedDrawId,
@@ -4600,7 +4624,8 @@ export class QuestsService {
               'Sign the claim fee in your wallet first (non-custodial flow).',
             );
           }
-          feeTxId = params.externalFeeTxId ?? `external-free-${questId}-${userId}`;
+          feeTxId =
+            params.externalFeeTxId ?? `external-free-${questId}-${userId}`;
         } else {
           try {
             feeTxId = await this.collectClaimFee({
@@ -5672,9 +5697,8 @@ export class QuestsService {
       select: { type: true, amountMicroCc: true, referenceId: true },
     });
     const min = BigInt(QuestsService.MIN_TASK_ACTION_MICRO_CC);
-    return rows.filter(
-      (r) => isSwapCcLeg(r) && swapCcLegMicro(r) >= min,
-    ).length;
+    return rows.filter((r) => isSwapCcLeg(r) && swapCcLegMicro(r) >= min)
+      .length;
   }
 
   /**
@@ -6182,7 +6206,10 @@ export class QuestsService {
           ? l.lockSeconds
           : Math.max(
               0,
-              ((l.unlockedAt ?? (l.status === 'LOCKED' ? new Date(nowMs) : l.lockedAt)).getTime() -
+              ((
+                l.unlockedAt ??
+                (l.status === 'LOCKED' ? new Date(nowMs) : l.lockedAt)
+              ).getTime() -
                 l.lockedAt.getTime()) /
                 1000,
             );

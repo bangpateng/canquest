@@ -13,9 +13,9 @@ import { resolveUpdateOffset } from './canton-updates.service';
 
 describe('resolveUpdateOffset (L60 checkpoint fallback)', () => {
   it('A: top-level offset ada → pakai top-level (event diabaikan)', () => {
-    expect(
-      resolveUpdateOffset('2180853', [{ offset: 1 }, { offset: 2 }]),
-    ).toBe(2180853);
+    expect(resolveUpdateOffset('2180853', [{ offset: 1 }, { offset: 2 }])).toBe(
+      2180853,
+    );
     expect(resolveUpdateOffset({ absolute: '819747' }, [])).toBe(819747);
     expect(resolveUpdateOffset(100, [{ offset: 200 }])).toBe(100);
   });
@@ -25,9 +25,7 @@ describe('resolveUpdateOffset (L60 checkpoint fallback)', () => {
     //   updateId, commandId, workflowId, effectiveAt, events:[
     //     { ExercisedEvent:{ offset:1325354, nodeId:0, ... } }]}}}}
     // (tanpa top-level offset).
-    expect(resolveUpdateOffset(undefined, [{ offset: 1325354 }])).toBe(
-      1325354,
-    );
+    expect(resolveUpdateOffset(undefined, [{ offset: 1325354 }])).toBe(1325354);
   });
 
   it('C: multi-event offset sama → maju sekali ke nilai itu', () => {

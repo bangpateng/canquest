@@ -158,14 +158,14 @@ export function readLedgerIntent(
  * (panah bisa `→` atau `->`). Mengembalikan marker kosong bila tidak cocok —
  * TIDAK menebak dari kata "swap" yang kebetulan muncul.
  */
-export function readSwapMarker(
-  reason: string | null | undefined,
-): SwapMarker {
+export function readSwapMarker(reason: string | null | undefined): SwapMarker {
   if (!reason || typeof reason !== 'string') return { ...EMPTY_MARKER };
-  const m = /^\s*Swap\s+([0-9]+(?:\.[0-9]+)?)\s+([A-Za-z0-9]+)\s*(?:→|->|=>)\s*([A-Za-z0-9]+)/.exec(
-    reason,
-  );
-  const escrow = /(?:^|[\s(])esc_[0-9a-fA-F]+/.exec(reason)?.[0]?.trim() ?? null;
+  const m =
+    /^\s*Swap\s+([0-9]+(?:\.[0-9]+)?)\s+([A-Za-z0-9]+)\s*(?:→|->|=>)\s*([A-Za-z0-9]+)/.exec(
+      reason,
+    );
+  const escrow =
+    /(?:^|[\s(])esc_[0-9a-fA-F]+/.exec(reason)?.[0]?.trim() ?? null;
   if (!m) return { ...EMPTY_MARKER };
   return {
     isSwap: true,
@@ -324,7 +324,9 @@ const SELF_FUNDS_CHOICES: ReadonlySet<string> = new Set([
 
 /** True bila update ini memindahkan dana party itu sendiri (unlock/expire). */
 export function isSelfFundsMovement(
-  exercised: ReadonlyArray<{ choice?: string; actingParties?: string[] }> | undefined,
+  exercised:
+    | ReadonlyArray<{ choice?: string; actingParties?: string[] }>
+    | undefined,
   party: string,
 ): boolean {
   return (exercised ?? []).some(
@@ -507,8 +509,8 @@ export function readLockMovement(
 
   // LOCK
   for (const c of (ev.created ?? []) as unknown as Array<
-      Record<string, unknown>
-    >) {
+    Record<string, unknown>
+  >) {
     const tpl = readStr(c.templateId) ?? '';
     if (!tpl.endsWith(':Splice.Amulet:LockedAmulet')) continue;
     const cid = readStr(c.contractId) ?? '';

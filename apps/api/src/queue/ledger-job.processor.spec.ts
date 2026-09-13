@@ -1,6 +1,9 @@
 import { ConfigService } from '@nestjs/config';
 
-import { LedgerJobProcessor, SendCcRewardPayload } from './ledger-job.processor';
+import {
+  LedgerJobProcessor,
+  SendCcRewardPayload,
+} from './ledger-job.processor';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { UsersService } from '../users/users.service';
@@ -18,7 +21,9 @@ import { PrismaService } from '../prisma/prisma.service';
  *      memicu retry → kirim CC ulang = double payout nyata).
  */
 
-function makePayload(over: Partial<SendCcRewardPayload> = {}): SendCcRewardPayload {
+function makePayload(
+  over: Partial<SendCcRewardPayload> = {},
+): SendCcRewardPayload {
   return {
     userId: 'user-1',
     username: 'arie',
@@ -64,9 +69,7 @@ describe('LedgerJobProcessor — processSendCcReward (fund-safety)', () => {
       ledgerTxId: '1220already-paid',
     });
 
-    await processor.processSendCcReward(
-      makeJob(makePayload()) as never,
-    );
+    await processor.processSendCcReward(makeJob(makePayload()) as never);
 
     expect(ledger.executeTransferFactoryTransfer).not.toHaveBeenCalled();
     expect(users.recordTransaction).not.toHaveBeenCalled();

@@ -18,7 +18,9 @@ import { IsString, Matches, MinLength } from 'class-validator';
 
 class PreapprovalPrepareDto {
   @IsString()
-  @Matches(/^[0-9a-fA-F]{64}$/, { message: 'publicKeyHex must be 64 hex chars' })
+  @Matches(/^[0-9a-fA-F]{64}$/, {
+    message: 'publicKeyHex must be 64 hex chars',
+  })
   publicKeyHex!: string;
 }
 
@@ -45,13 +47,19 @@ export class SigningRelayController {
 
   /** M5b: Preapproval prepare — hash raw 32 bytes TANPA 1220 prefix. */
   @Post('preapproval/prepare')
-  async preparePreapproval(@Req() req: AuthedReq, @Body() dto: PreapprovalPrepareDto) {
+  async preparePreapproval(
+    @Req() req: AuthedReq,
+    @Body() dto: PreapprovalPrepareDto,
+  ) {
     return this.relay.preparePreapproval(req.user.userId, dto.publicKeyHex);
   }
 
   /** M5b: Preapproval execute — signature hex dari browser. */
   @Post('preapproval/execute')
-  async executePreapproval(@Req() req: AuthedReq, @Body() dto: PreapprovalExecuteDto) {
+  async executePreapproval(
+    @Req() req: AuthedReq,
+    @Body() dto: PreapprovalExecuteDto,
+  ) {
     return this.relay.executePreapproval(req.user.userId, dto.signature);
   }
 

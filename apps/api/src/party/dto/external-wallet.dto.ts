@@ -1,4 +1,10 @@
-import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 /**
  * DTO onboarding wallet external (non-custodial) — M2.
@@ -8,7 +14,9 @@ import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-valid
 export class PrepareExternalWalletDto {
   /** Public key Ed25519 user (hex 64 char) — dari key-manager browser. */
   @IsString()
-  @Matches(/^[0-9a-fA-F]{64}$/, { message: 'publicKeyHex harus 64 karakter hex' })
+  @Matches(/^[0-9a-fA-F]{64}$/, {
+    message: 'publicKeyHex harus 64 karakter hex',
+  })
   publicKeyHex!: string;
 
   /** Nama party opaque, mis. canquest-user-8f3k2a91b7 (dibuat client, RNG). */
@@ -17,7 +25,6 @@ export class PrepareExternalWalletDto {
     message: 'partyHint harus canquest-user-<hex>',
   })
   partyHint!: string;
-
 }
 
 export class CompleteExternalWalletDto {
@@ -26,7 +33,6 @@ export class CompleteExternalWalletDto {
   @MinLength(16)
   @MaxLength(512)
   signature!: string;
-
 
   /** Username dapp (opsional — diset kalau user belum punya). */
   @IsOptional()

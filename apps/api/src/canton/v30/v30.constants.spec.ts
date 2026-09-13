@@ -140,8 +140,11 @@ describe('v30 DAML-LF JSON helpers', () => {
 });
 
 describe('v30ClaimModel — matriks FCFS/Raffle × CC/USDCx/Code (spesifikasi owner)', () => {
-  const q = (rewardType: string, rewardToken?: string, entryGateMode?: string) =>
-    v30ClaimModel({ rewardType, rewardToken, entryGateMode });
+  const q = (
+    rewardType: string,
+    rewardToken?: string,
+    entryGateMode?: string,
+  ) => v30ClaimModel({ rewardType, rewardToken, entryGateMode });
 
   // ── FCFS ──
   it('INVITE_CODE_FCFS → FCFS + CODE', () => {
@@ -203,21 +206,33 @@ describe('v30ClaimModel — matriks FCFS/Raffle × CC/USDCx/Code (spesifikasi ow
   // ── Gate lock ──
   it('entryGateMode CC_ONLY → requiresLock; NONE/POINTS_ONLY → tidak', () => {
     expect(q(RewardType.CC_MANUAL, 'CC', 'CC_ONLY').requiresLock).toBe(true);
-    expect(q(RewardType.CC_MANUAL, 'CC', 'CC_OR_POINTS').requiresLock).toBe(true);
+    expect(q(RewardType.CC_MANUAL, 'CC', 'CC_OR_POINTS').requiresLock).toBe(
+      true,
+    );
     expect(q(RewardType.CC_MANUAL, 'CC', 'NONE').requiresLock).toBe(false);
-    expect(q(RewardType.CC_MANUAL, 'CC', 'POINTS_ONLY').requiresLock).toBe(false);
+    expect(q(RewardType.CC_MANUAL, 'CC', 'POINTS_ONLY').requiresLock).toBe(
+      false,
+    );
   });
 });
 
 describe('v30T1At — penutupan pendaftaran 70% durasi', () => {
   it('T1 = startsAt + 70% durasi', () => {
-    const t1 = v30T1At(new Date('2026-09-01T00:00:00Z'), new Date('2026-09-11T00:00:00Z'))!;
+    const t1 = v30T1At(
+      new Date('2026-09-01T00:00:00Z'),
+      new Date('2026-09-11T00:00:00Z'),
+    )!;
     // 10 hari × 70% = 7 hari → 8 Sept.
     expect(t1.toISOString()).toBe('2026-09-08T00:00:00.000Z');
   });
   it('tidak pernah melewati T2 (70% ≥ 100% mustahil, tapi guard tetap)', () => {
-    const t1 = v30T1At(new Date('2026-09-10T00:00:00Z'), new Date('2026-09-11T00:00:00Z'))!;
-    expect(t1.getTime()).toBeLessThanOrEqual(new Date('2026-09-11T00:00:00Z').getTime());
+    const t1 = v30T1At(
+      new Date('2026-09-10T00:00:00Z'),
+      new Date('2026-09-11T00:00:00Z'),
+    )!;
+    expect(t1.getTime()).toBeLessThanOrEqual(
+      new Date('2026-09-11T00:00:00Z').getTime(),
+    );
   });
   it('startsAt kosong → T1 = T2 (tanpa penutupan dini)', () => {
     const t1 = v30T1At(null, new Date('2026-09-11T00:00:00Z'));

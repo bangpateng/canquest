@@ -92,10 +92,7 @@ export class LedgerActivityService {
     // baris lolos-proyeksi terkumpul (atau baris habis / cap tercapai). Jadi
     // page > 1 benar (dulu selalu skip:0 → halaman lanjut salah/kosong) dan
     // `total` stabil antar halaman (dihitung dari pemindaian yang sama).
-    const batchSize = Math.min(
-      500,
-      Math.max(50, take * CANDIDATE_OVERFETCH),
-    );
+    const batchSize = Math.min(500, Math.max(50, take * CANDIDATE_OVERFETCH));
     const need = skip + take;
     const projected: LedgerActivityItem[] = [];
     let rawSkip = 0;
@@ -180,10 +177,10 @@ export class LedgerActivityService {
     const p = (r.payload ?? {}) as Record<string, unknown>;
     const args = (p.createArgument ?? {}) as Record<string, unknown>;
     const tpl = r.templateId ?? '';
-    const shortTpl = tpl.includes(':') ? tpl.slice(tpl.lastIndexOf(':') + 1) : tpl;
-    const moduleTpl = tpl.includes(':')
-      ? tpl.slice(tpl.indexOf(':') + 1)
+    const shortTpl = tpl.includes(':')
+      ? tpl.slice(tpl.lastIndexOf(':') + 1)
       : tpl;
+    const moduleTpl = tpl.includes(':') ? tpl.slice(tpl.indexOf(':') + 1) : tpl;
 
     if (r.eventType === 'created') {
       const owner =
@@ -215,7 +212,12 @@ export class LedgerActivityService {
         counterparty: owner !== party ? owner : extractSender(p, party),
         instrumentId,
         amount,
-        label: labelForHolding(moduleTpl, instrumentId, amount, owner === party),
+        label: labelForHolding(
+          moduleTpl,
+          instrumentId,
+          amount,
+          owner === party,
+        ),
       };
     }
 
@@ -288,7 +290,8 @@ function extractHoldingFacts(
   else {
     const inst = args.instrument as { id?: string } | undefined;
     if (inst?.id) instrumentId = inst.id;
-    else if (typeof args.instrumentId === 'string') instrumentId = args.instrumentId;
+    else if (typeof args.instrumentId === 'string')
+      instrumentId = args.instrumentId;
     else if (typeof args.label === 'string') instrumentId = args.label;
   }
   return { instrumentId, amount: amountStr };
@@ -336,16 +339,16 @@ function labelForHolding(
   const unit = instrumentId ?? 'token';
   const amt = amount ?? '?';
   if (!isOwner) return `${moduleTpl} ${amt} ${unit}`.trim();
-  if (moduleTpl.includes('TransferOffer') || moduleTpl.includes('TransferInstruction')) {
+  if (
+    moduleTpl.includes('TransferOffer') ||
+    moduleTpl.includes('TransferInstruction')
+  ) {
     return `Offer ${amt} ${unit}`;
   }
   return `Received ${amt} ${unit}`;
 }
 
-function labelForChoice(
-  choice: string | null,
-  moduleTpl: string,
-): string {
+function labelForChoice(choice: string | null, moduleTpl: string): string {
   if (!choice) return moduleTpl || 'Action';
   if (choice === 'TransferInstruction_Accept') return 'Accepted offer';
   if (choice === 'TransferFactory_Transfer') return 'Sent transfer';

@@ -210,7 +210,10 @@ export class BalanceEventHandlerService
       // dengan token di applyTokenIncrement).
       const ccByOwner = new Map<
         string,
-        { total: number; holdings: Array<{ contractId: string; amount: number }> }
+        {
+          total: number;
+          holdings: Array<{ contractId: string; amount: number }>;
+        }
       >(); // partyId → total + rincian holding
       const tokenByOwnerKey = new Map<
         string,
@@ -727,10 +730,7 @@ export class BalanceEventHandlerService
 
     // Kumpulkan Amulet yang DIKONSUMSI di update ini (dedup per cid — event
     // yang sama bisa muncul di top-level DAN child tree).
-    const consumed = new Map<
-      string,
-      { witnessParties?: string[] }
-    >();
+    const consumed = new Map<string, { witnessParties?: string[] }>();
     const addConsumed = (
       cid: string | undefined,
       templateId: string | undefined,
@@ -780,9 +780,8 @@ export class BalanceEventHandlerService
         where: { contractId: cid, eventType: 'created' },
         select: { payload: true },
       });
-      const args =
-        (row?.payload as Record<string, unknown> | undefined)
-          ?.createArgument as Record<string, unknown> | undefined;
+      const args = (row?.payload as Record<string, unknown> | undefined)
+        ?.createArgument as Record<string, unknown> | undefined;
       const owner = typeof args?.owner === 'string' ? args.owner : null;
       const amt = args?.amount as Record<string, unknown> | undefined;
       const amountStr =
@@ -1159,8 +1158,7 @@ export class BalanceEventHandlerService
 
     // ── Owner resolution (multi-source, urut dari paling akurat) ───────────
     // view.owner didahulukan bila valid; sisanya fallback lama tak berubah.
-    const ownerFromArgs =
-      view?.owner ?? this.extractTokenOwnerParty(args);
+    const ownerFromArgs = view?.owner ?? this.extractTokenOwnerParty(args);
     let resolvedUser: { userId: string; username: string | null } | null = null;
     let resolvedParty: string | null = ownerFromArgs;
 
@@ -1858,5 +1856,4 @@ export class BalanceEventHandlerService
         this.extractTokenAmount(a),
     };
   }
-
 }

@@ -15,9 +15,7 @@ const MAX_REFRESH_PER_CALL = 5;
 
 /** Ambil avatar: fxtwitter SAJA (gratis, tanpa key). Gagal → null, coba
  *  lagi di load berikutnya. Tidak ada jalur berbayar. */
-async function resolveAvatar(
-  handle: string,
-): Promise<{ url: string } | null> {
+async function resolveAvatar(handle: string): Promise<{ url: string } | null> {
   const fx = await fetchFxAvatar(handle);
   if (fx?.avatarUrl) return { url: fx.avatarUrl };
   return null;

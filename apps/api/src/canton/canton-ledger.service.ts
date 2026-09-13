@@ -540,7 +540,8 @@ export class CantonLedgerService {
       instrumentId = 'Amulet',
     } = params;
 
-    const dsoParty = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+    const dsoParty =
+      this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
     const effectiveAdmin = params.instrumentAdmin || dsoParty;
     const isAmulet = instrumentId.toLowerCase() === 'amulet';
     if (!effectiveAdmin) {
@@ -1859,9 +1860,9 @@ export class CantonLedgerService {
       }
       const protoHoldingCids = isAmuletProto
         ? fullAmuletCids
-        : (
-            await this.getTokenHoldingCids(senderPartyId, t.instrumentId)
-          ).map((h) => h.contractId);
+        : (await this.getTokenHoldingCids(senderPartyId, t.instrumentId)).map(
+            (h) => h.contractId,
+          );
       if (protoHoldingCids.length === 0) {
         return {
           ok: false,
@@ -1960,7 +1961,10 @@ export class CantonLedgerService {
       } else {
         // Non-Amulet: satu leg per instrument (guard duplikat ada di atas,
         // sebelum registry call).
-        const th = await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+        const th = await this.getTokenHoldingCids(
+          senderPartyId,
+          t.instrumentId,
+        );
         if (th.length === 0) {
           return {
             ok: false,
@@ -2211,7 +2215,10 @@ export class CantonLedgerService {
           };
         }
         nonAmuletSeen.add(t.instrumentId);
-        const th = await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+        const th = await this.getTokenHoldingCids(
+          senderPartyId,
+          t.instrumentId,
+        );
         if (th.length === 0) {
           return {
             ok: false,
@@ -2549,9 +2556,7 @@ export class CantonLedgerService {
    * Archive (controller receiver). Create/cancel cukup SATU signature user
    * via interactive submission → cocok signing relay.
    */
-  async findRegistryPreapproval(
-    userPartyId: string,
-  ): Promise<{
+  async findRegistryPreapproval(userPartyId: string): Promise<{
     contractId: string;
     templateId: string;
     instrumentAdmin: string;
@@ -2576,7 +2581,9 @@ export class CantonLedgerService {
                 cumulative: [
                   {
                     identifierFilter: {
-                      WildcardFilter: { value: { includeCreatedEventBlob: false } },
+                      WildcardFilter: {
+                        value: { includeCreatedEventBlob: false },
+                      },
                     },
                   },
                 ],
@@ -3852,9 +3859,13 @@ export class CantonLedgerService {
     });
     if (!res.ok) {
       const t = await res.text();
-      this.logger.warn(`grantReadRightsOnParty ${res.status}: ${t.slice(0, 200)}`);
+      this.logger.warn(
+        `grantReadRightsOnParty ${res.status}: ${t.slice(0, 200)}`,
+      );
     } else {
-      this.logger.log(`Granted CanReadAs (only) for external party: ${partyId.split('::')[0]}`);
+      this.logger.log(
+        `Granted CanReadAs (only) for external party: ${partyId.split('::')[0]}`,
+      );
     }
   }
 
@@ -4064,13 +4075,10 @@ export class CantonLedgerService {
    * participantPrunedUpToInclusive saat ini 0 (belum pernah memangkas).
    */
   async latestPrunedOffset(): Promise<number> {
-    const res = await fetch(
-      `${this.baseUrl}/v2/state/latest-pruned-offsets`,
-      {
-        headers: await this.authHeaders(),
-        signal: AbortSignal.timeout(6_000),
-      },
-    );
+    const res = await fetch(`${this.baseUrl}/v2/state/latest-pruned-offsets`, {
+      headers: await this.authHeaders(),
+      signal: AbortSignal.timeout(6_000),
+    });
     const text = await res.text();
     if (!res.ok)
       throw new ServiceUnavailableException(
@@ -5337,12 +5345,16 @@ export class CantonLedgerService {
     if (!lockHolder) return { ok: false, error: 'lock holder party not set' };
 
     const amuletRules = await this.fetchScanProxyContract('amulet-rules');
-    if (!amuletRules) return { ok: false, error: 'scan-proxy /amulet-rules failed' };
+    if (!amuletRules)
+      return { ok: false, error: 'scan-proxy /amulet-rules failed' };
     const openRound = await this.fetchScanProxyContract(
       'open-and-issuing-mining-rounds',
     );
     if (!openRound) {
-      return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+      return {
+        ok: false,
+        error: 'scan-proxy /open-and-issuing-mining-rounds failed',
+      };
     }
 
     const holdings = await this.queryAmuletHoldingsRaw(ownerParty);
@@ -5361,7 +5373,10 @@ export class CantonLedgerService {
 
     const totalEff = scored.reduce((s, x) => s + x.eff, 0);
     if (totalEff < amountCc) {
-      return { ok: false, error: `Saldo efektif ~${totalEff.toFixed(4)} < ${amountCc} CC` };
+      return {
+        ok: false,
+        error: `Saldo efektif ~${totalEff.toFixed(4)} < ${amountCc} CC`,
+      };
     }
 
     const inputs: Array<{ tag: 'InputAmulet'; value: string }> = [];
@@ -5399,8 +5414,16 @@ export class CantonLedgerService {
     };
 
     const disclosedContracts = [
-      { templateId: amuletRules.templateId, contractId: amuletRules.contractId, createdEventBlob: amuletRules.blob },
-      { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+      {
+        templateId: amuletRules.templateId,
+        contractId: amuletRules.contractId,
+        createdEventBlob: amuletRules.blob,
+      },
+      {
+        templateId: openRound.templateId,
+        contractId: openRound.contractId,
+        createdEventBlob: openRound.blob,
+      },
     ];
 
     return {
@@ -5440,7 +5463,10 @@ export class CantonLedgerService {
       'open-and-issuing-mining-rounds',
     );
     if (!openRound) {
-      return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+      return {
+        ok: false,
+        error: 'scan-proxy /open-and-issuing-mining-rounds failed',
+      };
     }
 
     const locks = await this.findLockedAmulets(ownerParty);
@@ -5450,7 +5476,8 @@ export class CantonLedgerService {
       const ar = await this.fetchScanProxyContract('amulet-rules');
       const pkg = ar?.templateId?.split(':')[0];
       const fallback = pkg ? `${pkg}:Splice.Amulet:LockedAmulet` : null;
-      if (!fallback) return { ok: false, error: 'LockedAmulet cid tidak ditemukan' };
+      if (!fallback)
+        return { ok: false, error: 'LockedAmulet cid tidak ditemukan' };
       return {
         ok: true,
         command: {
@@ -5463,7 +5490,11 @@ export class CantonLedgerService {
         },
         commandId: `unlock-cc-${randomUUID()}`,
         disclosedContracts: [
-          { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+          {
+            templateId: openRound.templateId,
+            contractId: openRound.contractId,
+            createdEventBlob: openRound.blob,
+          },
         ],
       };
     }
@@ -5480,7 +5511,11 @@ export class CantonLedgerService {
       },
       commandId: `unlock-cc-${randomUUID()}`,
       disclosedContracts: [
-        { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+        {
+          templateId: openRound.templateId,
+          contractId: openRound.contractId,
+          createdEventBlob: openRound.blob,
+        },
       ],
     };
   }
@@ -5904,7 +5939,9 @@ export class CantonLedgerService {
   async fetchContractsForDisclosure(
     partyId: string,
     cids: string[],
-  ): Promise<Array<{ templateId: string; contractId: string; createdEventBlob: string }>> {
+  ): Promise<
+    Array<{ templateId: string; contractId: string; createdEventBlob: string }>
+  > {
     if (cids.length === 0) return [];
     let offset: number | string = 0;
     try {
@@ -6020,21 +6057,37 @@ export class CantonLedgerService {
     const { providerParty, receiverParty, lifetimeDays = 90 } = params;
 
     // 1) Proposal aktif milik receiver.
-    const proposal = await this.findPreapprovalProposal(providerParty, receiverParty);
+    const proposal = await this.findPreapprovalProposal(
+      providerParty,
+      receiverParty,
+    );
     if (!proposal) {
-      return { ok: false, error: 'TransferPreapprovalProposal tidak ditemukan (user belum sign / sudah dipakai)' };
+      return {
+        ok: false,
+        error:
+          'TransferPreapprovalProposal tidak ditemukan (user belum sign / sudah dipakai)',
+      };
     }
 
     // 2) Context + input pembayaran — mirror createTransferPreapprovalViaLedger.
     const amuletRules = await this.fetchScanProxyContract('amulet-rules');
-    if (!amuletRules) return { ok: false, error: 'scan-proxy /amulet-rules failed' };
-    const openRound = await this.fetchScanProxyContract('open-and-issuing-mining-rounds');
+    if (!amuletRules)
+      return { ok: false, error: 'scan-proxy /amulet-rules failed' };
+    const openRound = await this.fetchScanProxyContract(
+      'open-and-issuing-mining-rounds',
+    );
     if (!openRound) {
-      return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+      return {
+        ok: false,
+        error: 'scan-proxy /open-and-issuing-mining-rounds failed',
+      };
     }
     const holdings = await this.queryAmuletHoldingsRaw(providerParty);
     if (holdings.length === 0) {
-      return { ok: false, error: 'Provider tidak punya Amulet utk bayar fee preapproval' };
+      return {
+        ok: false,
+        error: 'Provider tidak punya Amulet utk bayar fee preapproval',
+      };
     }
     const round = openRound.round ?? 0;
     const scored = holdings
@@ -6046,7 +6099,10 @@ export class CantonLedgerService {
       })
       .sort((a, b) => b.eff - a.eff);
     if (scored[0].eff < 2) {
-      return { ok: false, error: `Provider Amulet terlalu kecil (eff ~${scored[0].eff.toFixed(4)} CC)` };
+      return {
+        ok: false,
+        error: `Provider Amulet terlalu kecil (eff ~${scored[0].eff.toFixed(4)} CC)`,
+      };
     }
 
     // 3) Exercise Accept (controller provider) — single command.
@@ -6066,8 +6122,16 @@ export class CantonLedgerService {
       expiresAt,
     };
     const disclosed = [
-      { templateId: amuletRules.templateId, contractId: amuletRules.contractId, createdEventBlob: amuletRules.blob },
-      { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+      {
+        templateId: amuletRules.templateId,
+        contractId: amuletRules.contractId,
+        createdEventBlob: amuletRules.blob,
+      },
+      {
+        templateId: openRound.templateId,
+        contractId: openRound.contractId,
+        createdEventBlob: openRound.blob,
+      },
     ];
     const { ok, status, text } = await this.exerciseChoice(
       proposal.contractId,
@@ -6080,15 +6144,24 @@ export class CantonLedgerService {
       disclosed,
     );
     if (!ok) {
-      return { ok: false, error: `Accept gagal (${status}): ${text.slice(0, 220)}` };
+      return {
+        ok: false,
+        error: `Accept gagal (${status}): ${text.slice(0, 220)}`,
+      };
     }
     let transferPreapprovalCid: string | undefined;
     try {
       const parsed = JSON.parse(text) as {
-        eventsById?: Record<string, { templateId?: string; contractId?: string }>;
+        eventsById?: Record<
+          string,
+          { templateId?: string; contractId?: string }
+        >;
       };
       for (const ev of Object.values(parsed.eventsById ?? {})) {
-        if (String(ev.templateId ?? '').endsWith(':TransferPreapproval') && ev.contractId) {
+        if (
+          String(ev.templateId ?? '').endsWith(':TransferPreapproval') &&
+          ev.contractId
+        ) {
           transferPreapprovalCid = ev.contractId;
           break;
         }
@@ -6098,7 +6171,9 @@ export class CantonLedgerService {
     }
     this.logger.log(
       `PreapprovalProposal ACCEPTED receiver=${receiverParty.split('::')[0]} → expires ${expiresAt}` +
-        (transferPreapprovalCid ? ` cid=${transferPreapprovalCid.slice(0, 16)}…` : ''),
+        (transferPreapprovalCid
+          ? ` cid=${transferPreapprovalCid.slice(0, 16)}…`
+          : ''),
     );
     return {
       ok: true,
@@ -6241,8 +6316,7 @@ export class CantonLedgerService {
         const contractId = readStr(ce.contractId);
         if (!contractId) continue;
         const arg = asRecord(ce.createArgument);
-        const amtRaw =
-          pick(arg, 'amulet', 'amount', 'initialAmount') ?? '0';
+        const amtRaw = pick(arg, 'amulet', 'amount', 'initialAmount') ?? '0';
         out.push({
           contractId,
           templateId: tpl,

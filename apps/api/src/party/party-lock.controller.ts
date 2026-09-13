@@ -61,7 +61,7 @@ export class PartyLockController {
   @Post('lock')
   async lockCc(@Req() req: AuthedReq, @Body() body: LockCcDto) {
     const user = await this.users.findById(req.user.userId);
-    
+
     // M5: custodial path removed — reject custodial users
     if (user?.walletKind === 'custodial') {
       throw new BadRequestException(
@@ -354,7 +354,7 @@ export class PartyLockController {
         amountCc: Number(l.amountCc),
         termKey: l.termKey,
         campaignTitle: l.termKey.startsWith('v30-')
-          ? questTitles.get(l.termKey.slice(4)) ?? null
+          ? (questTitles.get(l.termKey.slice(4)) ?? null)
           : null,
         lockSeconds: l.lockSeconds,
         // MODE OPEN: UI menghitung lama terkunci secara MAJU dari lockedAt

@@ -115,7 +115,9 @@ export class ClaimsV30Controller {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async prepareLock(@Req() req: AuthedReq, @Param('questId') questId: string) {
     await this.requireWallet(req.user.userId);
-    return this.relay.prepare(req.user.userId, 'accept_lock_proposal', { questId });
+    return this.relay.prepare(req.user.userId, 'accept_lock_proposal', {
+      questId,
+    });
   }
 
   @Get(':questId/lock-v30/status')

@@ -180,7 +180,8 @@ export class QuestsController {
     const claimType = allowed.find((t) => t === body?.claimType);
     if (!claimType) {
       return {
-        message: 'claimType harus salah dari: fcfs, draw_cc, invite, cc_code_raffle',
+        message:
+          'claimType harus salah dari: fcfs, draw_cc, invite, cc_code_raffle',
       };
     }
     return this.quests.prepareExternalClaimFee(
@@ -264,13 +265,15 @@ export class QuestsController {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
 
-    const { status, alreadyDone, nextCheckInAt } = await this.quests.submitTask({
-      userId: user.id,
-      userPartyId: user.cantonPartyId ?? '',
-      questId,
-      taskId,
-      proof: body.proof,
-    });
+    const { status, alreadyDone, nextCheckInAt } = await this.quests.submitTask(
+      {
+        userId: user.id,
+        userPartyId: user.cantonPartyId ?? '',
+        questId,
+        taskId,
+        proof: body.proof,
+      },
+    );
 
     if (alreadyDone) {
       return { ok: true, status, message: 'Task already completed' };

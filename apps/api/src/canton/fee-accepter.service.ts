@@ -96,7 +96,10 @@ export class FeeAccepterService implements OnModuleInit, OnModuleDestroy {
         `FeeAccepter: ${instructions.length} instruction fee pending → accept…`,
       );
       for (const ins of instructions) {
-        if ((this.failures.get(ins.contractId) ?? 0) >= FeeAccepterService.MAX_FAILURES) {
+        if (
+          (this.failures.get(ins.contractId) ?? 0) >=
+          FeeAccepterService.MAX_FAILURES
+        ) {
           continue; // sudah menyerah untuk cid ini (log saat keputusan di bawah)
         }
         const res = await this.ledger.acceptTransferInstruction(

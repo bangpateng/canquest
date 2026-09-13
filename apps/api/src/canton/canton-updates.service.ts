@@ -383,13 +383,16 @@ export function parseReassignment(
   const offsetKnown = Number.isFinite(off) && off >= 0;
 
   return {
-    updateId: typeof (value as { updateId?: unknown }).updateId === 'string'
-      ? ((value as { updateId: string }).updateId)
-      : '',
+    updateId:
+      typeof (value as { updateId?: unknown }).updateId === 'string'
+        ? (value as { updateId: string }).updateId
+        : '',
     offset: offsetKnown ? off : 0,
     offsetKnown,
     recordTime: strOrUndef((value as { recordTime?: unknown }).recordTime),
-    synchronizerId: strOrUndef((value as { synchronizerId?: unknown }).synchronizerId),
+    synchronizerId: strOrUndef(
+      (value as { synchronizerId?: unknown }).synchronizerId,
+    ),
     commandId: strOrUndef((value as { commandId?: unknown }).commandId),
     workflowId: strOrUndef((value as { workflowId?: unknown }).workflowId),
     parties: [...parties],
@@ -404,7 +407,9 @@ function strOrUndef(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 function strArray(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  return Array.isArray(v)
+    ? v.filter((x): x is string => typeof x === 'string')
+    : [];
 }
 
 const RECONNECT_BASE_DELAY_MS = 1_000;
@@ -452,8 +457,7 @@ export function resolveUpdateOffset(
     if (Number.isFinite(n)) eventOffsets.push(n);
   }
   const unanimous =
-    eventOffsets.length > 0 &&
-    eventOffsets.every((n) => n === eventOffsets[0]);
+    eventOffsets.length > 0 && eventOffsets.every((n) => n === eventOffsets[0]);
   return unanimous ? eventOffsets[0] : NaN;
 }
 /**
@@ -510,7 +514,7 @@ export function buildUpdateFormatCumulative(): Array<Record<string, unknown>> {
       },
     },
   ];
-}/**
+} /**
  * Cap delay reconnect reaktif. Tidak ada "give up" — selama service enabled,
  * terus retry dengan delay ≤60s supaya stream self-heal setelah infra sembuh
  * (kasus nyata: reverse proxy 502 berjam-jam, WS mati permanen, saldo stale).
@@ -1066,7 +1070,11 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
             `(3) Canton participant node tidak enable WS. ` +
             `Akan terus retry dengan backoff (tanpa give-up); poller jadi fallback.`,
         );
-      } else if (httpStatus === '502' || httpStatus === '503' || httpStatus === '504') {
+      } else if (
+        httpStatus === '502' ||
+        httpStatus === '503' ||
+        httpStatus === '504'
+      ) {
         this.logger.error(
           `CantonUpdates: WS ${httpStatus} — upstream proxy/participant tidak terjangkau ` +
             `(cek nginx VPS 1, container participant, tunnel WireGuard). ` +
@@ -1230,7 +1238,11 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    if (created.length === 0 && archived.length === 0 && exercised.length === 0) {
+    if (
+      created.length === 0 &&
+      archived.length === 0 &&
+      exercised.length === 0
+    ) {
       // Transaksi tanpa event yang relevan tetap sudah dikonsumsi — majukan
       // offset supaya resume tidak me-replay-nya, tapi TIDAK ada dispatch
       // yang bisa hilang di jalur ini.
@@ -1537,13 +1549,19 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
           streamKey: STREAM_KEY,
           lastOffset: BigInt(Math.trunc(off)),
           ...(head !== null && Number.isFinite(head)
-            ? { headOffset: BigInt(Math.trunc(head)), headUpdatedAt: new Date() }
+            ? {
+                headOffset: BigInt(Math.trunc(head)),
+                headUpdatedAt: new Date(),
+              }
             : {}),
         },
         update: {
           lastOffset: BigInt(Math.trunc(off)),
           ...(head !== null && Number.isFinite(head)
-            ? { headOffset: BigInt(Math.trunc(head)), headUpdatedAt: new Date() }
+            ? {
+                headOffset: BigInt(Math.trunc(head)),
+                headUpdatedAt: new Date(),
+              }
             : {}),
         },
       });

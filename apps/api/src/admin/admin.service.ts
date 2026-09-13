@@ -36,7 +36,11 @@ import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { ClaimOfferService } from '../canton/v30/claim-offer.service';
 import { LockProposalService } from '../canton/v30/lock-proposal.service';
-import { V30_LEDGER_PACKAGE, isV30Quest, v30ClaimModel } from '../canton/v30/v30.constants';
+import {
+  V30_LEDGER_PACKAGE,
+  isV30Quest,
+  v30ClaimModel,
+} from '../canton/v30/v30.constants';
 import {} from '../common/wallet-policy';
 import { PointsService } from '../users/points.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -572,7 +576,9 @@ export class AdminService {
     // CC_AND_CODE_RAFFLE / CC_AND_INVITE (raffle). Tolak eksplisit.
     const rt0 = (data.rewardType ?? RewardType.CC_ONLY) as string;
     if (
-      (rt0 === 'INVITE_CODE_FCFS' || rt0 === 'INVITE_CODE_RANDOM' || rt0 === 'INVITE_CODE') &&
+      (rt0 === 'INVITE_CODE_FCFS' ||
+        rt0 === 'INVITE_CODE_RANDOM' ||
+        rt0 === 'INVITE_CODE') &&
       (data.rewardCc ?? 0) > 0
     ) {
       throw new BadRequestException(
@@ -666,7 +672,9 @@ export class AdminService {
         // v30: pin paket saat create — quest ini TIDAK membuat QuestCampaign
         // on-chain (claim = ClaimOffer, eligibility = LockProposal).
         ledgerPackage:
-          data.ledgerPackage === V30_LEDGER_PACKAGE ? V30_LEDGER_PACKAGE : undefined,
+          data.ledgerPackage === V30_LEDGER_PACKAGE
+            ? V30_LEDGER_PACKAGE
+            : undefined,
         tasks: data.tasks
           ? {
               create: data.tasks.map((t, i) => ({
@@ -687,7 +695,9 @@ export class AdminService {
 
     // Kode reward dari form pembuatan (satu per baris) → InviteCodePool.
     // Aturan spesifikasi owner §1: reward Code → jumlah pemenang = jumlah kode.
-    const validCodes = (data.inviteCodes ?? []).map((c) => c.trim()).filter(Boolean);
+    const validCodes = (data.inviteCodes ?? [])
+      .map((c) => c.trim())
+      .filter(Boolean);
     if (validCodes.length > 0) {
       const model = v30ClaimModel({
         rewardType: data.rewardType ?? RewardType.CC_ONLY,
@@ -695,7 +705,11 @@ export class AdminService {
         entryGateMode: data.entryGateMode,
         rewardCc: data.rewardCc ?? 0,
       });
-      if (model.reward === 'CODE' && data.maxWinners != null && validCodes.length !== data.maxWinners) {
+      if (
+        model.reward === 'CODE' &&
+        data.maxWinners != null &&
+        validCodes.length !== data.maxWinners
+      ) {
         throw new BadRequestException(
           `Reward Code: jumlah pemenang (${data.maxWinners}) harus SAMA dengan jumlah kode (${validCodes.length}).`,
         );
@@ -886,10 +900,14 @@ export class AdminService {
     // expiresAt LockedAmulet peserta tertanam on-chain dan tidak ada choice
     // untuk mengubahnya; ubah tanggal di sini = mismatch T2 (spesifikasi
     // owner §"Yang mudah salah").
-    if (isV30Quest(existing) && (data.startsAt !== undefined || data.endsAt !== undefined)) {
+    if (
+      isV30Quest(existing) &&
+      (data.startsAt !== undefined || data.endsAt !== undefined)
+    ) {
       const dateChanged =
         (data.startsAt !== undefined &&
-          (data.startsAt ?? null) !== (existing.startsAt?.toISOString() ?? null)) ||
+          (data.startsAt ?? null) !==
+            (existing.startsAt?.toISOString() ?? null)) ||
         (data.endsAt !== undefined &&
           (data.endsAt ?? null) !== (existing.endsAt?.toISOString() ?? null));
       if (dateChanged) {
@@ -906,7 +924,12 @@ export class AdminService {
     }
 
     // Optional ecosystem partner — resolve & denormalize org/logo/socials.
-    let partner: { id: string; name: string; logoUrl: string | null; socialLinks: string } | null = null;
+    let partner: {
+      id: string;
+      name: string;
+      logoUrl: string | null;
+      socialLinks: string;
+    } | null = null;
     if (data.partnerId !== undefined) {
       if (data.partnerId === null) {
         partner = null;
@@ -1659,7 +1682,8 @@ export class AdminService {
     // ── v30 hook: quest jalur canquest-v30 → ClaimOffer on-chain per pemenang.
     // validUntil = waktu UNDIAN ini + 48 jam (bukan waktu campaign). Kode reward
     // di-assign & hash-nya dikomit sekarang (anti swap pasca-undian).
-    const v30Offers: Array<{ userId: string; ok: boolean; error?: string }> = [];
+    const v30Offers: Array<{ userId: string; ok: boolean; error?: string }> =
+      [];
     if (isV30Quest(quest) && results.length > 0) {
       // Fase 4/5 spesifikasi: re-verifikasi SEMUA lock tepat sebelum undian —
       // UnlockV2 (early unlock) tidak punya cek waktu; pemenang yang lock-nya
@@ -1675,7 +1699,10 @@ export class AdminService {
         );
       }
       for (const r of results) {
-        const made = await this.claimOffers.createOfferForWinner(questId, r.userId);
+        const made = await this.claimOffers.createOfferForWinner(
+          questId,
+          r.userId,
+        );
         v30Offers.push({ userId: r.userId, ok: made.ok, error: made.error });
         if (!made.ok) {
           this.logger.error(
@@ -1738,7 +1765,9 @@ export class AdminService {
    * Jalankan SEBELAUM undian (FLOW.md §T1, SECURITY.md §3.2).
    */
   async v30CloseRegistration(questId: string) {
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException('Quest not found');
     if (!isV30Quest(quest)) {
       throw new BadRequestException('Quest bukan jalur v30');
@@ -1749,7 +1778,9 @@ export class AdminService {
   /** Tarik semua ClaimOffer aktif quest ini (mis. undian ulang / kasus khusus). */
   async v30WithdrawOffers(questId: string, reason: string) {
     if (!reason?.trim()) throw new BadRequestException('reason wajib diisi');
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException('Quest not found');
     if (!isV30Quest(quest)) {
       throw new BadRequestException('Quest bukan jalur v30');
@@ -1760,7 +1791,10 @@ export class AdminService {
     });
     const out: Array<{ userId: string; ok: boolean; error?: string }> = [];
     for (const d of draws) {
-      const res = await this.claimOffers.withdrawOffer(d.offerContractId!, reason);
+      const res = await this.claimOffers.withdrawOffer(
+        d.offerContractId!,
+        reason,
+      );
       out.push({ userId: d.userId, ...res });
     }
     return { withdrawn: out.filter((o) => o.ok).length, results: out };
@@ -2834,7 +2868,6 @@ export class AdminService {
     });
   }
 
-
   /** Normalkan nilai kategori partner ke kanonik tabel EcosystemCategory (case-insensitive). */
   private async canonicalizeCategories(values: string[]): Promise<string[]> {
     if (values.length === 0) return [];
@@ -2976,7 +3009,9 @@ export class AdminService {
           validators: JSON.stringify(data.validators),
         }),
         ...(data.published !== undefined && { published: data.published }),
-        ...(data.featuredApp !== undefined && { featuredApp: data.featuredApp }),
+        ...(data.featuredApp !== undefined && {
+          featuredApp: data.featuredApp,
+        }),
       },
     });
     this.logger.log(`Partner updated: ${partner.name} (${partner.id})`);

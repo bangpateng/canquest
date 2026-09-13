@@ -66,7 +66,8 @@ describe('readLedgerIntent', () => {
         exercised: [
           exMeta('TransferFactory_Transfer', {
             [LEDGER_META.txKind]: 'transfer',
-            [LEDGER_META.reason]: 'Swap 10.42 CC → USDCx (OneSwap esc_692334d2ba682e43a62ba613)',
+            [LEDGER_META.reason]:
+              'Swap 10.42 CC → USDCx (OneSwap esc_692334d2ba682e43a62ba613)',
             [LEDGER_META.sender]: USER,
           }),
         ] as never,
@@ -83,12 +84,24 @@ describe('readLedgerIntent', () => {
         exercised: [
           {
             contractId: 'cid-a',
-            templateId: 'pkg:Splice.ExternalPartyConfigState:ExternalPartyConfigState',
+            templateId:
+              'pkg:Splice.ExternalPartyConfigState:ExternalPartyConfigState',
             choice: 'EventLog_HoldingsChange',
             choiceArgument: {
-              extraArgs: { meta: { values: { [LEDGER_META.reason]: 'holders released lock' } } },
+              extraArgs: {
+                meta: {
+                  values: { [LEDGER_META.reason]: 'holders released lock' },
+                },
+              },
               transferLegSides: [
-                { meta: { values: { [LEDGER_META.reason]: 'Swap 1 CC → USDCx (OneSwap esc_abc123)' } } },
+                {
+                  meta: {
+                    values: {
+                      [LEDGER_META.reason]:
+                        'Swap 1 CC → USDCx (OneSwap esc_abc123)',
+                    },
+                  },
+                },
               ],
             },
           },
@@ -113,7 +126,11 @@ describe('readLedgerIntent', () => {
 
   it('tanpa meta → semua kosong, sender null', () => {
     const intent = readLedgerIntent(
-      ev({ exercised: [{ contractId: 'c', templateId: 't', choice: 'X', choiceArgument: {} }] as never }),
+      ev({
+        exercised: [
+          { contractId: 'c', templateId: 't', choice: 'X', choiceArgument: {} },
+        ] as never,
+      }),
     );
     expect(intent.txKinds).toEqual([]);
     expect(intent.reasons).toEqual([]);
@@ -155,7 +172,10 @@ describe('readSwapMarker', () => {
   });
 
   it('helper hasSwapMarker / escrowIdFromReasons', () => {
-    const reasons = ['holders released lock', 'Swap 2 CC → USDCx (OneSwap esc_deadbeef)'];
+    const reasons = [
+      'holders released lock',
+      'Swap 2 CC → USDCx (OneSwap esc_deadbeef)',
+    ];
     expect(hasSwapMarker(reasons)).toBe(true);
     expect(hasSwapMarker(['no marker'])).toBe(false);
     expect(escrowIdFromReasons(reasons)).toBe('esc_deadbeef');
@@ -180,8 +200,17 @@ describe('transientContractIds', () => {
   it('created + Archive(choice) cid sama → transien', () => {
     const t = transientContractIds(
       ev({
-        created: [{ contractId: 'cid-x', templateId: 't', createArgument: {} }] as never,
-        exercised: [{ contractId: 'cid-x', templateId: 't', choice: 'Archive', choiceArgument: {} }] as never,
+        created: [
+          { contractId: 'cid-x', templateId: 't', createArgument: {} },
+        ] as never,
+        exercised: [
+          {
+            contractId: 'cid-x',
+            templateId: 't',
+            choice: 'Archive',
+            choiceArgument: {},
+          },
+        ] as never,
       }),
     );
     expect([...t]).toEqual(['cid-x']);
@@ -190,7 +219,9 @@ describe('transientContractIds', () => {
   it('created + archived[] cid sama → transien', () => {
     const t = transientContractIds(
       ev({
-        created: [{ contractId: 'cid-y', templateId: 't', createArgument: {} }] as never,
+        created: [
+          { contractId: 'cid-y', templateId: 't', createArgument: {} },
+        ] as never,
         archived: [{ contractId: 'cid-y', templateId: 't' }] as never,
       }),
     );
@@ -204,7 +235,14 @@ describe('transientContractIds', () => {
           { contractId: 'cid-keep', templateId: 't', createArgument: {} },
           { contractId: 'cid-gone', templateId: 't', createArgument: {} },
         ] as never,
-        exercised: [{ contractId: 'cid-gone', templateId: 't', choice: 'Archive', choiceArgument: {} }] as never,
+        exercised: [
+          {
+            contractId: 'cid-gone',
+            templateId: 't',
+            choice: 'Archive',
+            choiceArgument: {},
+          },
+        ] as never,
       }),
     );
     expect(t.has('cid-keep')).toBe(false);
@@ -215,11 +253,24 @@ describe('transientContractIds', () => {
     const t = transientContractIds(
       ev({
         created: [
-          { contractId: '0047a040df0a17b0', templateId: 'pkg:Splice.Amulet:Amulet', createArgument: { owner: USER } },
-          { contractId: '000a636f44b59eef', templateId: 'pkg:Splice.Amulet:Amulet', createArgument: { owner: ESCROW } },
+          {
+            contractId: '0047a040df0a17b0',
+            templateId: 'pkg:Splice.Amulet:Amulet',
+            createArgument: { owner: USER },
+          },
+          {
+            contractId: '000a636f44b59eef',
+            templateId: 'pkg:Splice.Amulet:Amulet',
+            createArgument: { owner: ESCROW },
+          },
         ] as never,
         exercised: [
-          { contractId: '0047a040df0a17b0', templateId: 'pkg:Splice.Amulet:Amulet', choice: 'Archive', choiceArgument: {} },
+          {
+            contractId: '0047a040df0a17b0',
+            templateId: 'pkg:Splice.Amulet:Amulet',
+            choice: 'Archive',
+            choiceArgument: {},
+          },
         ] as never,
       }),
     );
@@ -238,7 +289,8 @@ describe('readSwapOutLeg (kaki keluar dari event WSS)', () => {
       exercised: [
         {
           contractId: 'cid-rules',
-          templateId: 'pkg:Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules',
+          templateId:
+            'pkg:Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules',
           choice,
           choiceArgument: { transfer },
         },
@@ -278,9 +330,7 @@ describe('readSwapOutLeg (kaki keluar dari event WSS)', () => {
   });
 
   it('O3: Accept tanpa transfer args → null (bukan kaki keluar)', () => {
-    const leg = readSwapOutLeg(
-      depositUpdate({}, 'TransferInstruction_Accept'),
-    );
+    const leg = readSwapOutLeg(depositUpdate({}, 'TransferInstruction_Accept'));
     expect(leg).toBeNull();
   });
 
@@ -298,7 +348,9 @@ describe('readSwapOutLeg (kaki keluar dari event WSS)', () => {
     const leg = readSwapOutLeg(
       depositUpdate({
         ...SWAP_TRANSFER,
-        meta: { values: { [LEDGER_META.reason]: 'Swap 5 CC → USDCx (OneSwap)' } },
+        meta: {
+          values: { [LEDGER_META.reason]: 'Swap 5 CC → USDCx (OneSwap)' },
+        },
       }),
     );
     expect(leg).not.toBeNull();
@@ -322,7 +374,11 @@ describe('readLedgerIntent — sumber sender urutan parser resmi', () => {
             templateId: 'pkg:Utility.Registry.V0.Rule.Transfer:TransferRule',
             choice: 'TransferRule_TwoStepTransfer',
             choiceArgument: {
-              transfer: { sender: ESCROW, receiver: USER, amount: '0.6952488883' },
+              transfer: {
+                sender: ESCROW,
+                receiver: USER,
+                amount: '0.6952488883',
+              },
             },
           },
         ] as never,
@@ -340,7 +396,10 @@ describe('readLedgerIntent — sumber sender urutan parser resmi', () => {
             templateId: 't',
             choice: 'TransferFactory_Transfer',
             choiceArgument: {
-              transfer: { sender: ESCROW, meta: { values: { [LEDGER_META.sender]: ESCROW } } },
+              transfer: {
+                sender: ESCROW,
+                meta: { values: { [LEDGER_META.sender]: ESCROW } },
+              },
             },
           },
         ] as never,
@@ -358,7 +417,10 @@ describe('readLedgerIntent — sumber sender urutan parser resmi', () => {
             templateId: 't',
             choice: 'X',
             choiceArgument: {
-              transfer: { sender: ESCROW, meta: { values: { [LEDGER_META.sender]: USER } } },
+              transfer: {
+                sender: ESCROW,
+                meta: { values: { [LEDGER_META.sender]: USER } },
+              },
             },
           },
         ] as never,
@@ -386,10 +448,16 @@ describe('isSelfFundsMovement', () => {
 
   it('choice lain / aktor bukan party → false', () => {
     expect(
-      isSelfFundsMovement([{ choice: 'TransferFactory_Transfer', actingParties: [USER] }], USER),
+      isSelfFundsMovement(
+        [{ choice: 'TransferFactory_Transfer', actingParties: [USER] }],
+        USER,
+      ),
     ).toBe(false);
     expect(
-      isSelfFundsMovement([{ choice: 'LockedAmulet_UnlockV2', actingParties: ['DSO::x'] }], USER),
+      isSelfFundsMovement(
+        [{ choice: 'LockedAmulet_UnlockV2', actingParties: ['DSO::x'] }],
+        USER,
+      ),
     ).toBe(false);
     expect(isSelfFundsMovement(undefined, USER)).toBe(false);
   });
@@ -398,7 +466,13 @@ describe('isSelfFundsMovement', () => {
 describe('readLockMovement (lock/unlock dana sendiri)', () => {
   const PARTY = USER;
   const HOLD_IV = (owner: string, amount: string) => [
-    { viewValue: { owner, amount, instrumentId: { id: 'Amulet', admin: 'DSO::x' } } },
+    {
+      viewValue: {
+        owner,
+        amount,
+        instrumentId: { id: 'Amulet', admin: 'DSO::x' },
+      },
+    },
   ];
 
   it('LOCK: LockedAmulet persisten milik party → kind=lock + cid', () => {
@@ -408,16 +482,32 @@ describe('readLockMovement (lock/unlock dana sendiri)', () => {
           {
             contractId: 'cid-locked',
             templateId: 'pkg:Splice.Amulet:LockedAmulet',
-            createArgument: { lock: {}, amulet: { owner: PARTY, amount: { initialAmount: '8.0000000000' } } },
+            createArgument: {
+              lock: {},
+              amulet: {
+                owner: PARTY,
+                amount: { initialAmount: '8.0000000000' },
+              },
+            },
             interfaceViews: HOLD_IV(PARTY, '8.0000000000'),
           },
         ],
         archived: [],
-        exercised: [{ choice: 'AmuletRules_Transfer', actingParties: [PARTY], choiceArgument: {} }],
+        exercised: [
+          {
+            choice: 'AmuletRules_Transfer',
+            actingParties: [PARTY],
+            choiceArgument: {},
+          },
+        ],
       } as never,
       PARTY,
     );
-    expect(m).toMatchObject({ kind: 'lock', amount: '8.0000000000', lockedAmuletCid: 'cid-locked' });
+    expect(m).toMatchObject({
+      kind: 'lock',
+      amount: '8.0000000000',
+      lockedAmuletCid: 'cid-locked',
+    });
   });
 
   it('UNLOCK: OwnerExpireLockV2 + Amulet persisten milik party → kind=unlock', () => {
@@ -433,12 +523,21 @@ describe('readLockMovement (lock/unlock dana sendiri)', () => {
         ],
         archived: [],
         exercised: [
-          { choice: 'LockedAmulet_OwnerExpireLockV2', contractId: 'cid-locked', actingParties: [PARTY], choiceArgument: {} },
+          {
+            choice: 'LockedAmulet_OwnerExpireLockV2',
+            contractId: 'cid-locked',
+            actingParties: [PARTY],
+            choiceArgument: {},
+          },
         ],
       } as never,
       PARTY,
     );
-    expect(m).toMatchObject({ kind: 'unlock', amount: '8.0000000000', lockedAmuletCid: 'cid-locked' });
+    expect(m).toMatchObject({
+      kind: 'unlock',
+      amount: '8.0000000000',
+      lockedAmuletCid: 'cid-locked',
+    });
   });
 
   it('SWAP deposit (LockedAmulet + transfer keluar) TIDAK dianggap lock', () => {
@@ -457,7 +556,13 @@ describe('readLockMovement (lock/unlock dana sendiri)', () => {
           {
             choice: 'TransferFactory_Transfer',
             actingParties: [PARTY],
-            choiceArgument: { transfer: { sender: PARTY, receiver: 'oneswap-wallet::x', amount: '15' } },
+            choiceArgument: {
+              transfer: {
+                sender: PARTY,
+                receiver: 'oneswap-wallet::x',
+                amount: '15',
+              },
+            },
           },
         ],
       } as never,
@@ -478,7 +583,13 @@ describe('readLockMovement (lock/unlock dana sendiri)', () => {
           },
         ],
         archived: [],
-        exercised: [{ choice: 'AmuletRules_Transfer', actingParties: [PARTY], choiceArgument: {} }],
+        exercised: [
+          {
+            choice: 'AmuletRules_Transfer',
+            actingParties: [PARTY],
+            choiceArgument: {},
+          },
+        ],
       } as never,
       PARTY,
     );
@@ -489,7 +600,13 @@ describe('readLockMovement (lock/unlock dana sendiri)', () => {
 describe('selfUnlockCredit — unlock dana sendiri, bukan Receive', () => {
   const PARTY = USER;
   const HOLD_IV = (owner: string, amount: string) => [
-    { viewValue: { owner, amount, instrumentId: { id: 'Amulet', admin: 'DSO::x' } } },
+    {
+      viewValue: {
+        owner,
+        amount,
+        instrumentId: { id: 'Amulet', admin: 'DSO::x' },
+      },
+    },
   ];
   /** Update unlock: exercise LockedAmulet_UnlockV2 + Amulet persisten milik party. */
   const unlockEv = (amount: string, lockedCid = 'cid-locked') =>
@@ -560,7 +677,9 @@ describe('selfUnlockCredit — unlock dana sendiri, bukan Receive', () => {
   });
 
   it('jumlah hampir sama tapi beda nyata (toleransi 1e-9 relatif) → null', () => {
-    expect(selfUnlockCredit(unlockEv('5.0000000000'), PARTY, 5.000001)).toBeNull();
+    expect(
+      selfUnlockCredit(unlockEv('5.0000000000'), PARTY, 5.000001),
+    ).toBeNull();
   });
 
   it('transfer biasa tanpa unlock → null', () => {
@@ -577,7 +696,12 @@ describe('selfUnlockCredit — unlock dana sendiri, bukan Receive', () => {
           ],
           archived: [],
           exercised: [
-            { choice: 'TransferFactory_Transfer', contractId: 'cid-t', actingParties: ['orang::x'], choiceArgument: {} },
+            {
+              choice: 'TransferFactory_Transfer',
+              contractId: 'cid-t',
+              actingParties: ['orang::x'],
+              choiceArgument: {},
+            },
           ],
         } as never,
         PARTY,
@@ -615,7 +739,13 @@ describe('selfUnlockCredit — unlock dana sendiri, bukan Receive', () => {
             {
               choice: 'TransferFactory_Transfer',
               actingParties: [PARTY],
-              choiceArgument: { transfer: { sender: PARTY, receiver: 'oneswap-wallet::x', amount: '10.42' } },
+              choiceArgument: {
+                transfer: {
+                  sender: PARTY,
+                  receiver: 'oneswap-wallet::x',
+                  amount: '10.42',
+                },
+              },
             },
           ],
         } as never,
@@ -717,7 +847,8 @@ describe('isOwnChangeCredit — change pengirim bukan penerimaan (regresi Send h
   it('update LOCK (change 0.1 milik pengirim) → change, bukan Receive — kasus airplanestar 1220f33a', () => {
     // Realita ledger update lock: created LockedAmulet 10 CC + created Amulet
     // 0.1 CC (change) milik pengirim, plus AmuletRules_Transfer sender=pengirim.
-    const PL = 'canquest-user-7fd3df003453::1220a5e003d34981573be4bc35737d6b78176e7117af28e80c90ec339a0262b92260';
+    const PL =
+      'canquest-user-7fd3df003453::1220a5e003d34981573be4bc35737d6b78176e7117af28e80c90ec339a0262b92260';
     expect(
       isOwnChangeCredit({
         ownerPartyId: PL,
@@ -737,15 +868,18 @@ describe('pickIncomingMemo — memo penerima dari reason on-chain', () => {
   };
 
   it('memo asli pengirim → dipakai', () => {
-    expect(
-      pickIncomingMemo({ reasons: ['untuk kopi'], ...base }),
-    ).toBe('untuk kopi');
+    expect(pickIncomingMemo({ reasons: ['untuk kopi'], ...base })).toBe(
+      'untuk kopi',
+    );
   });
 
   it('fallback otomatis "Send to <hint penerima>" → null (bukan memo)', () => {
     expect(
       pickIncomingMemo({
-        reasons: ['holders released lock', 'Send to canquest-user-7fd3df003453'],
+        reasons: [
+          'holders released lock',
+          'Send to canquest-user-7fd3df003453',
+        ],
         ...base,
       }),
     ).toBeNull();
@@ -762,7 +896,10 @@ describe('pickIncomingMemo — memo penerima dari reason on-chain', () => {
       pickIncomingMemo({ reasons: ['holders released lock'], ...base }),
     ).toBeNull();
     expect(
-      pickIncomingMemo({ reasons: ['Swap 10.42 CC → USDCx (OneSwap esc_x)'], ...base }),
+      pickIncomingMemo({
+        reasons: ['Swap 10.42 CC → USDCx (OneSwap esc_x)'],
+        ...base,
+      }),
     ).toBeNull();
     expect(
       pickIncomingMemo({ reasons: ['Platform fee: @amel'], ...base }),

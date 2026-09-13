@@ -1,6 +1,10 @@
 import { createHash } from 'crypto';
 
-import { BadRequestException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
@@ -189,11 +193,13 @@ describe('AuthService — register / login / refresh', () => {
     const rawToken = 'f'.repeat(96);
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
 
-    function seedRefreshRow(over: Partial<{
-      revokedAt: Date | null;
-      expiresAt: Date;
-      user: UserRow;
-    }> = {}) {
+    function seedRefreshRow(
+      over: Partial<{
+        revokedAt: Date | null;
+        expiresAt: Date;
+        user: UserRow;
+      }> = {},
+    ) {
       prisma.refreshToken.findUnique.mockResolvedValue({
         id: 'rt-1',
         tokenHash,

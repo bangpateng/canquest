@@ -26,9 +26,7 @@ import dns from 'node:dns';
  *   yang DNS-nya di-override ke proxy mati (mis. PC dev); di VPS tidak perlu.
  */
 type WalletSdkModule = typeof import('@canton-network/wallet-sdk');
-export type CantonSdk = Awaited<
-  ReturnType<WalletSdkModule['SDK']['create']>
->;
+export type CantonSdk = Awaited<ReturnType<WalletSdkModule['SDK']['create']>>;
 
 @Injectable()
 export class CantonWalletSdkService {
@@ -66,7 +64,9 @@ export class CantonWalletSdkService {
       return ip ? orig(ip, opts, cb) : orig(hostname, opts, cb);
     };
     /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
-    this.logger.log(`DNS pin aktif untuk ${overrides.size} host (CANTON_DNS_OVERRIDES)`);
+    this.logger.log(
+      `DNS pin aktif untuk ${overrides.size} host (CANTON_DNS_OVERRIDES)`,
+    );
   }
 
   /** Instance SDK (lazy, sekali per proses). */
@@ -83,34 +83,40 @@ export class CantonWalletSdkService {
         // Pengecualian disengaja: satu-satunya cara memuat ESM dari output CJS.
         // Input 100% literal milik kami sendiri (tanpa data eksternal).
         // eslint-disable-next-line @typescript-eslint/no-implied-eval
-        const loadSdk = new Function(
-          'm',
-          'return import(m)',
-        ) as (m: string) => Promise<WalletSdkModule>;
+        const loadSdk = new Function('m', 'return import(m)') as (
+          m: string,
+        ) => Promise<WalletSdkModule>;
         const { SDK, CustomLogAdapter } = await loadSdk(
           '@canton-network/wallet-sdk',
         );
 
         // Logger redaksi: default SDK mencetak response (berisi access token).
-        const quiet = new CustomLogAdapter((level: string, ctx: Record<string, unknown>, message?: string) => {
-          if (level !== 'warn' && level !== 'error') return;
-          const safe: Record<string, unknown> = { ...ctx };
-          // Field response bisa memuat access token — buang sebelum di-log.
-          delete safe.response;
-          this.logger.warn(
-            `[sdk:${level}] ${message ?? ''} ${JSON.stringify(safe).slice(0, 160)}`,
-          );
-        });
+        const quiet = new CustomLogAdapter(
+          (level: string, ctx: Record<string, unknown>, message?: string) => {
+            if (level !== 'warn' && level !== 'error') return;
+            const safe: Record<string, unknown> = { ...ctx };
+            // Field response bisa memuat access token — buang sebelum di-log.
+            delete safe.response;
+            this.logger.warn(
+              `[sdk:${level}] ${message ?? ''} ${JSON.stringify(safe).slice(0, 160)}`,
+            );
+          },
+        );
 
-        const primary =
-          this.config.get<string>('LEDGER_API_URL')?.trim() || '';
+        const primary = this.config.get<string>('LEDGER_API_URL')?.trim() || '';
         const fallback =
           this.config.get<string>('CANTON_JSON_API_URL')?.trim() || '';
         const keycloakUrl = this.config.get<string>('KEYCLOAK_URL');
         const realm = this.config.get<string>('KEYCLOAK_REALM');
         const clientId = this.config.get<string>('LEDGER_CLIENT_ID');
         const clientSecret = this.config.get<string>('LEDGER_CLIENT_SECRET');
-        if ((!primary && !fallback) || !keycloakUrl || !realm || !clientId || !clientSecret) {
+        if (
+          (!primary && !fallback) ||
+          !keycloakUrl ||
+          !realm ||
+          !clientId ||
+          !clientSecret
+        ) {
           throw new Error(
             'Konfigurasi SDK belum lengkap (LEDGER_API_URL/CANTON_JSON_API_URL + KEYCLOAK_URL/REALM + LEDGER_CLIENT_ID/SECRET)',
           );

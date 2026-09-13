@@ -1,4 +1,9 @@
-import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CantonLedgerService } from '../canton-ledger.service';
@@ -66,7 +71,10 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
     this.timers.push(daily);
 
     // Reward-pending monitor — tiap 5 menit.
-    const monitor = setInterval(() => void this.rewardPendingTick(), 5 * 60_000);
+    const monitor = setInterval(
+      () => void this.rewardPendingTick(),
+      5 * 60_000,
+    );
     monitor.unref?.();
     this.timers.push(monitor);
 
@@ -124,7 +132,11 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
       if (!provider) return;
       // Pemakai external yang preapproval-nya belum aktif tapi punya proposal.
       const users = await this.prisma.user.findMany({
-        where: { walletKind: 'external', cantonPartyId: { not: null }, status: 'ACTIVE' },
+        where: {
+          walletKind: 'external',
+          cantonPartyId: { not: null },
+          status: 'ACTIVE',
+        },
         select: { cantonPartyId: true },
         take: 500,
       });
@@ -146,7 +158,9 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
         );
       }
     } catch (err) {
-      this.logger.warn(`acceptPendingPreapprovalProposals error: ${String(err).slice(0, 140)}`);
+      this.logger.warn(
+        `acceptPendingPreapprovalProposals error: ${String(err).slice(0, 140)}`,
+      );
     }
   }
 
@@ -155,14 +169,22 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
    * ALERT (log ERROR + return list) bila gagal — cron diam-diam adalah bug
    * SECURITY.md §3.6, bukan fitur.
    */
-  async renewPreapprovals(): Promise<{ scanned: number; renewed: number; alerts: string[] }> {
+  async renewPreapprovals(): Promise<{
+    scanned: number;
+    renewed: number;
+    alerts: string[];
+  }> {
     const alerts: string[] = [];
     const exerciseEnabled =
       this.config.get<string>('V30_PREAPPROVAL_RENEWAL_ENABLED') === 'true';
     const marginMs = V30_PREAPPROVAL_RENEWAL_MARGIN_DAYS * 24 * 60 * 60 * 1000;
 
     const users = await this.prisma.user.findMany({
-      where: { walletKind: 'external', cantonPartyId: { not: null }, status: 'ACTIVE' },
+      where: {
+        walletKind: 'external',
+        cantonPartyId: { not: null },
+        status: 'ACTIVE',
+      },
       select: { id: true, cantonPartyId: true },
       take: 500,
     });
@@ -171,11 +193,15 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
 
     for (const u of users) {
       const partyId = u.cantonPartyId!;
-      let status: Awaited<ReturnType<CantonLedgerService['getTransferPreapprovalAuthoritative']>>;
+      let status: Awaited<
+        ReturnType<CantonLedgerService['getTransferPreapprovalAuthoritative']>
+      >;
       try {
         status = await this.ledger.getTransferPreapprovalAuthoritative(partyId);
       } catch (err) {
-        alerts.push(`user=${u.id.slice(0, 8)}… cek preapproval gagal: ${String(err).slice(0, 80)}`);
+        alerts.push(
+          `user=${u.id.slice(0, 8)}… cek preapproval gagal: ${String(err).slice(0, 80)}`,
+        );
         continue;
       }
       scanned++;
@@ -190,7 +216,11 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
         );
         continue;
       }
-      const ok = await this.exerciseRenew(partyId, status.contractId, status.templateId);
+      const ok = await this.exerciseRenew(
+        partyId,
+        status.contractId,
+        status.templateId,
+      );
       if (ok) renewed++;
       else {
         alerts.push(
@@ -200,9 +230,13 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
       }
     }
     if (alerts.length > 0) {
-      this.logger.error(`⚠️ PREAPPROVAL RENEWAL — ${alerts.length} alert:\n  - ${alerts.join('\n  - ')}`);
+      this.logger.error(
+        `⚠️ PREAPPROVAL RENEWAL — ${alerts.length} alert:\n  - ${alerts.join('\n  - ')}`,
+      );
     } else {
-      this.logger.log(`preapproval-renewal: scanned=${scanned} renewed=${renewed} (semaya sehat)`);
+      this.logger.log(
+        `preapproval-renewal: scanned=${scanned} renewed=${renewed} (semaya sehat)`,
+      );
     }
     return { scanned, renewed, alerts };
   }
@@ -215,12 +249,17 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     try {
       if (!contractId || !templateId) return false;
-      const provider = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+      const provider = this.config
+        .get<string>('CANTON_VALIDATOR_PARTY_ID')
+        ?.trim();
       if (!provider) return false;
 
       // Context + input pembayaran — mirror createTransferPreapprovalViaLedger.
-      const amuletRules = await this.ledger.fetchScanProxyContract('amulet-rules');
-      const openRound = await this.ledger.fetchScanProxyContract('open-and-issuing-mining-rounds');
+      const amuletRules =
+        await this.ledger.fetchScanProxyContract('amulet-rules');
+      const openRound = await this.ledger.fetchScanProxyContract(
+        'open-and-issuing-mining-rounds',
+      );
       if (!amuletRules || !openRound) return false;
       const holdings = await this.ledger.queryAmuletHoldingsRaw(provider);
       const round = openRound.round ?? 0;
@@ -263,15 +302,27 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
         `v30-renew-${partyId.split('::')[0]}-${Date.now()}`,
         undefined,
         [
-          { templateId: amuletRules.templateId, contractId: amuletRules.contractId, createdEventBlob: amuletRules.blob },
-          { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+          {
+            templateId: amuletRules.templateId,
+            contractId: amuletRules.contractId,
+            createdEventBlob: amuletRules.blob,
+          },
+          {
+            templateId: openRound.templateId,
+            contractId: openRound.contractId,
+            createdEventBlob: openRound.blob,
+          },
         ],
       );
       if (!res.ok) {
-        this.logger.warn(`renew gagal party=${partyId.split('::')[0]}: ${res.text.slice(0, 160)}`);
+        this.logger.warn(
+          `renew gagal party=${partyId.split('::')[0]}: ${res.text.slice(0, 160)}`,
+        );
         return false;
       }
-      this.logger.log(`preapproval diperpanjang → ${newExpiresAt} (party=${partyId.split('::')[0]})`);
+      this.logger.log(
+        `preapproval diperpanjang → ${newExpiresAt} (party=${partyId.split('::')[0]})`,
+      );
       return true;
     } catch (err) {
       this.logger.warn(`exerciseRenew error: ${String(err).slice(0, 120)}`);
@@ -286,7 +337,11 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
    * di wallet UI) dan tandai record yang holding-nya sudah hilang.
    * OwnerExpireLockV2 controller OWNER — user menekan tombolnya sendiri.
    */
-  async expireLocks(): Promise<{ checked: number; backfilled: number; cleaned: number }> {
+  async expireLocks(): Promise<{
+    checked: number;
+    backfilled: number;
+    cleaned: number;
+  }> {
     const records = await this.prisma.lockProposalRecord.findMany({
       where: { status: 'ACCEPTED', expiresAt: { lt: new Date() } },
       take: 200,
@@ -295,7 +350,9 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
     let cleaned = 0;
     for (const record of records) {
       const ccLock = record.lockedAmuletCid
-        ? await this.prisma.ccLock.findUnique({ where: { lockedAmuletCid: record.lockedAmuletCid } })
+        ? await this.prisma.ccLock.findUnique({
+            where: { lockedAmuletCid: record.lockedAmuletCid },
+          })
         : null;
       if (!ccLock && record.lockedAmuletCid) {
         // On-chain sukses tapi mirror gagal dulu — backfill sekarang.
@@ -310,7 +367,9 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
         });
         if (user?.cantonPartyId) {
           const locks = await this.ledger.findLockedAmulets(user.cantonPartyId);
-          const stillActive = locks.some((l) => l.contractId === record.lockedAmuletCid);
+          const stillActive = locks.some(
+            (l) => l.contractId === record.lockedAmuletCid,
+          );
           if (!stillActive) {
             await this.locks.onLockedAmuletUnlocked(record.lockedAmuletCid!);
             cleaned++;
@@ -351,7 +410,15 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
           endsAt: { not: null },
           // T1 HANYA untuk Raffle (klarifikasi owner 2026-09-03): FCFS ditutup
           // oleh kuota penuh / tanggal berakhir — tanpa T1.
-          rewardType: { in: ['INVITE_CODE_RANDOM', 'INVITE_CODE', 'CC_MANUAL', 'CC_AND_INVITE', 'CC_AND_CODE_RAFFLE'] },
+          rewardType: {
+            in: [
+              'INVITE_CODE_RANDOM',
+              'INVITE_CODE',
+              'CC_MANUAL',
+              'CC_AND_INVITE',
+              'CC_AND_CODE_RAFFLE',
+            ],
+          },
         },
         select: { id: true, startsAt: true, endsAt: true },
         take: 100,
@@ -405,7 +472,10 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
         if (seen.has(key)) continue;
         seen.add(key);
         if (seen.size === 1) quests = 1;
-        const made = await this.claims.createOfferForWinner(w.questId, w.userId);
+        const made = await this.claims.createOfferForWinner(
+          w.questId,
+          w.userId,
+        );
         if (made.ok) offers++;
         else if (made.skipped !== 'exists') {
           this.logger.warn(
@@ -415,7 +485,9 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
       }
       quests = new Set(pending.map((p) => p.questId)).size;
     } catch (err) {
-      this.logger.error(`offerCreationTick error: ${String(err).slice(0, 160)}`);
+      this.logger.error(
+        `offerCreationTick error: ${String(err).slice(0, 160)}`,
+      );
     }
     return { quests, offers };
   }
@@ -428,7 +500,10 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
    * MENGEMBALIKAN KODE ke pool (unassign) supaya bisa dipakai campaign lain /
    * draw ulang. Baris WinnerDraw ditandai Expired (kode dibersihkan).
    */
-  async expiredOfferTick(): Promise<{ expired: number; codesReturned: number }> {
+  async expiredOfferTick(): Promise<{
+    expired: number;
+    codesReturned: number;
+  }> {
     let expired = 0;
     let codesReturned = 0;
     try {
@@ -483,7 +558,11 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
         }
         await this.prisma.winnerDraw.update({
           where: { id: d.id },
-          data: { claimStatus: 'Expired', inviteCode: null, rewardClosedAt: new Date() },
+          data: {
+            claimStatus: 'Expired',
+            inviteCode: null,
+            rewardClosedAt: new Date(),
+          },
         });
         expired++;
         this.logger.log(
@@ -498,17 +577,24 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
 
   // ── 3. RewardPending monitor ──────────────────────────────────────────────
 
-  async rewardPendingTick(): Promise<{ checked: number; confirmed: number; expired: number }> {
+  async rewardPendingTick(): Promise<{
+    checked: number;
+    confirmed: number;
+    expired: number;
+  }> {
     let pending: Awaited<ReturnType<ClaimOfferService['listRewardPending']>>;
     try {
       pending = await this.claims.listRewardPending();
     } catch (err) {
-      this.logger.warn(`rewardPendingTick list gagal: ${String(err).slice(0, 120)}`);
+      this.logger.warn(
+        `rewardPendingTick list gagal: ${String(err).slice(0, 120)}`,
+      );
       return { checked: 0, confirmed: 0, expired: 0 };
     }
     let confirmed = 0;
     let expiredCount = 0;
-    const rewardSender = this.config.get<string>('CANTON_REWARD_PARTY_ID')?.trim() ?? '';
+    const rewardSender =
+      this.config.get<string>('CANTON_REWARD_PARTY_ID')?.trim() ?? '';
 
     for (const row of pending) {
       try {
@@ -523,10 +609,19 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
         // implementer TransferInstruction, dicocokkan pengirim+jumlah.)
         const pendingIncoming = await this.ledger
           .queryPendingOffers(user.cantonPartyId, 'incoming')
-          .catch(() => [] as Array<{ sender: string; amount: string; instrumentId: string; expiresAt: string }>);
+          .catch(
+            () =>
+              [] as Array<{
+                sender: string;
+                amount: string;
+                instrumentId: string;
+                expiresAt: string;
+              }>,
+          );
         const matched = pendingIncoming.find(
           (o) =>
-            (!rewardSender || o.sender.split('::')[0] === rewardSender.split('::')[0]) &&
+            (!rewardSender ||
+              o.sender.split('::')[0] === rewardSender.split('::')[0]) &&
             Math.abs(parseFloat(o.amount) - row.rewardAmountCc) < 1e-6,
         );
 
@@ -553,7 +648,9 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
             row.rewardToken,
           ).catch(() => -1);
           if (balance >= row.rewardAmountCc - 1e-6) {
-            const res = await this.claims.confirmRewardReceived(row.receiptContractId);
+            const res = await this.claims.confirmRewardReceived(
+              row.receiptContractId,
+            );
             if (res.ok) {
               confirmed++;
               this.logger.log(
@@ -574,7 +671,9 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
               );
               if (res.ok) {
                 expiredCount++;
-                this.logger.warn(`RewardPending → RewardExpired draw=${row.id.slice(0, 8)}… (saldo bukti gagal)`);
+                this.logger.warn(
+                  `RewardPending → RewardExpired draw=${row.id.slice(0, 8)}… (saldo bukti gagal)`,
+                );
               }
             }
           }
@@ -584,7 +683,9 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
         // SSE bisa memunculkan "Check your offers" tanpa spam.
         await this.markReminderIfDue(row.id);
       } catch (err) {
-        this.logger.warn(`rewardPending draw=${row.id.slice(0, 8)}… error: ${String(err).slice(0, 120)}`);
+        this.logger.warn(
+          `rewardPending draw=${row.id.slice(0, 8)}… error: ${String(err).slice(0, 120)}`,
+        );
       }
     }
     if (pending.length > 0) {
@@ -605,7 +706,10 @@ export class V30JobsService implements OnModuleInit, OnModuleDestroy {
       return holdings.reduce((s, h) => s + (parseFloat(h.amount) || 0), 0);
     }
     // Non-CC (USDCx dsb): instrument id = simbol token di dapp.
-    const holdings = await this.ledger.getTokenHoldingCids(partyId, rewardToken);
+    const holdings = await this.ledger.getTokenHoldingCids(
+      partyId,
+      rewardToken,
+    );
     return holdings.length; // jumlah holding bukan nominal — cukup utk bukti "pernah diterima"
   }
 

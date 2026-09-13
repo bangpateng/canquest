@@ -111,9 +111,14 @@ export class SwapService {
         const done = await this.oneswap.getSwap(esc).catch(() => null);
         if (!done) continue;
         if (
-          ['returned', 'refunded', 'expired', 'failed', 'cancelled', 'needs_review'].includes(
-            done.status,
-          )
+          [
+            'returned',
+            'refunded',
+            'expired',
+            'failed',
+            'cancelled',
+            'needs_review',
+          ].includes(done.status)
         ) {
           const user = await this.users.findById(row.userId);
           await this.finalizeSwapInBackground({
@@ -238,7 +243,9 @@ export class SwapService {
       data: {
         userId,
         direction:
-          params.from.toUpperCase() === CC_SYMBOL ? 'CC_TO_TOKEN' : 'TOKEN_TO_CC',
+          params.from.toUpperCase() === CC_SYMBOL
+            ? 'CC_TO_TOKEN'
+            : 'TOKEN_TO_CC',
         sellInstrumentId: params.from,
         sellInstrumentAdmin: '',
         sellAmount: params.amount,
@@ -484,16 +491,16 @@ export class SwapService {
       : priorSwap
         ? priorSwap
         : await this.createOrResumeSwap(
-      {
-        userRef: user.id,
-        inSymbol: params.from,
-        amountIn: params.amount,
-        outSymbol: params.to,
-        minOut: Math.max(0, quote.amountOut * minOutFactor),
-        slippageBps,
-      },
-      { keepAwaitingDeposit: opts?.skipDeposit === true },
-    );
+            {
+              userRef: user.id,
+              inSymbol: params.from,
+              amountIn: params.amount,
+              outSymbol: params.to,
+              minOut: Math.max(0, quote.amountOut * minOutFactor),
+              slippageBps,
+            },
+            { keepAwaitingDeposit: opts?.skipDeposit === true },
+          );
 
     // Kalau swap lama sudah terminal (refunded/expired), recreate yang baru.
     if (
@@ -559,7 +566,9 @@ export class SwapService {
             data: { ccLedgerTxId: transfer.updateId },
           })
           .catch((e) =>
-            this.logger.warn(`swap deposit updateId persist fail: ${String(e)}`),
+            this.logger.warn(
+              `swap deposit updateId persist fail: ${String(e)}`,
+            ),
           );
       } else {
         this.logger.warn(
@@ -621,7 +630,9 @@ export class SwapService {
             where: { id: args.swapTxId },
             data: {
               status: result.success ? 'EXECUTED' : 'FAILED',
-              buyAmount: result.outputAmount ? Number(result.outputAmount) : null,
+              buyAmount: result.outputAmount
+                ? Number(result.outputAmount)
+                : null,
               swapExecutedAt: result.success ? new Date() : null,
               errorMessage: result.success ? null : (result.message ?? null),
             },

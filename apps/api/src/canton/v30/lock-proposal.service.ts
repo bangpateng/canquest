@@ -58,7 +58,10 @@ export class LockProposalService {
    * isi "canquest:campaign-42"; mapping contextRef→quest hanya di DB
    * (LOCK-SPEC.md §"opaque token").
    */
-  async createProposal(questId: string, userId: string): Promise<{
+  async createProposal(
+    questId: string,
+    userId: string,
+  ): Promise<{
     ok: boolean;
     recordId?: string;
     proposalContractId?: string;
@@ -67,21 +70,39 @@ export class LockProposalService {
     proposalExpiresAt?: string;
     error?: string;
   }> {
-    if (!v30Enabled(this.config)) return { ok: false, error: 'CLAIM_V30_ENABLED=false' };
+    if (!v30Enabled(this.config))
+      return { ok: false, error: 'CLAIM_V30_ENABLED=false' };
     if (!this.validatorParty || !this.dsoParty) {
-      return { ok: false, error: 'CANTON_VALIDATOR_PARTY_ID / CANTON_DSO_PARTY_ID belum diset' };
+      return {
+        ok: false,
+        error: 'CANTON_VALIDATOR_PARTY_ID / CANTON_DSO_PARTY_ID belum diset',
+      };
     }
 
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
-    if (!quest || !isV30Quest(quest)) return { ok: false, error: 'Quest bukan jalur v30' };
-    if (quest.status !== 'ACTIVE') return { ok: false, error: 'Campaign tidak aktif' };
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
+    if (!quest || !isV30Quest(quest))
+      return { ok: false, error: 'Quest bukan jalur v30' };
+    if (quest.status !== 'ACTIVE')
+      return { ok: false, error: 'Campaign tidak aktif' };
 
     // T2 = campaign end. Lock harus masih hidup sampai T2.
     const endsAt = quest.endsAt ?? null;
-    if (!endsAt) return { ok: false, error: 'Quest belum punya endsAt (T2) — set di dashboard admin' };
+    if (!endsAt)
+      return {
+        ok: false,
+        error: 'Quest belum punya endsAt (T2) — set di dashboard admin',
+      };
     const proposalExpiresAt = new Date(Date.now() + V30_PROPOSAL_WINDOW_MS);
-    if (endsAt.getTime() <= proposalExpiresAt.getTime() + EXPIRY_TOLERANCE_SECONDS * 1000) {
-      return { ok: false, error: 'Campaign terlalu dekat dengan berakhir (T2) untuk lock baru' };
+    if (
+      endsAt.getTime() <=
+      proposalExpiresAt.getTime() + EXPIRY_TOLERANCE_SECONDS * 1000
+    ) {
+      return {
+        ok: false,
+        error: 'Campaign terlalu dekat dengan berakhir (T2) untuk lock baru',
+      };
     }
 
     // T1 = 70% durasi — pendaftaran TERTUTUP setelah ini. HANYA untuk Raffle
@@ -96,7 +117,8 @@ export class LockProposalService {
       if (registrationClosed) {
         return {
           ok: false,
-          error: 'Pendaftaran campaign sudah ditutup (T1) — lock baru tidak diterima.',
+          error:
+            'Pendaftaran campaign sudah ditutup (T1) — lock baru tidak diterima.',
         };
       }
     }
@@ -105,7 +127,10 @@ export class LockProposalService {
       where: { questId_userId: { questId, userId } },
     });
     if (existing && existing.status !== 'PROPOSED') {
-      return { ok: false, error: `Sudah ada lock (${existing.status}) utk campaign ini` };
+      return {
+        ok: false,
+        error: `Sudah ada lock (${existing.status}) utk campaign ini`,
+      };
     }
 
     const user = await this.users.findById(userId);
@@ -113,7 +138,10 @@ export class LockProposalService {
       return { ok: false, error: 'Wallet external belum aktif' };
     }
     if (user.walletKind && user.walletKind !== 'external') {
-      return { ok: false, error: 'Jalur lock v30 hanya utk wallet non-custodial' };
+      return {
+        ok: false,
+        error: 'Jalur lock v30 hanya utk wallet non-custodial',
+      };
     }
 
     // Ambang = eligibility campaign (LOCK_CC). Default entryCcLock / 30 CC.
@@ -135,7 +163,10 @@ export class LockProposalService {
       `v30-lock-${createHash('sha256').update(contextRef).digest('hex').slice(0, 24)}`,
     );
     if (!res.ok || !res.contractId) {
-      return { ok: false, error: `create LockProposal gagal: ${res.error ?? '?'}` };
+      return {
+        ok: false,
+        error: `create LockProposal gagal: ${res.error ?? '?'}`,
+      };
     }
 
     const record = existing
@@ -189,7 +220,8 @@ export class LockProposalService {
     userId: string,
     params: Record<string, unknown>,
   ): Promise<V30BuiltFlow> {
-    if (!v30Enabled(this.config)) throw new BadRequestException('v30 lock disabled');
+    if (!v30Enabled(this.config))
+      throw new BadRequestException('v30 lock disabled');
     const questId = typeof params.questId === 'string' ? params.questId : '';
     if (!questId) throw new BadRequestException('questId is required');
 
@@ -197,7 +229,9 @@ export class LockProposalService {
       where: { questId_userId: { questId, userId } },
     });
     if (!record || record.status !== 'PROPOSED') {
-      throw new BadRequestException('LockProposal tidak ditemukan / sudah tidak PROPOSED');
+      throw new BadRequestException(
+        'LockProposal tidak ditemukan / sudah tidak PROPOSED',
+      );
     }
     if (record.proposalExpiresAt.getTime() <= Date.now()) {
       throw new BadRequestException(
@@ -205,14 +239,20 @@ export class LockProposalService {
       );
     }
     const user = await this.users.findById(userId);
-    if (!user?.cantonPartyId) throw new BadRequestException('Wallet tidak ditemukan');
+    if (!user?.cantonPartyId)
+      throw new BadRequestException('Wallet tidak ditemukan');
 
-    const amuletRules = await this.ledger.fetchScanProxyContract('amulet-rules');
-    if (!amuletRules) throw new BadRequestException('scan-proxy /amulet-rules gagal');
+    const amuletRules =
+      await this.ledger.fetchScanProxyContract('amulet-rules');
+    if (!amuletRules)
+      throw new BadRequestException('scan-proxy /amulet-rules gagal');
     const openRound = await this.ledger.fetchScanProxyContract(
       'open-and-issuing-mining-rounds',
     );
-    if (!openRound) throw new BadRequestException('scan-proxy /open-and-issuing-mining-rounds gagal');
+    if (!openRound)
+      throw new BadRequestException(
+        'scan-proxy /open-and-issuing-mining-rounds gagal',
+      );
 
     const amount = Number(record.amountCc);
     const holdings = await this.ledger.queryAmuletHoldings(user.cantonPartyId);
@@ -289,7 +329,10 @@ export class LockProposalService {
     const lockRecordId = readStr(meta.lockRecordId) ?? '';
     if (!lockRecordId) return;
     try {
-      const verified = await this.verifyAndRecord(lockRecordId, result?.updateId);
+      const verified = await this.verifyAndRecord(
+        lockRecordId,
+        result?.updateId,
+      );
       this.logger.log(
         `accept_lock_proposal ${verified.ok ? 'TERVERIFIKASI' : 'GAGAL VERIFIKASI'} record=${lockRecordId.slice(0, 8)}… ${verified.detail ?? ''}`,
       );
@@ -320,26 +363,35 @@ export class LockProposalService {
       locks.find((l) => l.optContext === record.contextRef) ??
       locks.find(
         (l) =>
-          Math.abs(
-            Date.parse(l.expiresAt || '') - record.expiresAt.getTime(),
-          ) /
+          Math.abs(Date.parse(l.expiresAt || '') - record.expiresAt.getTime()) /
             1000 <=
           EXPIRY_TOLERANCE_SECONDS,
       );
     if (!match) {
-      return { ok: false, detail: 'LockedAmulet dgn contextRef/expiresAt cocok tidak ditemukan di ACS' };
+      return {
+        ok: false,
+        detail:
+          'LockedAmulet dgn contextRef/expiresAt cocok tidak ditemukan di ACS',
+      };
     }
     // holders WAJIB [validator] persis — selain itu TOLAK (gerbang eligibility).
     const holdersOk =
-      match.holders.length === 1 && cantonPartyIdsEqual(match.holders[0], this.validatorParty);
+      match.holders.length === 1 &&
+      cantonPartyIdsEqual(match.holders[0], this.validatorParty);
     if (!holdersOk) {
       this.logger.error(
         `⚠️ LOCK HOLDERS SALAH: cid=${match.contractId.slice(0, 16)}… holders=${JSON.stringify(match.holders)} — record TIDAK di-ACCEPT (SECURITY.md §holders)`,
       );
-      return { ok: false, detail: `holders != [validator]: ${JSON.stringify(match.holders)}` };
+      return {
+        ok: false,
+        detail: `holders != [validator]: ${JSON.stringify(match.holders)}`,
+      };
     }
     if (match.amount + 1e-9 < Number(record.amountCc)) {
-      return { ok: false, detail: `amount ${match.amount} < ambang ${Number(record.amountCc)}` };
+      return {
+        ok: false,
+        detail: `amount ${match.amount} < ambang ${Number(record.amountCc)}`,
+      };
     }
 
     await this.prisma.lockProposalRecord.update({
@@ -353,7 +405,9 @@ export class LockProposalService {
     });
     // Mirror utk gating partisipasi existing (CampaignEligibilityLedger LOCK_CC).
     await this.prisma.campaignEligibilityLedger.upsert({
-      where: { questId_userId: { questId: record.questId, userId: record.userId } },
+      where: {
+        questId_userId: { questId: record.questId, userId: record.userId },
+      },
       create: {
         questId: record.questId,
         userId: record.userId,
@@ -364,7 +418,11 @@ export class LockProposalService {
         status: 'ELIGIBLE',
         lockId: `v30:${record.contextRef}`,
       },
-      update: { status: 'ELIGIBLE', amount: Number(record.amountCc), lockId: `v30:${record.contextRef}` },
+      update: {
+        status: 'ELIGIBLE',
+        amount: Number(record.amountCc),
+        lockId: `v30:${record.contextRef}`,
+      },
     });
     // Mirror CcLock supaya lock tampil di wallet UI + bisa di-unlock via flow
     // unlock_cc existing (LockedAmulet_OwnerExpireLockV2, controller owner).
@@ -386,7 +444,10 @@ export class LockProposalService {
       },
       update: { status: 'LOCKED' },
     });
-    return { ok: true, detail: `cid=${match.contractId.slice(0, 14)}… amount=${match.amount}` };
+    return {
+      ok: true,
+      detail: `cid=${match.contractId.slice(0, 14)}… amount=${match.amount}`,
+    };
   }
 
   // ── 4. Re-verifikasi T1 + expiry ──────────────────────────────────────────
@@ -429,7 +490,8 @@ export class LockProposalService {
         data: {
           status: 'REVOKED',
           revokedAt: new Date(),
-          revokedReason: 'T1 re-verify: LockedAmulet tidak lagi aktif (early-unlock?)',
+          revokedReason:
+            'T1 re-verify: LockedAmulet tidak lagi aktif (early-unlock?)',
         },
       });
       await this.prisma.campaignEligibilityLedger.updateMany({
@@ -437,7 +499,9 @@ export class LockProposalService {
         data: { status: 'REVOKED' },
       });
       revoked++;
-      details.push(`user=${record.userId.slice(0, 8)}… dicabut (lock hilang dari ACS)`);
+      details.push(
+        `user=${record.userId.slice(0, 8)}… dicabut (lock hilang dari ACS)`,
+      );
     }
     this.logger.log(
       `reVerify T1 quest=${questId}: checked=${records.length} eligible=${stillEligible} revoked=${revoked}`,
@@ -446,7 +510,10 @@ export class LockProposalService {
   }
 
   /** Status lock utk UI (endpoint GET lock-v30/status). */
-  async lockStatus(questId: string, userId: string): Promise<{
+  async lockStatus(
+    questId: string,
+    userId: string,
+  ): Promise<{
     v30: true;
     record: {
       exists: boolean;
@@ -460,17 +527,21 @@ export class LockProposalService {
     };
     eligible: boolean;
   }> {
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
-    if (!quest || !isV30Quest(quest)) throw new BadRequestException('Quest bukan jalur v30');
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
+    if (!quest || !isV30Quest(quest))
+      throw new BadRequestException('Quest bukan jalur v30');
     const record = await this.prisma.lockProposalRecord.findUnique({
       where: { questId_userId: { questId, userId } },
     });
     const eligibility = await this.prisma.campaignEligibilityLedger.findUnique({
       where: { questId_userId: { questId, userId } },
     });
-    const proposalWindowOpen = !!record
-      && record.status === 'PROPOSED'
-      && record.proposalExpiresAt.getTime() > Date.now();
+    const proposalWindowOpen =
+      !!record &&
+      record.status === 'PROPOSED' &&
+      record.proposalExpiresAt.getTime() > Date.now();
     const canRequest =
       (!record || (record.status === 'PROPOSED' && !proposalWindowOpen)) &&
       quest.status === 'ACTIVE';
@@ -486,7 +557,8 @@ export class LockProposalService {
         canRequest,
         unlockedAt: record?.unlockedAt?.toISOString() ?? null,
       },
-      eligible: eligibility?.status === 'ELIGIBLE' || record?.status === 'ACCEPTED',
+      eligible:
+        eligibility?.status === 'ELIGIBLE' || record?.status === 'ACCEPTED',
     };
   }
 
@@ -495,15 +567,18 @@ export class LockProposalService {
     const record = await this.prisma.lockProposalRecord.findUnique({
       where: { lockedAmuletCid },
     });
-    if (!record || record.status === 'UNLOCKED' || record.status === 'REVOKED') return;
+    if (!record || record.status === 'UNLOCKED' || record.status === 'REVOKED')
+      return;
     await this.prisma.lockProposalRecord.update({
       where: { id: record.id },
       data: { status: 'UNLOCKED', unlockedAt: new Date() },
     });
-    await this.prisma.campaignEligibilityLedger.updateMany({
-      where: { questId: record.questId, userId: record.userId },
-      data: { status: 'EXPIRED' },
-    }).catch(() => undefined);
+    await this.prisma.campaignEligibilityLedger
+      .updateMany({
+        where: { questId: record.questId, userId: record.userId },
+        data: { status: 'EXPIRED' },
+      })
+      .catch(() => undefined);
   }
 }
 
@@ -511,7 +586,9 @@ function greedyFill(
   holdings: Array<{ contractId: string; amount: string }>,
   target: number,
 ): string[] {
-  const sorted = [...holdings].sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount));
+  const sorted = [...holdings].sort(
+    (a, b) => parseFloat(b.amount) - parseFloat(a.amount),
+  );
   const cids: string[] = [];
   let acc = 0;
   for (const h of sorted) {

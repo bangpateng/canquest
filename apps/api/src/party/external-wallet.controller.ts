@@ -89,7 +89,10 @@ export class ExternalWalletController {
 
   /** Langkah 2 — allocate dengan signature user, lalu bind ke akun. */
   @Post('complete')
-  async complete(@Req() req: AuthedReq, @Body() dto: CompleteExternalWalletDto) {
+  async complete(
+    @Req() req: AuthedReq,
+    @Body() dto: CompleteExternalWalletDto,
+  ) {
     this.assertEnabled();
 
     const existing = await this.users.findById(req.user.userId);
@@ -101,7 +104,7 @@ export class ExternalWalletController {
     }
 
     const username = dto.username
-      ? normalizeWalletUsername(dto.username) ?? undefined
+      ? (normalizeWalletUsername(dto.username) ?? undefined)
       : undefined;
     if (dto.username && (!username || username.length < 3)) {
       throw new BadRequestException('Username must be at least 3 characters.');

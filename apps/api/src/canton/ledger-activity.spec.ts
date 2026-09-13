@@ -5,12 +5,17 @@
  */
 import { LedgerActivityService } from './ledger-activity.service';
 
-const USER = 'canquest-user-7fd3df003453::1220a5e003d34981573be4bc35737d6b78176e7117af28e80c90ec339a0262b92260';
-const ESCROW = 'oneswap-wallet-mtpoao3s::122043df1a3b6ae04288cbcd1899434a945a75b849859f20b124e8ba07ebb812a047';
-const DSO = 'DSO::1220b1431ef217342db44d516bb9befde802be7d8899637d290895fa58880f19accc';
+const USER =
+  'canquest-user-7fd3df003453::1220a5e003d34981573be4bc35737d6b78176e7117af28e80c90ec339a0262b92260';
+const ESCROW =
+  'oneswap-wallet-mtpoao3s::122043df1a3b6ae04288cbcd1899434a945a75b849859f20b124e8ba07ebb812a047';
+const DSO =
+  'DSO::1220b1431ef217342db44d516bb9befde802be7d8899637d290895fa58880f19accc';
 
 function svc(): LedgerActivityService {
-  return Object.create(LedgerActivityService.prototype) as LedgerActivityService;
+  return Object.create(
+    LedgerActivityService.prototype,
+  ) as LedgerActivityService;
 }
 
 function row(over: Record<string, unknown>) {
@@ -33,7 +38,10 @@ describe('ledger activity projection (satu sumber)', () => {
       row({
         templateId: 'hash:Splice.Amulet:Amulet',
         payload: {
-          createArgument: { owner: USER, amount: { initialAmount: '8.6924543455' } },
+          createArgument: {
+            owner: USER,
+            amount: { initialAmount: '8.6924543455' },
+          },
           witnessParties: [USER],
         },
       }),

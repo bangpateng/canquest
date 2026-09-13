@@ -108,7 +108,9 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
       // pending (kasus: receive biasa drift, mis. DB 1.40 vs on-chain 0.70).
       // Non-fatal + di-cap agar tidak overload ledger API.
       await this.alignAllTokenBalances().catch((err) =>
-        this.logger.warn(`Offer reconciler: alignAllTokenBalances failed: ${String(err)}`),
+        this.logger.warn(
+          `Offer reconciler: alignAllTokenBalances failed: ${String(err)}`,
+        ),
       );
       // Scan KEDUA tabel PENDING dengan cid (offer yang belum settled).
       // L60-D: HANYA baris sender (TRANSFER_OUT). Baris receiver PENDING

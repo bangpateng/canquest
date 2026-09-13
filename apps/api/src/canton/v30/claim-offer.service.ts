@@ -3,7 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CantonLedgerService } from '../canton-ledger.service';
-import { TokenInstrumentHelper, normalizeRewardToken } from '../token-instrument.helper';
+import {
+  TokenInstrumentHelper,
+  normalizeRewardToken,
+} from '../token-instrument.helper';
 import { UsersService } from '../../users/users.service';
 import { hasRealWallet } from '../../common/wallet-policy';
 import { readStr } from '../ledger-json';
@@ -66,7 +69,9 @@ export class ClaimOfferService {
     return this.config.get<string>('CANTON_REWARD_PARTY_ID')?.trim() ?? '';
   }
   private get feeReceiverParty(): string {
-    return this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ?? '';
+    return (
+      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ?? ''
+    );
   }
   private get dsoParty(): string {
     return this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ?? '';
@@ -79,7 +84,8 @@ export class ClaimOfferService {
       ['CANTON_FEE_RECIPIENT_PARTY_ID', this.feeReceiverParty],
       ['CANTON_DSO_PARTY_ID', this.dsoParty],
     ] as const) {
-      if (!v) throw new BadRequestException(`${label} not configured (v30 claim)`);
+      if (!v)
+        throw new BadRequestException(`${label} not configured (v30 claim)`);
     }
   }
 
@@ -91,32 +97,56 @@ export class ClaimOfferService {
    * dikomit ke offer — pra-undian, tidak bisa ditukar admin setelahnya
    * (SECURITY.md §2).
    */
-  async createOfferForWinner(questId: string, userId: string): Promise<{
+  async createOfferForWinner(
+    questId: string,
+    userId: string,
+  ): Promise<{
     ok: boolean;
     offerContractId?: string;
     error?: string;
     skipped?: string;
   }> {
-    if (!v30Enabled(this.config)) return { ok: false, error: 'CLAIM_V30_ENABLED=false' };
+    if (!v30Enabled(this.config))
+      return { ok: false, error: 'CLAIM_V30_ENABLED=false' };
     this.assertConfigured();
 
     const [quest, draw] = await Promise.all([
       this.prisma.quest.findUnique({ where: { id: questId } }),
-      this.prisma.winnerDraw.findUnique({ where: { questId_userId: { questId, userId } } }),
+      this.prisma.winnerDraw.findUnique({
+        where: { questId_userId: { questId, userId } },
+      }),
     ]);
-    if (!quest || !isV30Quest(quest)) return { ok: false, error: 'Quest bukan jalur v30' };
+    if (!quest || !isV30Quest(quest))
+      return { ok: false, error: 'Quest bukan jalur v30' };
     if (!draw) return { ok: false, error: 'WinnerDraw tidak ditemukan' };
-    if (draw.offerContractId) return { ok: true, offerContractId: draw.offerContractId, skipped: 'exists' };
-    if (draw.distributed && draw.claimStatus !== 'RewardPending' && draw.claimStatus !== 'RewardExpired') {
+    if (draw.offerContractId)
+      return {
+        ok: true,
+        offerContractId: draw.offerContractId,
+        skipped: 'exists',
+      };
+    if (
+      draw.distributed &&
+      draw.claimStatus !== 'RewardPending' &&
+      draw.claimStatus !== 'RewardExpired'
+    ) {
       // v29 path already distributed this draw — jangan dobel.
-      return { ok: false, skipped: 'already-distributed-v29', error: 'Draw sudah didistribusi via jalur lama' };
+      return {
+        ok: false,
+        skipped: 'already-distributed-v29',
+        error: 'Draw sudah didistribusi via jalur lama',
+      };
     }
 
     // Matriks klaim — SATU sumber kebenaran FCFS/Raffle × CC/USDCx/Code.
     const model = v30ClaimModel(quest);
     if (!model.allowed) {
       // WAITLIST_EMAIL dsb. — bukan error, memang tanpa klaim on-chain.
-      return { ok: false, skipped: `offchain:${model.selection}`, error: `RewardType ${quest.rewardType} tidak punya klaim on-chain v30` };
+      return {
+        ok: false,
+        skipped: `offchain:${model.selection}`,
+        error: `RewardType ${quest.rewardType} tidak punya klaim on-chain v30`,
+      };
     }
 
     // Gate lock CC → eligibility WAJIB (jangan percaya bahwa peserta pernah lock;
@@ -127,7 +157,10 @@ export class ClaimOfferService {
         select: { id: true },
       });
       if (!eligible) {
-        return { ok: false, error: 'Peserta tidak eligible (lock CC tidak aktif / sudah dicabut)' };
+        return {
+          ok: false,
+          error: 'Peserta tidak eligible (lock CC tidak aktif / sudah dicabut)',
+        };
       }
     }
 
@@ -157,25 +190,35 @@ export class ClaimOfferService {
       } else if (
         quest.rewardType !== RewardType.CC_AND_CODE_RAFFLE // variant CC boleh tanpa kode
       ) {
-        return { ok: false, error: 'InviteCodePool habis — upload kode sebelum draw/claim' };
+        return {
+          ok: false,
+          error: 'InviteCodePool habis — upload kode sebelum draw/claim',
+        };
       }
     }
 
     // Reward token leg: variant split CC_AND_CODE_RAFFLE.
     const variantIsCodeOnly =
-      quest.rewardType === RewardType.CC_AND_CODE_RAFFLE && draw.rewardVariant === 'CODE';
+      quest.rewardType === RewardType.CC_AND_CODE_RAFFLE &&
+      draw.rewardVariant === 'CODE';
     const variantIsCcOnly =
-      quest.rewardType === RewardType.CC_AND_CODE_RAFFLE && draw.rewardVariant === 'CC';
+      quest.rewardType === RewardType.CC_AND_CODE_RAFFLE &&
+      draw.rewardVariant === 'CC';
     const rewardSymbol = normalizeRewardToken(quest.rewardToken);
     const instrument = await this.instruments.resolveInstrument(rewardSymbol);
-    const rewardAmount = variantIsCodeOnly ? 0 : draw.ccAmount || quest.rewardCc || 0;
+    const rewardAmount = variantIsCodeOnly
+      ? 0
+      : draw.ccAmount || quest.rewardCc || 0;
 
     const kind = v30RewardKindFor({
       rewardType: variantIsCcOnly ? RewardType.CC_ONLY : quest.rewardType,
       rewardToken: quest.rewardToken,
       rewardAmountCc: rewardAmount,
       codePlaintext,
-      instrument: { admin: instrument.instrumentAdmin, id: instrument.instrumentId },
+      instrument: {
+        admin: instrument.instrumentAdmin,
+        id: instrument.instrumentId,
+      },
     });
     if (!kind) {
       return {
@@ -217,7 +260,10 @@ export class ClaimOfferService {
       commandId,
     );
     if (!res.ok || !res.contractId) {
-      return { ok: false, error: `create ClaimOffer gagal: ${res.error ?? res.updateId ?? '?'}` };
+      return {
+        ok: false,
+        error: `create ClaimOffer gagal: ${res.error ?? res.updateId ?? '?'}`,
+      };
     }
 
     await this.prisma.winnerDraw.update({
@@ -243,22 +289,32 @@ export class ClaimOfferService {
    * slot yang sudah ada, dan hanya setelah event berakhir (T2). Sweep job
    * `offerCreationTick` biasanya sudah lebih dulu membuat offer-nya.
    */
-  async createOfferForFcfs(questId: string, userId: string): Promise<{
+  async createOfferForFcfs(
+    questId: string,
+    userId: string,
+  ): Promise<{
     ok: boolean;
     offerContractId?: string;
     error?: string;
     reason?: 'SLOTS_FULL' | 'NOT_ELIGIBLE' | 'NOT_ENDED';
   }> {
-    if (!v30Enabled(this.config)) return { ok: false, error: 'CLAIM_V30_ENABLED=false' };
+    if (!v30Enabled(this.config))
+      return { ok: false, error: 'CLAIM_V30_ENABLED=false' };
     this.assertConfigured();
 
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
-    if (!quest || !isV30Quest(quest)) return { ok: false, error: 'Quest bukan jalur v30' };
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
+    if (!quest || !isV30Quest(quest))
+      return { ok: false, error: 'Quest bukan jalur v30' };
 
     // Matriks klaim — FCFS sah utk Code-FCFS & Token-FCFS (CC/USDCx).
     const model = v30ClaimModel(quest);
     if (!model.allowed || model.selection !== 'FCFS') {
-      return { ok: false, error: `RewardType ${quest.rewardType} bukan jalur FCFS` };
+      return {
+        ok: false,
+        error: `RewardType ${quest.rewardType} bukan jalur FCFS`,
+      };
     }
 
     // Slot harus sudah diamankan saat submit — bukan di sini.
@@ -284,14 +340,21 @@ export class ClaimOfferService {
         select: { id: true },
       });
       if (!eligible) {
-        return { ok: false, reason: 'NOT_ELIGIBLE', error: 'Kamu belum eligible — lock CC dulu untuk ikut campaign ini.' };
+        return {
+          ok: false,
+          reason: 'NOT_ELIGIBLE',
+          error: 'Kamu belum eligible — lock CC dulu untuk ikut campaign ini.',
+        };
       }
     }
 
     return this.createOfferForWinner(questId, userId);
   }
 
-  private resolveFee(quest: { claimFeeCc?: number | null; rewardType: string }): number {
+  private resolveFee(quest: {
+    claimFeeCc?: number | null;
+    rewardType: string;
+  }): number {
     const fee = quest.claimFeeCc ?? null;
     if (fee != null && fee > 0) return fee;
     // Default lama dapp: 2 utk klaim kode, 3 utk FCFS token (kolom claimFeeCc comment).
@@ -314,7 +377,11 @@ export class ClaimOfferService {
     disclosedContracts: unknown[];
     transferKind: string;
   } | null> {
-    const v2 = await this.ledger.callTransferFactoryRegistry(v2Payload, instrumentAdmin, 'v2');
+    const v2 = await this.ledger.callTransferFactoryRegistry(
+      v2Payload,
+      instrumentAdmin,
+      'v2',
+    );
     if (v2) return v2;
     this.logger.warn(
       'Registry v2 tidak tersedia (scan-proxy 404) — fallback ke registry v1 (pola v29 settleAtomic)',
@@ -325,14 +392,23 @@ export class ClaimOfferService {
       delete out.actors;
       const tr = p.transfer as Record<string, unknown> | undefined;
       if (tr) {
-        const sender = typeof tr.sender === 'string' ? tr.sender : (tr.sender as { owner?: string })?.owner;
+        const sender =
+          typeof tr.sender === 'string'
+            ? tr.sender
+            : (tr.sender as { owner?: string })?.owner;
         const receiver =
-          typeof tr.receiver === 'string' ? tr.receiver : (tr.receiver as { owner?: string })?.owner;
+          typeof tr.receiver === 'string'
+            ? tr.receiver
+            : (tr.receiver as { owner?: string })?.owner;
         out.transfer = { ...tr, sender, receiver, lock: null };
       }
       return out;
     };
-    return this.ledger.callTransferFactoryRegistry(toV1(v2Payload), instrumentAdmin, 'v1');
+    return this.ledger.callTransferFactoryRegistry(
+      toV1(v2Payload),
+      instrumentAdmin,
+      'v1',
+    );
   }
 
   // ── 2. Bangun Accept* utk user (dipanggil signing relay) ──────────────────
@@ -346,31 +422,42 @@ export class ClaimOfferService {
     userId: string,
     params: Record<string, unknown>,
   ): Promise<V30BuiltFlow> {
-    if (!v30Enabled(this.config)) throw new BadRequestException('v30 claim disabled');
+    if (!v30Enabled(this.config))
+      throw new BadRequestException('v30 claim disabled');
     this.assertConfigured();
     const questId = typeof params.questId === 'string' ? params.questId : '';
     if (!questId) throw new BadRequestException('questId is required');
 
     const [quest, draw] = await Promise.all([
       this.prisma.quest.findUnique({ where: { id: questId } }),
-      this.prisma.winnerDraw.findUnique({ where: { questId_userId: { questId, userId } } }),
+      this.prisma.winnerDraw.findUnique({
+        where: { questId_userId: { questId, userId } },
+      }),
     ]);
-    if (!quest || !isV30Quest(quest)) throw new BadRequestException('Quest bukan jalur v30');
-    if (!draw?.offerContractId) throw new BadRequestException('Belum ada ClaimOffer utk klaim ini');
+    if (!quest || !isV30Quest(quest))
+      throw new BadRequestException('Quest bukan jalur v30');
+    if (!draw?.offerContractId)
+      throw new BadRequestException('Belum ada ClaimOffer utk klaim ini');
     if (draw.claimStatus && draw.claimStatus !== 'PreSettle') {
-      throw new BadRequestException(`Klaim sudah diproses (status: ${draw.claimStatus})`);
+      throw new BadRequestException(
+        `Klaim sudah diproses (status: ${draw.claimStatus})`,
+      );
     }
     const validUntil = draw.validUntil ?? new Date();
     if (validUntil.getTime() <= Date.now()) {
-      throw new BadRequestException('Offer kedaluwarsa (48 jam sejak undian) — hubungi operator.');
+      throw new BadRequestException(
+        'Offer kedaluwarsa (48 jam sejak undian) — hubungi operator.',
+      );
     }
 
     const user = await this.users.findById(userId);
-    if (!user?.cantonPartyId) throw new BadRequestException('Wallet tidak ditemukan');
+    if (!user?.cantonPartyId)
+      throw new BadRequestException('Wallet tidak ditemukan');
     const userParty = user.cantonPartyId;
 
     const kindLabel = (draw.rewardKind ?? '') as V30RewardKindLabel;
-    const hasToken = kindLabel === 'TOKEN_ONLY' || kindLabel === 'TOKEN_AND_CODE';
+    const hasToken =
+      kindLabel === 'TOKEN_ONLY' || kindLabel === 'TOKEN_AND_CODE';
     const feeAmount = this.resolveFee(quest);
 
     // ── FEE leg: user → feeReceiver (CC) ────────────────────────────────────
@@ -405,10 +492,15 @@ export class ClaimOfferService {
       },
       this.dsoParty,
     );
-    if (!feeRegistry) throw new BadRequestException('Registry fee (CC) tidak merespons');
+    if (!feeRegistry)
+      throw new BadRequestException('Registry fee (CC) tidak merespons');
 
     // ── REWARD leg (bila Token*): rewardSender → user ───────────────────────
-    let rewardRegistry: { factoryId: string; choiceContextData: Record<string, unknown>; disclosedContracts: unknown[] } | null = null;
+    let rewardRegistry: {
+      factoryId: string;
+      choiceContextData: Record<string, unknown>;
+      disclosedContracts: unknown[];
+    } | null = null;
     let rewardTransfer: Record<string, unknown> | null = null;
     let rewardInputsForDisclosure: string[] = [];
     if (hasToken) {
@@ -418,7 +510,10 @@ export class ClaimOfferService {
       const rewardHoldings =
         instrument.instrumentId.toLowerCase() === 'amulet'
           ? await this.ledger.queryAmuletHoldings(this.rewardSenderParty)
-          : await this.ledger.getTokenHoldingCids(this.rewardSenderParty, instrument.instrumentId);
+          : await this.ledger.getTokenHoldingCids(
+              this.rewardSenderParty,
+              instrument.instrumentId,
+            );
       const rewardInputs = greedyFill(rewardHoldings, rewardAmount);
       if (rewardInputs.length === 0) {
         throw new BadRequestException(
@@ -428,7 +523,10 @@ export class ClaimOfferService {
       rewardInputsForDisclosure = rewardInputs;
       const rewardCommon = {
         amount: rewardAmount.toFixed(10),
-        instrumentId: { admin: instrument.instrumentAdmin, id: instrument.instrumentId },
+        instrumentId: {
+          admin: instrument.instrumentAdmin,
+          id: instrument.instrumentId,
+        },
         requestedAt: nowIso,
         executeBefore,
         inputHoldingCids: rewardInputs,
@@ -448,7 +546,8 @@ export class ClaimOfferService {
         },
         instrument.instrumentAdmin,
       );
-      if (!rewardRegistry) throw new BadRequestException('Registry reward tidak merespons');
+      if (!rewardRegistry)
+        throw new BadRequestException('Registry reward tidak merespons');
     }
 
     const safeCtx = (ctx: Record<string, unknown> | null | undefined) =>
@@ -456,22 +555,32 @@ export class ClaimOfferService {
     // Activity marker fee leg: default OFF — FeaturedAppRight di paket v30 adalah
     // v2 (data-dep splice-api-featured-app-v2), cid-nya harus diverifikasi
     // bertipe V2 sebelum dipakai. Nyalakan via CANTON_V30_FEE_MARKER_FAR_CID.
-    const farCid = this.config.get<string>('CANTON_V30_FEE_MARKER_FAR_CID')?.trim() || null;
+    const farCid =
+      this.config.get<string>('CANTON_V30_FEE_MARKER_FAR_CID')?.trim() || null;
 
     const choiceArgument = hasToken
       ? {
           feeFactoryCid: feeRegistry.factoryId,
           feeTransfer,
-          feeExtraArgs: { context: safeCtx(feeRegistry.choiceContextData), meta: { values: {} } },
+          feeExtraArgs: {
+            context: safeCtx(feeRegistry.choiceContextData),
+            meta: { values: {} },
+          },
           rewardFactoryCid: rewardRegistry!.factoryId,
           rewardTransfer,
-          rewardExtraArgs: { context: safeCtx(rewardRegistry!.choiceContextData), meta: { values: {} } },
+          rewardExtraArgs: {
+            context: safeCtx(rewardRegistry!.choiceContextData),
+            meta: { values: {} },
+          },
           featuredAppRightCid: farCid,
         }
       : {
           feeFactoryCid: feeRegistry.factoryId,
           feeTransfer,
-          feeExtraArgs: { context: safeCtx(feeRegistry.choiceContextData), meta: { values: {} } },
+          feeExtraArgs: {
+            context: safeCtx(feeRegistry.choiceContextData),
+            meta: { values: {} },
+          },
           featuredAppRightCid: farCid,
         };
 
@@ -484,7 +593,10 @@ export class ClaimOfferService {
     // → sudah terlihat, tidak perlu disclosure.
     if (hasToken && rewardInputsForDisclosure.length > 0) {
       const rewardOwner = this.rewardSenderParty;
-      const blobs = await this.ledger.fetchContractsForDisclosure(rewardOwner, rewardInputsForDisclosure);
+      const blobs = await this.ledger.fetchContractsForDisclosure(
+        rewardOwner,
+        rewardInputsForDisclosure,
+      );
       if (blobs.length !== rewardInputsForDisclosure.length) {
         throw new BadRequestException(
           `Disclosure amulet reward gagal (${blobs.length}/${rewardInputsForDisclosure.length}) — coba lagi sebentar (ACS index).`,
@@ -531,7 +643,9 @@ export class ClaimOfferService {
     if (!drawId) return;
     try {
       await this.syncReceiptFromLedger(drawId);
-      const draw = await this.prisma.winnerDraw.findUnique({ where: { id: drawId } });
+      const draw = await this.prisma.winnerDraw.findUnique({
+        where: { id: drawId },
+      });
       if (draw?.claimStatus === 'Settled' && draw.rewardKind !== 'TOKEN_ONLY') {
         await this.revealIfSettled(draw.questId, draw.userId);
       }
@@ -552,13 +666,23 @@ export class ClaimOfferService {
     claimStatus: string | null;
     receiptContractId: string | null;
   }> {
-    const draw = await this.prisma.winnerDraw.findUnique({ where: { id: drawId } });
+    const draw = await this.prisma.winnerDraw.findUnique({
+      where: { id: drawId },
+    });
     if (!draw?.claimId) return { claimStatus: null, receiptContractId: null };
     const user = await this.users.findById(draw.userId);
-    if (!user?.cantonPartyId) return { claimStatus: null, receiptContractId: null };
+    if (!user?.cantonPartyId)
+      return { claimStatus: null, receiptContractId: null };
 
-    const receipt = await this.findReceiptOnChain(draw.claimId, user.cantonPartyId);
-    if (!receipt) return { claimStatus: draw.claimStatus, receiptContractId: draw.receiptContractId };
+    const receipt = await this.findReceiptOnChain(
+      draw.claimId,
+      user.cantonPartyId,
+    );
+    if (!receipt)
+      return {
+        claimStatus: draw.claimStatus,
+        receiptContractId: draw.receiptContractId,
+      };
 
     await this.prisma.winnerDraw.update({
       where: { id: drawId },
@@ -568,7 +692,10 @@ export class ClaimOfferService {
         revealedCode: receipt.revealedCode ?? draw.revealedCode,
       },
     });
-    return { claimStatus: receipt.status, receiptContractId: receipt.contractId };
+    return {
+      claimStatus: receipt.status,
+      receiptContractId: receipt.contractId,
+    };
   }
 
   /** Cari ClaimReceipt aktif di ACS user berdasarkan claimId (payload match). */
@@ -619,15 +746,22 @@ export class ClaimOfferService {
    * RevealCode — controller admin. Idempoten: status sudah Revealed → return kode.
    * Plaintext diambil dari WinnerDraw.inviteCode (hash-nya dikomit pra-undian).
    */
-  async revealIfSettled(questId: string, userId: string): Promise<{ code: string | null; status: string | null }> {
+  async revealIfSettled(
+    questId: string,
+    userId: string,
+  ): Promise<{ code: string | null; status: string | null }> {
     const draw = await this.prisma.winnerDraw.findUnique({
       where: { questId_userId: { questId, userId } },
     });
-    if (!draw?.receiptContractId) return { code: null, status: draw?.claimStatus ?? null };
+    if (!draw?.receiptContractId)
+      return { code: null, status: draw?.claimStatus ?? null };
     if (draw.claimStatus === 'Revealed' && draw.revealedCode) {
       return { code: draw.revealedCode, status: 'Revealed' };
     }
-    if (draw.claimStatus !== 'Settled' && draw.claimStatus !== 'RewardPending') {
+    if (
+      draw.claimStatus !== 'Settled' &&
+      draw.claimStatus !== 'RewardPending'
+    ) {
       return { code: null, status: draw.claimStatus };
     }
     const plaintext = draw.inviteCode;
@@ -642,7 +776,9 @@ export class ClaimOfferService {
       `v30-reveal-${createHashShort(draw.id)}`,
     );
     if (!res.ok) {
-      this.logger.warn(`RevealCode gagal draw=${draw.id}: ${res.text.slice(0, 160)}`);
+      this.logger.warn(
+        `RevealCode gagal draw=${draw.id}: ${res.text.slice(0, 160)}`,
+      );
       return { code: null, status: draw.claimStatus };
     }
     await this.prisma.winnerDraw.update({
@@ -653,8 +789,12 @@ export class ClaimOfferService {
   }
 
   /** WithdrawOffer — controller admin, offer belum dikonsumsi. */
-  async withdrawOffer(offerContractId: string, reason: string): Promise<{ ok: boolean; error?: string }> {
-    if (!reason.trim()) throw new BadRequestException('reason wajib non-empty (kontrak ensure)');
+  async withdrawOffer(
+    offerContractId: string,
+    reason: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!reason.trim())
+      throw new BadRequestException('reason wajib non-empty (kontrak ensure)');
     const res = await this.ledger.exerciseChoice(
       offerContractId,
       v30ClaimTemplateId(this.config, 'ClaimOffer'),
@@ -672,7 +812,9 @@ export class ClaimOfferService {
   }
 
   /** ConfirmRewardReceived — user menerima reward lewat menu offer. */
-  async confirmRewardReceived(receiptContractId: string): Promise<{ ok: boolean; error?: string }> {
+  async confirmRewardReceived(
+    receiptContractId: string,
+  ): Promise<{ ok: boolean; error?: string }> {
     const res = await this.ledger.exerciseChoice(
       receiptContractId,
       v30ClaimTemplateId(this.config, 'ClaimReceipt'),
@@ -690,7 +832,10 @@ export class ClaimOfferService {
   }
 
   /** MarkRewardExpired — reward hangus, fee TIDAK dikembalikan kontrak. */
-  async markRewardExpired(receiptContractId: string, reason: string): Promise<{ ok: boolean; error?: string }> {
+  async markRewardExpired(
+    receiptContractId: string,
+    reason: string,
+  ): Promise<{ ok: boolean; error?: string }> {
     const res = await this.ledger.exerciseChoice(
       receiptContractId,
       v30ClaimTemplateId(this.config, 'ClaimReceipt'),
@@ -715,17 +860,20 @@ export class ClaimOfferService {
    *   - saldo CC bebas >= fee (kurang → arahkan unlock dulu)
    *   - preapproval aktif (tidak → warning reward masuk menu offer)
    */
-  async claimStatus(questId: string, userId: string): Promise<{
+  async claimStatus(
+    questId: string,
+    userId: string,
+  ): Promise<{
     v30: true;
-  offer: {
-    exists: boolean;
-    claimStatus: string | null;
-    rewardKind: string | null;
-    validUntil: string | null;
-    expired: boolean;
-  };
-  /** FCFS: slot sudah diamankan saat submit, menunggu event berakhir. */
-  hasSlot: boolean;
+    offer: {
+      exists: boolean;
+      claimStatus: string | null;
+      rewardKind: string | null;
+      validUntil: string | null;
+      expired: boolean;
+    };
+    /** FCFS: slot sudah diamankan saat submit, menunggu event berakhir. */
+    hasSlot: boolean;
     revealedCode: string | null;
     prechecks: {
       freeBalanceCc: number;
@@ -734,7 +882,13 @@ export class ClaimOfferService {
       preapprovalActive: boolean;
       preapprovalExpiresAt: string | null;
     };
-    uiHint: 'CLAIM_READY' | 'NEED_UNLOCK_OR_TOPUP' | 'NO_PREAPPROVAL_WARN' | 'OFFER_EXPIRED' | 'NOT_DRAWN' | 'DONE';
+    uiHint:
+      | 'CLAIM_READY'
+      | 'NEED_UNLOCK_OR_TOPUP'
+      | 'NO_PREAPPROVAL_WARN'
+      | 'OFFER_EXPIRED'
+      | 'NOT_DRAWN'
+      | 'DONE';
     /** Jenis pemenang — menentukan UX (FCFS: submit→claim instan; RAFFLE: draw dulu). */
     selection: 'FCFS' | 'RAFFLE' | 'OFFCHAIN';
     /** User sudah submit tugas campaign ini (completion ada). */
@@ -742,9 +896,12 @@ export class ClaimOfferService {
   }> {
     const [quest, draw] = await Promise.all([
       this.prisma.quest.findUnique({ where: { id: questId } }),
-      this.prisma.winnerDraw.findUnique({ where: { questId_userId: { questId, userId } } }),
+      this.prisma.winnerDraw.findUnique({
+        where: { questId_userId: { questId, userId } },
+      }),
     ]);
-    if (!quest || !isV30Quest(quest)) throw new BadRequestException('Quest bukan jalur v30');
+    if (!quest || !isV30Quest(quest))
+      throw new BadRequestException('Quest bukan jalur v30');
 
     // Refresh dari ledger bila offer sudah dikonsumsi (async, best-effort).
     if (draw?.receiptContractId) {
@@ -764,12 +921,16 @@ export class ClaimOfferService {
     if (userParty) {
       try {
         const holdings = await this.ledger.queryAmuletHoldings(userParty);
-        freeBalanceCc = holdings.reduce((s, h) => s + (parseFloat(h.amount) || 0), 0);
+        freeBalanceCc = holdings.reduce(
+          (s, h) => s + (parseFloat(h.amount) || 0),
+          0,
+        );
       } catch {
         /* baca gagal → 0 → UI memaksa user cek manual; jangan blokir dgn error */
       }
       try {
-        const pa = await this.ledger.getTransferPreapprovalAuthoritative(userParty);
+        const pa =
+          await this.ledger.getTransferPreapprovalAuthoritative(userParty);
         preapprovalActive = pa.active;
         preapprovalExpiresAt = pa.expiresAt ?? null;
       } catch {
@@ -778,12 +939,21 @@ export class ClaimOfferService {
     }
 
     const validUntil = fresh?.validUntil ?? null;
-    const expired = !!validUntil && new Date(validUntil).getTime() <= Date.now();
+    const expired =
+      !!validUntil && new Date(validUntil).getTime() <= Date.now();
     const status = fresh?.claimStatus ?? null;
 
-    let uiHint: 'CLAIM_READY' | 'NEED_UNLOCK_OR_TOPUP' | 'NO_PREAPPROVAL_WARN' | 'OFFER_EXPIRED' | 'NOT_DRAWN' | 'DONE' = 'NOT_DRAWN';
-    if (!fresh?.offerContractId && !fresh?.receiptContractId) uiHint = 'NOT_DRAWN';
-    else if (status && status !== 'PreSettle' && status !== 'Withdrawn') uiHint = 'DONE';
+    let uiHint:
+      | 'CLAIM_READY'
+      | 'NEED_UNLOCK_OR_TOPUP'
+      | 'NO_PREAPPROVAL_WARN'
+      | 'OFFER_EXPIRED'
+      | 'NOT_DRAWN'
+      | 'DONE' = 'NOT_DRAWN';
+    if (!fresh?.offerContractId && !fresh?.receiptContractId)
+      uiHint = 'NOT_DRAWN';
+    else if (status && status !== 'PreSettle' && status !== 'Withdrawn')
+      uiHint = 'DONE';
     else if (expired) uiHint = 'OFFER_EXPIRED';
     else if (freeBalanceCc < feeCc) uiHint = 'NEED_UNLOCK_OR_TOPUP';
     else if (!preapprovalActive) uiHint = 'NO_PREAPPROVAL_WARN';
@@ -823,7 +993,9 @@ export class ClaimOfferService {
     try {
       await this.ledger.grantUserRights(this.rewardSenderParty);
     } catch (err) {
-      this.logger.warn(`grantUserRights(rewardSender) gagal: ${String(err).slice(0, 120)}`);
+      this.logger.warn(
+        `grantUserRights(rewardSender) gagal: ${String(err).slice(0, 120)}`,
+      );
     }
   }
 
@@ -870,7 +1042,9 @@ function greedyFill(
   holdings: Array<{ contractId: string; amount: string }>,
   target: number,
 ): string[] {
-  const sorted = [...holdings].sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount));
+  const sorted = [...holdings].sort(
+    (a, b) => parseFloat(b.amount) - parseFloat(a.amount),
+  );
   const cids: string[] = [];
   let acc = 0;
   for (const h of sorted) {

@@ -248,7 +248,8 @@ export class LockEligibilityService {
             amountCc: lock.amount,
             termKey: termKey || OPEN_TERM_KEY,
             // MODE OPEN: lock tanpa durasi → sentinel 0 (tier quest hitung elapsed).
-            lockSeconds: map.size > 0 ? termSeconds : OPEN_LOCK_SECONDS_SENTINEL,
+            lockSeconds:
+              map.size > 0 ? termSeconds : OPEN_LOCK_SECONDS_SENTINEL,
             lockedAt,
             expiresAt,
             status: 'LOCKED',

@@ -53,9 +53,7 @@ export interface ResumeDecision {
     | 'normal-resume';
 }
 
-export function decideResume(
-  input: ResumeDecisionInput,
-): ResumeDecision {
+export function decideResume(input: ResumeDecisionInput): ResumeDecision {
   const { checkpointOffset, ledgerEnd, prunedUpToInclusive } = input;
 
   if (checkpointOffset === null) {

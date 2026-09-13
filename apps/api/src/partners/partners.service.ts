@@ -106,7 +106,9 @@ export class PartnersService {
     if (withQuestCount) {
       dto.activeQuestCount =
         p.quests?.filter(
-          (q) => q.status === QuestStatus.ACTIVE && q.questKind === QuestKind.CAMPAIGN,
+          (q) =>
+            q.status === QuestStatus.ACTIVE &&
+            q.questKind === QuestKind.CAMPAIGN,
         ).length ?? 0;
     }
     return dto;

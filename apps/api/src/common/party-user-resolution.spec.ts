@@ -1,4 +1,7 @@
-import { findUserByPartyExact, type PartyUserLookup } from './party-user-resolution';
+import {
+  findUserByPartyExact,
+  type PartyUserLookup,
+} from './party-user-resolution';
 
 /**
  * Phase 4 L1 — unit test resolver ketat (gap #19): atribusi party→user HANYA
@@ -46,7 +49,9 @@ describe('findUserByPartyExact (resolver ketat party→user)', () => {
       // user "budi" TIDAK punya party — event party "budi::…" bukan miliknya.
       { id: 'u1', username: 'budi', cantonPartyId: 'budi2::1220fff' },
     ]);
-    await expect(findUserByPartyExact(users, 'budi::1220abc')).resolves.toBeNull();
+    await expect(
+      findUserByPartyExact(users, 'budi::1220abc'),
+    ).resolves.toBeNull();
   });
 
   it('party milik user lain tidak bisa dicocokkan via prefix username user ketiga', async () => {
@@ -60,7 +65,9 @@ describe('findUserByPartyExact (resolver ketat party→user)', () => {
       findUserByPartyExact(users, 'karel2::1220def'),
     ).resolves.toEqual({ userId: 'lain', username: 'karel2' });
     // Party yang tidak terdaftar milik siapa pun → null, bukan nebak prefix.
-    await expect(findUserByPartyExact(users, 'karel3::1220xxx')).resolves.toBeNull();
+    await expect(
+      findUserByPartyExact(users, 'karel3::1220xxx'),
+    ).resolves.toBeNull();
   });
 
   it('party auth0_… TIDAK di-resolve lewat keycloakId (fallback lama dihapus)', async () => {
@@ -91,7 +98,9 @@ describe('findUserByPartyExact (resolver ketat party→user)', () => {
       { id: 'u1', username: 'karel', cantonPartyId: 'karel::1220abc' },
       { id: 'u2', username: 'karel-dupe', cantonPartyId: 'KAREL::1220ABC' },
     ]);
-    await expect(findUserByPartyExact(users, 'karel::1220abc')).resolves.toBeNull();
+    await expect(
+      findUserByPartyExact(users, 'karel::1220abc'),
+    ).resolves.toBeNull();
   });
 
   it('input kosong / whitespace → null', async () => {

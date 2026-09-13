@@ -10,7 +10,6 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-
 /** Sub-DTO social link { platform, url } — dipakai partner & team member. */
 export class PartnerSocialLinkDto {
   @IsString()

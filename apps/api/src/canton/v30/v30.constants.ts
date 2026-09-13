@@ -25,10 +25,7 @@ export type V30ClaimStatus =
   | 'Revealed';
 
 /** Nilai WinnerDraw.rewardKind — mirror RewardKind yang dikomit di ClaimOffer. */
-export type V30RewardKindLabel =
-  | 'CODE_ONLY'
-  | 'TOKEN_ONLY'
-  | 'TOKEN_AND_CODE';
+export type V30RewardKindLabel = 'CODE_ONLY' | 'TOKEN_ONLY' | 'TOKEN_AND_CODE';
 
 /** Flag global jalur v30 (default OFF — dual-run dengan v29 sampai smoke lulus). */
 export function v30Enabled(config: ConfigService): boolean {
@@ -41,7 +38,11 @@ export function isV30Quest(quest: { ledgerPackage?: string | null }): boolean {
 
 // ── Package refs (nama DAR, di-resolve participant via prefix '#') ──────────
 
-function packageRef(config: ConfigService, key: string, fallback: string): string {
+function packageRef(
+  config: ConfigService,
+  key: string,
+  fallback: string,
+): string {
   const name = config.get<string>(key)?.trim() || fallback;
   return name.startsWith('#') ? name : `#${name}`;
 }
@@ -106,7 +107,11 @@ export function v30Dec(value: number): string {
 }
 
 /** Splice.Api.Token.HoldingV2.Account — regular account (owner Some, provider/id kosong). */
-export function v30Account(partyId: string): { owner: string; provider: null; id: string } {
+export function v30Account(partyId: string): {
+  owner: string;
+  provider: null;
+  id: string;
+} {
   return { owner: partyId, provider: null, id: '' };
 }
 
@@ -115,7 +120,10 @@ export type V30RewardKindJson =
   | { tag: 'CodeOnly'; value: { codeHash: string } }
   | {
       tag: 'TokenOnly';
-      value: { tokenAmount: string; tokenInstrument: { admin: string; id: string } };
+      value: {
+        tokenAmount: string;
+        tokenInstrument: { admin: string; id: string };
+      };
     }
   | {
       tag: 'TokenAndCode';
@@ -138,17 +146,28 @@ export function v30RewardKindFor(params: {
   rewardAmountCc: number;
   codePlaintext: string | null; // kode dari InviteCodePool (sudah di-assign)
   instrument: { admin: string; id: string }; // reward instrument (CC=Amulet/DSO)
-}): { label: V30RewardKindLabel; json: V30RewardKindJson; hasToken: boolean; hasCode: boolean } | null {
+}): {
+  label: V30RewardKindLabel;
+  json: V30RewardKindJson;
+  hasToken: boolean;
+  hasCode: boolean;
+} | null {
   const rt = String(params.rewardType);
-  const tokenLeg = { tokenAmount: v30Dec(params.rewardAmountCc), tokenInstrument: params.instrument };
-  const codeHash = params.codePlaintext ? v30CodeHash(params.codePlaintext) : null;
+  const tokenLeg = {
+    tokenAmount: v30Dec(params.rewardAmountCc),
+    tokenInstrument: params.instrument,
+  };
+  const codeHash = params.codePlaintext
+    ? v30CodeHash(params.codePlaintext)
+    : null;
 
   const isCodeType =
     rt === RewardType.INVITE_CODE_RANDOM ||
     rt === RewardType.INVITE_CODE_FCFS ||
     rt === RewardType.INVITE_CODE;
   const isCcOnly = rt === RewardType.CC_ONLY || rt === RewardType.CC_MANUAL;
-  const isBoth = rt === RewardType.CC_AND_INVITE || rt === RewardType.CC_AND_CODE_RAFFLE;
+  const isBoth =
+    rt === RewardType.CC_AND_INVITE || rt === RewardType.CC_AND_CODE_RAFFLE;
 
   if (isCodeType && codeHash) {
     return {
@@ -163,7 +182,12 @@ export function v30RewardKindFor(params: {
     };
   }
   if (isCcOnly && params.rewardAmountCc > 0) {
-    return { label: 'TOKEN_ONLY', json: { tag: 'TokenOnly', value: tokenLeg }, hasToken: true, hasCode: false };
+    return {
+      label: 'TOKEN_ONLY',
+      json: { tag: 'TokenOnly', value: tokenLeg },
+      hasToken: true,
+      hasCode: false,
+    };
   }
   if (isBoth && params.rewardAmountCc > 0 && codeHash) {
     return {
@@ -197,7 +221,9 @@ export function v30T1At(
 ): Date | null {
   if (!endsAt) return null;
   if (!startsAt) return endsAt;
-  const t1 = new Date(startsAt.getTime() + 0.7 * (endsAt.getTime() - startsAt.getTime()));
+  const t1 = new Date(
+    startsAt.getTime() + 0.7 * (endsAt.getTime() - startsAt.getTime()),
+  );
   // Jangan melewati T2.
   return t1.getTime() >= endsAt.getTime() ? endsAt : t1;
 }
@@ -236,11 +262,16 @@ export function v30ClaimModel(quest: {
   rewardCc?: number | null;
 }): V30ClaimModel {
   const rt = String(quest.rewardType);
-  const token = String(quest.rewardToken ?? 'CC').toUpperCase() === 'USDCX' ? 'USDCx' : 'CC';
+  const token =
+    String(quest.rewardToken ?? 'CC').toUpperCase() === 'USDCX'
+      ? 'USDCx'
+      : 'CC';
   const tokenKind = token === 'USDCx' ? 'TOKEN_USDCX' : 'TOKEN_CC';
   const requiresLock =
     quest.entryGateMode === 'CC_ONLY' ||
-    (quest.entryGateMode !== 'NONE' && quest.entryGateMode !== 'POINTS_ONLY' && quest.entryGateMode !== undefined);
+    (quest.entryGateMode !== 'NONE' &&
+      quest.entryGateMode !== 'POINTS_ONLY' &&
+      quest.entryGateMode !== undefined);
 
   const base = (selection: V30Selection): V30ClaimModel => ({
     selection,
@@ -278,7 +309,12 @@ export function v30ClaimModel(quest: {
     };
   }
   if (rt === 'CC_AND_INVITE' || rt === 'CC_AND_CODE_RAFFLE') {
-    return { selection: 'RAFFLE', reward: 'TOKEN_AND_CODE', allowed: true, requiresLock };
+    return {
+      selection: 'RAFFLE',
+      reward: 'TOKEN_AND_CODE',
+      allowed: true,
+      requiresLock,
+    };
   }
   // ── Offchain ──
   if (rt === 'WAITLIST_EMAIL') {

@@ -225,7 +225,9 @@ export class AdminAuthController {
         secret: Secret.fromBase32(secretBase32),
       });
     } catch (err) {
-      this.logger.error(`ADMIN_TOTP_SECRET is not valid base32: ${String(err)}`);
+      this.logger.error(
+        `ADMIN_TOTP_SECRET is not valid base32: ${String(err)}`,
+      );
       throw new InternalServerErrorException(
         'Admin 2FA secret is misconfigured (invalid base32).',
       );

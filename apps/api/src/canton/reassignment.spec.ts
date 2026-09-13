@@ -145,10 +145,14 @@ describe('parseReassignment', () => {
   it('R4: bukan reassignment → null (tidak menelan frame Transaction)', () => {
     expect(parseReassignment({})).toBeNull();
     expect(
-      parseReassignment({ update: { Transaction: { value: { updateId: 'x' } } } }),
+      parseReassignment({
+        update: { Transaction: { value: { updateId: 'x' } } },
+      }),
     ).toBeNull();
     expect(
-      parseReassignment({ update: { OffsetCheckpoint: { value: { offset: 1 } } } }),
+      parseReassignment({
+        update: { OffsetCheckpoint: { value: { offset: 1 } } },
+      }),
     ).toBeNull();
   });
 
@@ -161,7 +165,12 @@ describe('parseReassignment', () => {
     const parsed = parseReassignment({
       update: {
         Reassignment: {
-          value: { updateId: '1220x', events: [{ JsAssignmentEvent: { createdEvent: { contractId: 'c' } } }] },
+          value: {
+            updateId: '1220x',
+            events: [
+              { JsAssignmentEvent: { createdEvent: { contractId: 'c' } } },
+            ],
+          },
         },
       },
     });
