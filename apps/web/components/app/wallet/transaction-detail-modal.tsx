@@ -1,12 +1,15 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 import { TransactionDetailContent } from "@/components/app/wallet/transaction-detail-content";
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 import { useTransactionDetail } from "@/lib/hooks/use-transaction-detail";
+import { txTypeLabel, type TxType } from "@/lib/canton/tx-labels";
+import { TxTypeIcon, txIconBg } from "@/lib/canton/tx-icons";
+import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 type TransactionDetailModalProps = {
   open: boolean;
@@ -28,21 +31,19 @@ export function TransactionDetailModal({
   partyId = null,
   onClose,
 }: TransactionDetailModalProps) {
+  const t = usePlatformT();
   const { detail, loading, error } = useTransactionDetail(
     open ? transactionId : null,
   );
 
   if (!open) return null;
 
-  // Decide direction from the detail. Defaults to "sent" until detail loads
-  // (most modal openers are post-send). Footer skema label app: kaki masuk =
-  // TRANSFER_IN / TOKEN_TRANSFER_IN / SWAP_IN; kaki keluar (SWAP_OUT) = "Send".
-  const isIn =
-    detail?.type === "TRANSFER_IN" ||
-    detail?.type === "TOKEN_TRANSFER_IN" ||
-    detail?.type === "SWAP_IN";
-
-  const headerTitle = title ?? (isIn ? "Receive" : "Send");
+  // Header mengikuti TIPE transaksi — bukan tebakan arah. Dulu header
+  // hardcode "Receive"/"Send" + panah untuk SEMUA tipe di luar daftar masuk,
+  // sehingga detail Lock/Unlock berjudul "Send" dengan panah merah padahal
+  // Type di dalamnya benar (laporan owner 2026-09-13, muncul di PC mana pun).
+  const headerTitle =
+    title ?? (detail ? txTypeLabel(detail.type, t) : "Transaction");
   const headerSubtitle = subtitle ?? "";
 
   return (
@@ -63,21 +64,22 @@ export function TransactionDetailModal({
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-6 py-5">
           <div className="flex min-w-0 items-start gap-4">
-            {loading ? (
-              <CheckCircle2 className="mt-1 h-10 w-10 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+            {loading || !detail ? (
+              <span
+                className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
+                aria-hidden
+              >
+                <Loader2 className="h-5 w-5 spin" />
+              </span>
             ) : (
               <span
                 className={cn(
-                  "mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                  isIn ? "bg-green-500/15 text-green-600" : "bg-red-500/15 text-red-600",
+                  "mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                  txIconBg(detail.type as TxType),
                 )}
                 aria-hidden
               >
-                {isIn ? (
-                  <ArrowDownLeft className="h-5 w-5" />
-                ) : (
-                  <ArrowUpRight className="h-5 w-5" />
-                )}
+                <TxTypeIcon type={detail.type as TxType} />
               </span>
             )}
             <div className="min-w-0">
