@@ -89,7 +89,11 @@ function RankBadge({ rank }: { rank: number }) {
         <Medal className="h-5 w-5 text-canton-muted" />
       </span>
     );
-  return <span className="text-sm font-bold tabular-nums text-[var(--muted-foreground)]">{rank}</span>;
+  return (
+    <span className="flex h-8 w-8 items-center justify-center text-sm font-bold tabular-nums text-[var(--muted-foreground)]">
+      {rank}
+    </span>
+  );
 }
 
 function ParticipantCell({
