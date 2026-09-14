@@ -46,23 +46,6 @@ function getInitials(displayName: string): string {
     .slice(0, 2);
 }
 
-const AVATAR_GRADIENTS = [
-  "linear-gradient(145deg, #d4ff3f 0%, #8b9c0d 100%)",
-  "linear-gradient(145deg, #60a5fa 0%, #1d4ed8 100%)",
-  "linear-gradient(145deg, #f472b6 0%, #9333ea 100%)",
-  "linear-gradient(145deg, #34d399 0%, #0d9488 100%)",
-  "linear-gradient(145deg, #fb923c 0%, #c2410c 100%)",
-  "linear-gradient(145deg, #a78bfa 0%, #6d28d9 100%)",
-  "linear-gradient(145deg, #38bdf8 0%, #0369a1 100%)",
-  "linear-gradient(145deg, #fbbf24 0%, #d97706 100%)",
-];
-
-function avatarGradient(username: string): string {
-  let hash = 0;
-  for (let i = 0; i < username.length; i++) hash = (hash * 31 + username.charCodeAt(i)) | 0;
-  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]!;
-}
-
 function leaderboardAvatarSrc(url: string | null): string | null {
   if (!url?.trim()) return null;
   const trimmed = url.trim();
@@ -99,8 +82,9 @@ function RankBadge({ rank }: { rank: number }) {
 /**
  * Avatar peserta: pakai foto X bila URL-nya ada DAN benar-benar bisa dimuat.
  * URL pbs.twimg.com bisa 404 (akun/gambar dihapus) — tanpa onError, browser
- * menampilkan ikon gambar rusak. Gagal muat → fallback inisial + gradient
- * (sama seperti saat avatarUrl null). Berlaku semua period (weekly/monthly/all).
+ * menampilkan ikon gambar rusak. Gagal muat → fallback inisial di lingkaran
+ * netral dengan FONT ABU (muted), bukan gradient. Berlaku semua period
+ * (weekly/monthly/all).
  */
 function LeaderboardAvatar({ row }: { row: LeaderboardRow }) {
   const avatarSrc = leaderboardAvatarSrc(row.avatarUrl);
@@ -115,11 +99,11 @@ function LeaderboardAvatar({ row }: { row: LeaderboardRow }) {
 
   return (
     <div
-      className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full sm:h-12 sm:w-12"
+      className={cn(
+        "relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full sm:h-12 sm:w-12",
+        showImage ? undefined : "bg-[var(--muted)]",
+      )}
       aria-hidden
-      style={
-        showImage ? undefined : { backgroundImage: avatarGradient(row.username) }
-      }
     >
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -135,7 +119,7 @@ function LeaderboardAvatar({ row }: { row: LeaderboardRow }) {
           onError={() => setFailed(true)}
         />
       ) : (
-        <span className="text-xs font-bold uppercase tracking-wider text-[var(--foreground)] drop-shadow-sm">
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-sm">
           {getInitials(row.displayName)}
         </span>
       )}
