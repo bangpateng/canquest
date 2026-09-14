@@ -96,6 +96,53 @@ function RankBadge({ rank }: { rank: number }) {
   );
 }
 
+/**
+ * Avatar peserta: pakai foto X bila URL-nya ada DAN benar-benar bisa dimuat.
+ * URL pbs.twimg.com bisa 404 (akun/gambar dihapus) — tanpa onError, browser
+ * menampilkan ikon gambar rusak. Gagal muat → fallback inisial + gradient
+ * (sama seperti saat avatarUrl null). Berlaku semua period (weekly/monthly/all).
+ */
+function LeaderboardAvatar({ row }: { row: LeaderboardRow }) {
+  const avatarSrc = leaderboardAvatarSrc(row.avatarUrl);
+  const [failed, setFailed] = useState(false);
+
+  // Reset saat sumber berubah (mis. data di-refresh / ganti halaman).
+  useEffect(() => {
+    setFailed(false);
+  }, [avatarSrc]);
+
+  const showImage = Boolean(avatarSrc) && !failed;
+
+  return (
+    <div
+      className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full sm:h-12 sm:w-12"
+      aria-hidden
+      style={
+        showImage ? undefined : { backgroundImage: avatarGradient(row.username) }
+      }
+    >
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={avatarSrc as string}
+          alt=""
+          width={LEADERBOARD_AVATAR_PX}
+          height={LEADERBOARD_AVATAR_PX}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--foreground)] drop-shadow-sm">
+          {getInitials(row.displayName)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ParticipantCell({
   row,
   isCurrentUser,
@@ -103,38 +150,10 @@ function ParticipantCell({
   row: LeaderboardRow;
   isCurrentUser: boolean;
 }) {
-  const avatarSrc = leaderboardAvatarSrc(row.avatarUrl);
-
   return (
     <td className="px-4 py-3.5 sm:px-6 sm:py-4">
       <div className="flex items-center gap-3 sm:gap-4">
-        <div
-          className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full sm:h-12 sm:w-12"
-          aria-hidden
-          style={
-            avatarSrc
-              ? undefined
-              : { backgroundImage: avatarGradient(row.username) }
-          }
-        >
-          {avatarSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={avatarSrc}
-              alt=""
-              width={LEADERBOARD_AVATAR_PX}
-              height={LEADERBOARD_AVATAR_PX}
-              className="h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--foreground)] drop-shadow-sm">
-              {getInitials(row.displayName)}
-            </span>
-          )}
-        </div>
+        <LeaderboardAvatar row={row} />
         <div className="min-w-0 leading-tight">
           <div className="flex flex-wrap items-center gap-2 gap-y-1">
             <span className="text-sm font-semibold text-[var(--foreground)] sm:text-base">
