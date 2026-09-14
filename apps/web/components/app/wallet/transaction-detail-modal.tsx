@@ -3,7 +3,6 @@
 import { Loader2, X } from "lucide-react";
 
 import { TransactionDetailContent } from "@/components/app/wallet/transaction-detail-content";
-import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 import { useTransactionDetail } from "@/lib/hooks/use-transaction-detail";

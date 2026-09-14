@@ -233,7 +233,7 @@ export function KeyCeremony({ onComplete, onCancel, replaceStaleKey }: KeyCeremo
                 className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
               >
                 <CheckCircle2 className="h-4 w-4" />
-                I've Saved It
+                I&apos;ve Saved It
               </button>
               <button
                 type="button"

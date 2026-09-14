@@ -11,11 +11,14 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react"],
   },
+  // Build WAJIB gagal saat ada error TypeScript/ESLint nyata (release gate).
+  // Sebelumnya keduanya di-ignore sehingga error bisa diam-diam lolos ke
+  // produksi. Tidak ada opsi "ignore" lagi — perbaiki kodenya, bukan config.
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   // Allow Next.js Image Optimization to serve images from the API CDN
   images: {

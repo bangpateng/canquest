@@ -154,16 +154,35 @@ function sessionExpiredResponse(): NextResponse {
   );
 }
 
-/** Single-flight: banyak 401 paralel → satu round-trip refresh saja. */
-let inflightRefresh: Promise<RefreshResult> | null = null;
+/**
+ * Single-flight PER SESI: banyak 401 paralel dari sesi yang SAMA → satu
+ * round-trip refresh. Kunci = refresh token (identitas sesi), BUKAN variabel
+ * global.
+ *
+ * Keamanan (P0): sebelumnya single-flight memakai satu promise global. Dua
+ * request dari USER BERBEDA yang sama-sama kena 401 secara paralel akan
+ * berbagi satu promise → user B menerima token hasil refresh user A (kebocoran
+ * sesi lintas-user). Refresh token bersifat unik per sesi (dan dirotasi tiap
+ * refresh), jadi memetakan per refresh token menjamin:
+ *   - sesi berbeda → operasi refresh independen (tidak ada crossover),
+ *   - sesi sama   → tetap satu round-trip (single-flight dipertahankan).
+ */
+const inflightRefreshes = new Map<string, Promise<RefreshResult>>();
 
 function refreshSingleFlight(refreshToken: string): Promise<RefreshResult> {
-  if (!inflightRefresh) {
-    inflightRefresh = refreshSession(refreshToken).finally(() => {
-      inflightRefresh = null;
-    });
+  const existing = inflightRefreshes.get(refreshToken);
+  if (existing) {
+    return existing;
   }
-  return inflightRefresh;
+  const promise = refreshSession(refreshToken).finally(() => {
+    // Hapus hanya bila promise ini masih yang terdaftar (bukan hasil refresh
+    // baru dengan token yang sama setelah rotasi).
+    if (inflightRefreshes.get(refreshToken) === promise) {
+      inflightRefreshes.delete(refreshToken);
+    }
+  });
+  inflightRefreshes.set(refreshToken, promise);
+  return promise;
 }
 
 async function refreshSession(refreshToken: string): Promise<RefreshResult> {

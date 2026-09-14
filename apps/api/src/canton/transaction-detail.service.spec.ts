@@ -281,4 +281,67 @@ describe('TransactionDetailService — pending offer', () => {
       expect(ledger.findUpdateIdForContract).not.toHaveBeenCalled();
     });
   });
+
+  describe('IDOR — user lain tidak boleh membaca transaksi orang lain', () => {
+    it('getDetailForUser(userB, id transaksi userA) → 404, dan lookup dibatasi userId', async () => {
+      const { service, prisma } = makeService();
+      // Tiru filter Prisma `{ id, userId }`: baris hanya cocok bila userId
+      // pemanggil SAMA dengan pemilik baris (userA).
+      const ownedBy = 'userA';
+      prisma.ccTransaction.findFirst.mockImplementation(
+        (args: { where?: { id?: string; userId?: string } }) => {
+          const where = args?.where ?? {};
+          if (where.id === 'cc-owned-by-A' && where.userId === ownedBy) {
+            return Promise.resolve({
+              id: 'cc-owned-by-A',
+              userId: ownedBy,
+              amountMicroCc: -1_000_000n,
+              type: 'TRANSFER_OUT',
+              status: 'COMPLETED',
+              description: 'send',
+              referenceId: RECEIVER,
+              ledgerTxId: null,
+              cantonUpdateId: null,
+              transferInstructionCid: null,
+              settledAt: null,
+              createdAt: new Date('2026-09-12T07:48:27Z'),
+              cancelledAmountCc: null,
+              cancelledInstrumentId: null,
+            });
+          }
+          return Promise.resolve(null);
+        },
+      );
+      prisma.user.findUnique.mockResolvedValue({ cantonPartyId: SENDER });
+
+      // userB meminta transaksi milik userA → harus NotFound.
+      await expect(
+        service.getDetailForUser('userB', 'cc-owned-by-A'),
+      ).rejects.toMatchObject({ status: 404 });
+
+      // Kepemilikan memang dibawa ke query (bukan hanya dicek di frontend).
+      const args = (
+        prisma.ccTransaction.findFirst.mock.calls as unknown as Array<
+          [{ where: { userId?: string } }]
+        >
+      )[0][0];
+      expect(args.where.userId).toBe('userB');
+    });
+
+    it('token row milik user lain → 404', async () => {
+      const { service, prisma } = makeService();
+      prisma.tokenTransaction.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getDetailForUser('userB', 'tok-owned-by-A'),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const args = (
+        prisma.tokenTransaction.findFirst.mock.calls as unknown as Array<
+          [{ where: { userId?: string } }]
+        >
+      )[0][0];
+      expect(args.where.userId).toBe('userB');
+    });
+  });
 });

@@ -171,4 +171,119 @@ describe('nestWithAccessCookie session refresh', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(cookieHeaders(result)).toBe('');
   });
+
+  it('keeps concurrent refresh isolated per session — no cross-user token crossover', async () => {
+    const fetchMock = jest.mocked(fetch);
+    // Skenario: user A & user B sama-sama kena 401 dan refresh PARALEL.
+    // Urutan panggilan fetch: A-401, B-401, A-refresh, B-refresh, A-retry, B-retry.
+    const refreshA = response(200, {
+      accessToken: 'A-access-new',
+      refreshToken: 'A-refresh-new',
+    });
+    const refreshB = response(200, {
+      accessToken: 'B-access-new',
+      refreshToken: 'B-refresh-new',
+    });
+
+    // Refresh endpoint mengembalikan token sesuai refresh token yang dikirim.
+    fetchMock.mockImplementation(
+      (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        const auth = new Headers(init?.headers).get('authorization');
+        if (u.endsWith('/auth/refresh')) {
+          const body = JSON.parse(String(init?.body ?? '{}')) as {
+            refreshToken?: string;
+          };
+          if (body.refreshToken === 'A-refresh') return Promise.resolve(refreshA);
+          if (body.refreshToken === 'B-refresh') return Promise.resolve(refreshB);
+          return Promise.resolve(response(401, {}));
+        }
+        if (auth === 'Bearer A-access') return Promise.resolve(response(401, {}));
+        if (auth === 'Bearer B-access') return Promise.resolve(response(401, {}));
+        if (auth === 'Bearer A-access-new')
+          return Promise.resolve(response(200, { ok: 'A' }));
+        if (auth === 'Bearer B-access-new')
+          return Promise.resolve(response(200, { ok: 'B' }));
+        return Promise.resolve(response(500, {}));
+      },
+    );
+
+    const [resultA, resultB] = await Promise.all([
+      nestWithAccessCookie(
+        request({ cq_access: 'A-access', cq_refresh: 'A-refresh' }),
+        '/example',
+        { method: 'GET' },
+      ),
+      nestWithAccessCookie(
+        request({ cq_access: 'B-access', cq_refresh: 'B-refresh' }),
+        '/example',
+        { method: 'GET' },
+      ),
+    ]);
+
+    // Tiap user hanya melihat sesinya sendiri.
+    await expect(resultA.json()).resolves.toEqual({ ok: 'A' });
+    await expect(resultB.json()).resolves.toEqual({ ok: 'B' });
+
+    const cookiesA = cookieHeaders(resultA);
+    const cookiesB = cookieHeaders(resultB);
+    expect(cookiesA).toContain('cq_access=A-access-new');
+    expect(cookiesA).toContain('cq_refresh=A-refresh-new');
+    expect(cookiesB).toContain('cq_access=B-access-new');
+    expect(cookiesB).toContain('cq_refresh=B-refresh-new');
+    // Tidak ada silang: cookie B tidak pernah memuat token A, dan sebaliknya.
+    expect(cookiesA).not.toContain('B-access-new');
+    expect(cookiesA).not.toContain('B-refresh-new');
+    expect(cookiesB).not.toContain('A-access-new');
+    expect(cookiesB).not.toContain('A-refresh-new');
+  });
+
+  it('single-flights concurrent 401s from the SAME session into one refresh call', async () => {
+    const fetchMock = jest.mocked(fetch);
+    let refreshCalls = 0;
+    fetchMock.mockImplementation(
+      (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        const auth = new Headers(init?.headers).get('authorization');
+        if (u.endsWith('/auth/refresh')) {
+          refreshCalls += 1;
+          // Tunda supaya dua request benar-benar overlap.
+          return new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve(
+                  response(200, {
+                    accessToken: 'same-access-new',
+                    refreshToken: 'same-refresh-new',
+                  }),
+                ),
+              10,
+            ),
+          );
+        }
+        if (auth === 'Bearer same-access')
+          return Promise.resolve(response(401, {}));
+        return Promise.resolve(response(200, { ok: true }));
+      },
+    );
+
+    const [r1, r2] = await Promise.all([
+      nestWithAccessCookie(
+        request({ cq_access: 'same-access', cq_refresh: 'same-refresh' }),
+        '/example',
+        { method: 'GET' },
+      ),
+      nestWithAccessCookie(
+        request({ cq_access: 'same-access', cq_refresh: 'same-refresh' }),
+        '/example',
+        { method: 'GET' },
+      ),
+    ]);
+
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(refreshCalls).toBe(1);
+    expect(cookieHeaders(r1)).toContain('cq_access=same-access-new');
+    expect(cookieHeaders(r2)).toContain('cq_access=same-access-new');
+  });
 });

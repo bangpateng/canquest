@@ -609,7 +609,7 @@ export function AdminPartnersPanel({
                 ))}
               </div>
               <span className="text-[11px] text-[var(--muted-foreground)]">
-                Yes = tombol biru "Featured App" muncul setelah nama partner.
+                Yes = tombol biru &quot;Featured App&quot; muncul setelah nama partner.
               </span>
             </div>
           </div>

@@ -76,7 +76,7 @@ export function SignatureRequestModal({
         {/* Payload box — monospace, ala wallet extension */}
         <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--muted)] p-3.5 font-mono text-xs leading-relaxed">
           <p className="text-[var(--muted-foreground)]/70">
-            // Transaction Payload
+            {"// Transaction Payload"}
           </p>
           {payload.map((row) => (
             <p key={row.label} className="mt-0.5 break-all">
