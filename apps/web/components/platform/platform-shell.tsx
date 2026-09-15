@@ -17,6 +17,7 @@ import type { LucideIcon } from "lucide-react";
 import { CanQuestLogo } from "@/components/ui/canquest-logo";
 import { PlatformToolbar } from "@/components/platform/platform-toolbar";
 import { TransactionStatusModal } from "@/components/platform/transaction-status-modal";
+import { RealtimeStatusToast } from "@/components/platform/realtime-status-toast";
 import { platformContentClass } from "@/components/platform/platform-page";
 import { PlatformI18nProvider, usePlatformI18n } from "@/lib/i18n/platform-provider";
 import { ROUTES } from "@/lib/routing/app-routes";
@@ -246,6 +247,10 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
       {/* Unified on-chain transaction status dialog (Sign → Broadcast → Confirmed). */}
       <TransactionStatusModal />
+
+      {/* Toast status koneksi realtime — silent saat putus sebentar, muncul
+          "Reconnecting…" hanya bila terputus > grace. Non-blocking. */}
+      <RealtimeStatusToast />
     </div>
   );
 }

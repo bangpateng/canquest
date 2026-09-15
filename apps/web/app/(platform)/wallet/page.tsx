@@ -5,7 +5,6 @@ import { WalletSetup } from "@/components/app/wallet/wallet-setup";
 import { WalletDashboard } from "@/components/app/wallet/wallet-dashboard";
 import { WalletReconnect } from "@/components/app/wallet/wallet-reconnect";
 import { PlatformPage } from "@/components/platform/platform-page";
-import { getLedgerStatus, type LedgerStatus } from "@/lib/services/api";
 import { useMe } from "@/lib/hooks/use-me";
 import { useInvalidateWalletTokens } from "@/lib/hooks/use-wallet-tokens";
 import {
@@ -33,7 +32,6 @@ export default function WalletPage() {
   const { me: meData, isLoading: meLoading, isError: meError, refetch } = useMe();
   const [me, setMe] = useState<Me | null>(null);
   const [profileStale, setProfileStale] = useState(false);
-  const [ledgerStatus, setLedgerStatus] = useState<LedgerStatus | null>(null);
   const invalidateWalletTokens = useInvalidateWalletTokens();
 
   // Sinkronkan data hook → state lokal (mirip implementasi lama, agar logika
@@ -57,24 +55,10 @@ export default function WalletPage() {
   }, [meData, meError]);
 
   const refresh = useCallback(async () => {
-    // Refresh paralel: profil (useMe) + ledger + token pools/balances.
-    void getLedgerStatus()
-      .then(setLedgerStatus)
-      .catch(() => {
-        /* node check is advisory — never block wallet UI */
-      });
+    // Refresh paralel: profil (useMe) + token pools/balances.
     void invalidateWalletTokens();
     await refetch();
   }, [refetch, invalidateWalletTokens]);
-
-  useEffect(() => {
-    // Ledger check di-fire sekali saat mount (advisory, non-blocking).
-    void getLedgerStatus()
-      .then(setLedgerStatus)
-      .catch(() => {
-        /* node check is advisory — never block wallet UI */
-      });
-  }, []);
 
   // FIX bug flash: saat profil masih loading (useMe belum resolve), JANGAN
   // fallback ke <WalletSetup> (form buat-wallet). Tampilkan skeleton sampai
@@ -94,10 +78,6 @@ export default function WalletPage() {
   const hasRealParty = isRealCantonPartyId(partyId);
   const isPlaceholder = Boolean(partyId?.startsWith("canquest:"));
 
-  const showNodeWarning =
-    ledgerStatus &&
-    (!ledgerStatus.canton.reachable || !ledgerStatus.splice.reachable);
-
   return (
     <PlatformPage>
       {profileStale ? (
@@ -107,18 +87,6 @@ export default function WalletPage() {
             <p className="font-semibold text-amber-600">{t("wallet.profileStale")}</p>
             <p className="mt-1 break-words text-sm font-medium text-amber-600/70">
               {t("wallet.profileStaleHint")}
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      {showNodeWarning ? (
-        <div className="flex w-full min-w-0 items-start gap-3 rounded-3xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 backdrop-blur-xl">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-orange-600" />
-          <div className="min-w-0 text-sm">
-            <p className="font-semibold text-orange-600">{t("wallet.nodeIssue")}</p>
-            <p className="mt-1 break-words text-sm font-medium text-orange-600/70">
-              {ledgerStatus!.message}
             </p>
           </div>
         </div>
