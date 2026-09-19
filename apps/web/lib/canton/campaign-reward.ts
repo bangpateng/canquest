@@ -234,15 +234,17 @@ export function campaignUiKind(
   }
 }
 
-/** "Aug 14, 21:39" — compact end date untuk claim-details rows & sidebar. */
+/** "Aug 14, 2026, 21:39" — local end date untuk claim-details rows & sidebar. */
 export function formatEndMeta(
   endsAt: string | null | undefined,
 ): string | null {
   if (!endsAt) return null;
-  return new Date(endsAt).toLocaleString("en-GB", {
-    day: "numeric",
+  return new Date(endsAt).toLocaleString("en-US", {
     month: "short",
+    day: "numeric",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }
