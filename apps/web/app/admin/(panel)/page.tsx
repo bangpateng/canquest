@@ -73,7 +73,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Stat cards — warna ikon konsisten (semua canton), value pakai type-stat. */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => (
           <div
             key={card.label}
@@ -88,10 +88,10 @@ export default async function AdminPage() {
         ))}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Link
           href="/admin/wallet-invites"
-          className="group rounded-2xl border border-canton-muted bg-canton-subtle p-6 transition-colors hover:border-canton-muted"
+          className="group h-full rounded-2xl border border-canton-muted bg-canton-subtle p-6 transition-colors hover:border-canton-muted"
         >
           <div className="flex items-start justify-between gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-canton-soft text-canton">
@@ -108,7 +108,7 @@ export default async function AdminPage() {
 
         <Link
           href="/admin/earn"
-          className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 transition-colors hover:border-[var(--primary)]/35"
+          className="group h-full rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 transition-colors hover:border-[var(--primary)]/35"
         >
           <div className="flex items-start justify-between gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-canton-soft text-canton">
@@ -127,7 +127,7 @@ export default async function AdminPage() {
 
         <Link
           href="/admin/quests"
-          className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 transition-colors hover:border-[var(--primary)]/35"
+          className="group h-full rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 transition-colors hover:border-[var(--primary)]/35"
         >
           <div className="flex items-start justify-between gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-canton-soft text-canton">
