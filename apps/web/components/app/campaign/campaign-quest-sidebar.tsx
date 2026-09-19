@@ -1,7 +1,8 @@
 import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
-import { formatCodePerWinners, formatCodePoolLabel, formatEndMeta, formatRewardAmount } from "@/lib/canton/campaign-reward";
+import { formatCodePerWinners, formatCodePoolLabel, formatRewardAmount } from "@/lib/canton/campaign-reward";
+import { LocalCampaignDate } from "@/components/app/campaign/local-campaign-date";
 import { questRewardToken } from "@/lib/quest/quest-types";
 import type { Quest } from "@/lib/quest/quest-types";
 import { Card } from "@/components/ui/card";
@@ -17,9 +18,10 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-/** Compact date format: "Jun 15, 21:39" */
-function formatEnd(quest: Quest): string {
-  return formatEndMeta(quest.endsAt) ?? quest.deadline ?? "—";
+/** Local end date: "Sep 19, 2026, 23:27". */
+function formatEnd(quest: Quest): React.ReactNode {
+  if (quest.endsAt) return <LocalCampaignDate iso={quest.endsAt} />;
+  return quest.deadline ?? "—";
 }
 
 /**
@@ -239,7 +241,7 @@ function MetricTile({
 }: {
   icon: LucideIcon;
   label: string;
-  value: string;
+  value: React.ReactNode;
   small?: boolean;
 }) {
   return (
