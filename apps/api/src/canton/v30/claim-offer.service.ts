@@ -11,6 +11,7 @@ import { UsersService } from '../../users/users.service';
 import { hasRealWallet } from '../../common/wallet-policy';
 import { readStr } from '../ledger-json';
 import { RewardType } from '@prisma/client';
+import { resolveClaimFeeCc } from '../../quests/quest-reward-config';
 import {
   V30RewardKindLabel,
   isV30Quest,
@@ -171,12 +172,16 @@ export class ClaimOfferService {
 
     // Kode reward: assign dari pool SEKARANG (hash dikomit pra-klaim).
     let codePlaintext: string | null = draw.inviteCode ?? null;
+    const isCombinedCcOnly =
+      quest.rewardType === RewardType.CC_AND_CODE_RAFFLE &&
+      draw.rewardVariant === 'CC';
     const needsCode =
-      quest.rewardType === RewardType.INVITE_CODE_RANDOM ||
-      quest.rewardType === RewardType.INVITE_CODE_FCFS ||
-      quest.rewardType === RewardType.INVITE_CODE ||
-      quest.rewardType === RewardType.CC_AND_INVITE ||
-      quest.rewardType === RewardType.CC_AND_CODE_RAFFLE;
+      !isCombinedCcOnly &&
+      (quest.rewardType === RewardType.INVITE_CODE_RANDOM ||
+        quest.rewardType === RewardType.INVITE_CODE_FCFS ||
+        quest.rewardType === RewardType.INVITE_CODE ||
+        quest.rewardType === RewardType.CC_AND_INVITE ||
+        quest.rewardType === RewardType.CC_AND_CODE_RAFFLE);
     if (needsCode && !codePlaintext) {
       const code = await this.prisma.inviteCodePool.findFirst({
         where: { questId, userId: null },
@@ -357,8 +362,9 @@ export class ClaimOfferService {
   }): number {
     const fee = quest.claimFeeCc ?? null;
     if (fee != null && fee > 0) return fee;
-    // Default lama dapp: 2 utk klaim kode, 3 utk FCFS token (kolom claimFeeCc comment).
-    return quest.rewardType === RewardType.INVITE_CODE_FCFS ? 3 : 2;
+    // Reuse the canonical product defaults: code claims 2 CC, token claims
+    // 3 CC, combined claims 3 CC. Explicit quest fees still win.
+    return resolveClaimFeeCc(quest) ?? 0;
   }
 
   /**
@@ -952,8 +958,7 @@ export class ClaimOfferService {
       | 'DONE' = 'NOT_DRAWN';
     if (!fresh?.offerContractId && !fresh?.receiptContractId)
       uiHint = 'NOT_DRAWN';
-    else if (status && status !== 'PreSettle' && status !== 'Withdrawn')
-      uiHint = 'DONE';
+    else if (status && status !== 'PreSettle') uiHint = 'DONE';
     else if (expired) uiHint = 'OFFER_EXPIRED';
     else if (freeBalanceCc < feeCc) uiHint = 'NEED_UNLOCK_OR_TOPUP';
     else if (!preapprovalActive) uiHint = 'NO_PREAPPROVAL_WARN';
@@ -975,8 +980,13 @@ export class ClaimOfferService {
         validUntil: validUntil ? new Date(validUntil).toISOString() : null,
         expired,
       },
-      hasSlot: !!fresh && !fresh.offerContractId && !fresh.receiptContractId,
-      revealedCode: fresh?.revealedCode ?? null,
+      hasSlot:
+        v30ClaimModel(quest).selection === 'FCFS' &&
+        !!fresh &&
+        !fresh.offerContractId &&
+        !fresh.receiptContractId,
+      revealedCode:
+        fresh?.claimStatus === 'Revealed' ? (fresh.revealedCode ?? null) : null,
       prechecks: {
         freeBalanceCc: Math.floor(freeBalanceCc * 10_000) / 10_000,
         feeCc,

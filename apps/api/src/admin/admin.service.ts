@@ -1504,6 +1504,7 @@ export class AdminService {
     }
 
     const rewardType = normalizeRewardType(quest.rewardType);
+    let availableCodeCount: number | null = null;
     if (
       rewardType === RewardType.INVITE_CODE_RANDOM ||
       rewardType === RewardType.INVITE_CODE ||
@@ -1512,6 +1513,7 @@ export class AdminService {
       const codeCount = await this.prisma.inviteCodePool.count({
         where: { questId, userId: null },
       });
+      availableCodeCount = codeCount;
       if (codeCount === 0) {
         throw new BadRequestException(
           'Add invite codes on the Winners page before running a draw.',
@@ -1560,6 +1562,28 @@ export class AdminService {
 
     if (selectedUserIds.length === 0) {
       return { added: 0, winners: [] };
+    }
+
+    if (availableCodeCount != null) {
+      const existingSelected = await this.prisma.winnerDraw.findMany({
+        where: { questId, userId: { in: selectedUserIds } },
+        select: { userId: true },
+      });
+      const existingIds = new Set(existingSelected.map((row) => row.userId));
+      const newWinnerCount = selectedUserIds.filter(
+        (userId) => !existingIds.has(userId),
+      ).length;
+      const requiredCodeCount =
+        rewardType === RewardType.CC_AND_CODE_RAFFLE &&
+        quest.codeWinnersQuota != null &&
+        quest.codeWinnersQuota > 0
+          ? Math.min(quest.codeWinnersQuota, newWinnerCount)
+          : newWinnerCount;
+      if (requiredCodeCount > availableCodeCount) {
+        throw new BadRequestException(
+          `Not enough codes for this draw: ${requiredCodeCount} winner(s) need a code but only ${availableCodeCount} are available.`,
+        );
+      }
     }
 
     // CC_AND_CODE_RAFFLE variant split: bila admin menetapkan codeWinnersQuota,

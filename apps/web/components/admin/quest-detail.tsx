@@ -58,6 +58,8 @@ interface QuestData {
   rewardToken?: string;
   rewardPool: string;
   deadline: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
   status: string;
   rewardType: string;
   maxWinners: number | null;

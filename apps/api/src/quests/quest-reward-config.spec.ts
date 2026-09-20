@@ -27,11 +27,13 @@ import { PrismaService } from '../prisma/prisma.service';
  */
 
 describe('quest-reward-config (pure helpers)', () => {
-  it('defaultClaimFeeCc per tipe reward', () => {
-    expect(defaultClaimFeeCc('CC_ONLY')).toBeGreaterThan(0);
-    expect(defaultClaimFeeCc('CC_AND_CODE_RAFFLE')).toBeGreaterThan(0);
+  it('defaultClaimFeeCc matches active campaign defaults', () => {
+    expect(defaultClaimFeeCc('CC_ONLY')).toBe(3);
+    expect(defaultClaimFeeCc('CC_MANUAL')).toBe(3);
+    expect(defaultClaimFeeCc('INVITE_CODE_FCFS')).toBe(2);
+    expect(defaultClaimFeeCc('INVITE_CODE_RANDOM')).toBe(2);
+    expect(defaultClaimFeeCc('CC_AND_CODE_RAFFLE')).toBe(3);
     expect(defaultClaimFeeCc('WAITLIST_EMAIL')).toBeNull();
-    expect(defaultClaimFeeCc('tipe-tak-dikenal')).toBeNull();
   });
 
   it('fcfsSlotsTakenCount — slot terisi tidak melebihi max', () => {

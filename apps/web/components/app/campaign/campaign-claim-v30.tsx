@@ -230,7 +230,7 @@ export function CampaignClaimV30Section({
         </CampaignStatusRow>
       );
     }
-    if (st === "RewardExpired") {
+    if (st === "RewardExpired" || st === "Expired") {
       return (
         <CampaignStatusRow tone="neutral" icon={AlertTriangle} label="Reward expired">
           The offer expired before the reward was received — the claim fee is
@@ -238,7 +238,14 @@ export function CampaignClaimV30Section({
         </CampaignStatusRow>
       );
     }
-    if (st === "Settled" || st === "Withdrawn") {
+    if (st === "Withdrawn") {
+      return (
+        <CampaignStatusRow tone="neutral" icon={AlertTriangle} label="Offer withdrawn">
+          This reward offer is no longer available. Contact the campaign operator.
+        </CampaignStatusRow>
+      );
+    }
+    if (st === "Settled") {
       return (
         <CampaignStatusRow tone="emerald" icon={Gift} label="Reward sent">
           Your reward was delivered directly to your wallet.
@@ -262,11 +269,28 @@ export function CampaignClaimV30Section({
         </CampaignStatusRow>
       );
     }
-    // FCFS: slot sudah diamankan saat submit — infokan, jangan diam saja.
-    if (status.hasSlot) {
+    if (status.selection === "FCFS" && status.hasSlot) {
       return (
         <CampaignStatusRow tone="sky" icon={Clock} label="FCFS slot secured">
-          Your slot is locked in — the Claim button appears once the event ends.
+          {offer.exists
+            ? "Your claim offer is ready now."
+            : "Claim is being prepared — refresh in a moment."}
+        </CampaignStatusRow>
+      );
+    }
+    // Raffle/off-chain submissions have no offer until admin draw; show the
+    // existing entry/waiting state instead of rendering a blank panel.
+    if (status.submitted && status.selection === "OFFCHAIN") {
+      return (
+        <CampaignStatusRow tone="sky" icon={Clock} label="Waitlist">
+          Entry recorded · winners will be announced after the event ends.
+        </CampaignStatusRow>
+      );
+    }
+    if (status.submitted && status.selection === "RAFFLE") {
+      return (
+        <CampaignStatusRow tone="sky" icon={Clock} label="Raffle Entry">
+          Entry recorded · winners are drawn after the event ends.
         </CampaignStatusRow>
       );
     }

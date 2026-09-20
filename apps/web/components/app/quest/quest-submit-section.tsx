@@ -144,9 +144,13 @@ export function QuestSubmitSection({
 }
 
 /** Label prefix baris status per uiKind (mockup rev. user). */
-function notSelectedLabel(uiKind: string): string {
+function notSelectedLabel(uiKind: string, rewardType?: string): string {
   if (uiKind === "cc_manual_draw") return "Raffle Result";
-  if (uiKind === "waitlist_code") return "Code Raffle";
+  if (uiKind === "waitlist_code") {
+    return rewardType === "INVITE_CODE_FCFS"
+      ? "Invite Code FCFS"
+      : "Code Raffle";
+  }
   if (uiKind === "cc_and_code_raffle") return "CC + Code Raffle";
   return "Draw Result";
 }
@@ -226,31 +230,37 @@ export function QuestSubmittedProof({
         </CampaignStatusRow>
       );
     }
+    if (state === "fcfs_missed" && (rt as string) === "INVITE_CODE_FCFS") {
+      return (
+        <CampaignStatusRow tone="neutral" icon={X} label="Invite Code FCFS">
+          All codes have been claimed
+        </CampaignStatusRow>
+      );
+    }
     return (
-      <CampaignStatusRow tone="neutral" icon={X} label={notSelectedLabel(uiKind)}>
+      <CampaignStatusRow tone="neutral" icon={X} label={notSelectedLabel(uiKind, rt as string)}>
         Not selected this time
       </CampaignStatusRow>
     );
   }
 
-  // ── Invite code: pool kode habis ─────────────────────────────────
+  // ── Invite code FCFS: pool habis ─────────────────────────────────
   if (
     uiKind === "waitlist_code" &&
     state === "fcfs_claimable" &&
     (campaignMeta?.codesRemaining ?? 0) <= 0
   ) {
     return (
-      <CampaignStatusRow tone="neutral" icon={X} label="Invite Code">
+      <CampaignStatusRow tone="neutral" icon={X} label="Invite Code FCFS">
         All codes have been claimed
       </CampaignStatusRow>
     );
   }
-
   // ── Waitlist email ────────────────────────────────────────────────
   if (uiKind === "waitlist_email" && state === "winner") {
     return (
       <CampaignStatusRow tone="emerald" icon={Check} label="Waitlist">
-        Selected · check your email
+        {rewardStatus?.message ?? "Selected · check your email"}
       </CampaignStatusRow>
     );
   }
@@ -299,10 +309,17 @@ export function QuestSubmittedProof({
   }
 
   if (uiKind === "cc_and_code_raffle" && state === "cc_reward") {
+    const rewardVariant = rewardStatus?.rewardVariant ?? null;
+    const rewardMessage =
+      rewardVariant === "CODE"
+        ? "Claimed · invite code revealed below"
+        : rewardVariant === "CC"
+          ? "Claimed · token sent to your wallet"
+          : "Claimed · token sent + code below";
     return (
       <div className="space-y-3">
         <CampaignStatusRow tone="emerald" icon={Check} label="CC + Code Raffle">
-          Claimed · token sent + code below
+          {rewardMessage}
         </CampaignStatusRow>
         {inviteCode ? (
           <RewardReveal

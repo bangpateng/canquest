@@ -71,6 +71,17 @@ export function CampaignCcAndCodeRaffleClaimSection({
     : rewardVariant === "CC"
       ? `Claim ${formatRewardAmount(rewardCc, token)}`
       : `Claim ${formatRewardAmount(rewardCc, token)} + Code`;
+  const rewardHeroValue = isCodeOnly ? "1" : String(rewardCc);
+  const rewardHeroUnit = isCodeOnly
+    ? "invite code"
+    : rewardVariant === "CC"
+      ? token
+      : `${token} + 1 Code`;
+  const rewardDescription = isCodeOnly
+    ? "You won · claim your code below"
+    : rewardVariant === "CC"
+      ? `You won · claim your ${formatRewardAmount(rewardCc, token)} below`
+      : "You won · claim your token + code below";
 
   async function handleClaim() {
     if (isSubmitting) return;
@@ -80,11 +91,17 @@ export function CampaignCcAndCodeRaffleClaimSection({
 
     // Mockup claim flow: tx-status modal (broadcast → confirmed), no confetti.
     tx.start({
-      title: isCodeOnly ? "Invite code claimed" : "Reward claimed",
+      title: isCodeOnly
+        ? "Invite code claimed"
+        : rewardVariant === "CC"
+          ? "Token reward claimed"
+          : "Reward claimed",
       subtitle,
       amountText: isCodeOnly
         ? "1 invite code"
-        : `+${formatRewardAmount(rewardCc, token)} + 1 Code`,
+        : rewardVariant === "CC"
+          ? `+${formatRewardAmount(rewardCc, token)}`
+          : `+${formatRewardAmount(rewardCc, token)} + 1 Code`,
       usdAmount:
         !isCodeOnly && rewardCc > 0 ? { amount: rewardCc, token } : null,
       subText: subtitle,
@@ -151,9 +168,11 @@ export function CampaignCcAndCodeRaffleClaimSection({
       setDeliveryKind(data.rewardDelivery ?? null);
       setSuccess(
         data.message ??
-          (code
-            ? `${formatRewardAmount(rewardCc, token)} sent to your wallet! Your code: ${code}`
-            : `${formatRewardAmount(rewardCc, token)} sent to your wallet.`),
+          (isCodeOnly
+            ? "Your invite code was claimed."
+            : code
+              ? `${formatRewardAmount(data.rewardCc ?? rewardCc, token)} sent to your wallet! Your code: ${code}`
+              : `${formatRewardAmount(data.rewardCc ?? rewardCc, token)} sent to your wallet.`),
       );
       tx.succeed({
         meta: [
@@ -185,14 +204,13 @@ export function CampaignCcAndCodeRaffleClaimSection({
     <div className="space-y-3">
       {/* M3b: prompt passphrase claim fee (user external). */}
       {passphraseModal}
-      {/* Baris WIN (state fcfs_claimable) — pemenang ditarik admin, belum claim. */}
       <CampaignStatusRow
         tone="emerald"
         icon={Trophy}
         strokeWidth={2.4}
         label="CC + Code Raffle"
       >
-        You won · claim your token + code below
+        {rewardDescription}
       </CampaignStatusRow>
 
       {/* Cukup tombol Claim — rincian (fee/reward) ada di modal. */}
@@ -209,8 +227,8 @@ export function CampaignCcAndCodeRaffleClaimSection({
       <ClaimDetailsModal
         open={claimOpen}
         onClose={() => setClaimOpen(false)}
-        heroValue={isCodeOnly ? "1" : String(rewardCc)}
-        heroUnit={isCodeOnly ? "invite code" : `${token} + 1 Code`}
+        heroValue={rewardHeroValue}
+        heroUnit={rewardHeroUnit}
         heroUsd={
           !isCodeOnly && rewardCc > 0 ? (
             <TokenUsdValue amount={rewardCc} token={token} />
@@ -241,7 +259,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
       {claimedCode && (
         <RewardReveal
           inviteCode={claimedCode}
-          rewardCc={rewardVariant === "CC" ? 0 : rewardCc}
+          rewardCc={isCodeOnly ? 0 : rewardCc}
           rewardType="CC_AND_CODE_RAFFLE"
           rewardToken={token}
           redeemUrl={campaignMeta.redeemUrl}

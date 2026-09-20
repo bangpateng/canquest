@@ -734,7 +734,7 @@ export function QuestForm({
                 className={inputCls}
               />
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Shown on cards as the deadline.
+                Local browser time; saved as UTC.
               </p>
             </div>
           </div>
