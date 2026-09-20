@@ -20,7 +20,11 @@
  */
 
 /** Template yang dianggap kontrak offer (butuh accept penerima). */
-const OFFER_TEMPLATE_SUFFIXES = [':TransferInstruction', ':TransferOffer'];
+const OFFER_TEMPLATE_SUFFIXES = [
+  ':TransferInstruction',
+  ':AmuletTransferInstruction',
+  ':TransferOffer',
+];
 
 /** True bila templateId adalah kontrak offer. */
 export function isOfferTemplate(templateId: string): boolean {

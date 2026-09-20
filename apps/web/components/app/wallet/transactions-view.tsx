@@ -351,6 +351,15 @@ function txDisplayDescription(
   // Label lock/unlock ringkas (baris lama menyimpan "CC Locked"/"CC Unlocked").
   if (/^CC Locked\b/.test(d)) return "Lock";
   if (/^CC Unlocked\b/.test(d)) return "Unlock";
+  // Reward campaign: pengirim = party reward wallet (canquest-reward-user::…).
+  // Label "Reward" (bukan "Receive") supaya beda dari kiriman P2P biasa.
+  if (
+    tx.type === "QUEST_REWARD" ||
+    (/^Received\b/.test(d) &&
+      (tx.referenceId?.startsWith("canquest-reward-user") ?? false))
+  ) {
+    return "Reward";
+  }
   if (/^Received\b/.test(d)) return "Receive";
   if (/^Sent\b/.test(d)) return "Send";
   if (d) return d;

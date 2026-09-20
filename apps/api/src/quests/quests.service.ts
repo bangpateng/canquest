@@ -498,6 +498,13 @@ export class QuestsService {
     ) {
       return `Claim fee failed: ${detail}`;
     }
+    if (
+      d.includes('eligible') ||
+      d.includes('locked cc') ||
+      d.includes('participant')
+    ) {
+      return `Claim blocked: ${detail}`;
+    }
     return FCFS_CLAIM_FAIL_MSG;
   }
 
@@ -642,6 +649,12 @@ export class QuestsService {
       where: {
         questId,
         distributed: false,
+        claimFeeLedgerTxId: null,
+        claimSessionContractId: null,
+        ledgerTxId: null,
+        offerContractId: null,
+        receiptContractId: null,
+        claimStatus: null,
         drawnAt: { lt: cutoff },
         quest: { is: { ledgerPackage: { not: 'canquest-v30' } } },
       },
@@ -1502,7 +1515,6 @@ export class QuestsService {
       drawId,
       userId,
       questId,
-      questTitle,
       cantonPartyId,
       username,
       claimContractId,
@@ -1601,7 +1613,7 @@ export class QuestsService {
         userId,
         amountCc: feeAmount,
         type: 'TRANSFER_OUT',
-        description: `Claim fee — ${questTitle}`,
+        description: 'Claim Fee',
         referenceId: `fee:${questId}`,
         counterparty: feePartyId.split('::')[0],
         ledgerTxId: updateId,
@@ -1932,6 +1944,12 @@ export class QuestsService {
       where: {
         questId: { in: questIds },
         distributed: false,
+        claimFeeLedgerTxId: null,
+        claimSessionContractId: null,
+        ledgerTxId: null,
+        offerContractId: null,
+        receiptContractId: null,
+        claimStatus: null,
         drawnAt: { lt: cutoff },
         quest: { is: { ledgerPackage: { not: 'canquest-v30' } } },
       },
@@ -3478,10 +3496,12 @@ export class QuestsService {
     claimType: 'fcfs' | 'draw_cc' | 'invite' | 'cc_code_raffle',
   ): Promise<{
     flow: string;
-    hash: string;
-    commandId: string;
-    description: string;
+    hash?: string;
+    commandId?: string;
+    description?: string;
     feeCc: number;
+    alreadyPaid?: boolean;
+    externalFeeTxId?: string;
   }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user?.username?.trim() || !user.cantonPartyId?.trim()) {
@@ -3598,6 +3618,44 @@ export class QuestsService {
       );
     }
 
+    // Reuse an already executed external fee for this user/quest. The existing
+    // claim endpoint remains the continuation path; no second signature/charge.
+    const existingFeeDraw = await this.prisma.winnerDraw.findUnique({
+      where: { questId_userId: { questId, userId } },
+      select: { claimFeeLedgerTxId: true },
+    });
+    if (existingFeeDraw?.claimFeeLedgerTxId) {
+      return {
+        flow,
+        feeCc,
+        alreadyPaid: true,
+        externalFeeTxId: existingFeeDraw.claimFeeLedgerTxId,
+      };
+    }
+
+    // The relay records an executed external fee before the claim endpoint
+    // continues. Reuse that existing on-chain update if the browser retries
+    // before WinnerDraw was updated.
+    const existingFeeHistory = await this.prisma.ccTransaction.findFirst({
+      where: {
+        userId,
+        type: 'TRANSFER_OUT',
+        referenceId: `claim:${questId}`,
+        status: 'COMPLETED',
+        ledgerTxId: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { ledgerTxId: true },
+    });
+    if (existingFeeHistory?.ledgerTxId) {
+      return {
+        flow,
+        feeCc,
+        alreadyPaid: true,
+        externalFeeTxId: existingFeeHistory.ledgerTxId,
+      };
+    }
+
     const validatorPartyId = this.config
       .get<string>('CANTON_VALIDATOR_PARTY_ID')
       ?.trim();
@@ -3625,7 +3683,7 @@ export class QuestsService {
       [built.command],
       {
         disclosedContracts: built.disclosedContracts,
-        meta: { questId, feeCc, claimType },
+        meta: { questId, questTitle: quest.title, feeCc, claimType },
         description: `Claim fee ${feeCc} CC — ${quest.title}`,
         partyId: user.cantonPartyId,
       },
@@ -5006,7 +5064,7 @@ export class QuestsService {
 
     try {
       // Re-check distributed under the lock (TOCTOU hardening).
-      const drawNow = await this.prisma.winnerDraw.findUnique({
+      let drawNow = await this.prisma.winnerDraw.findUnique({
         where: { id: draw.id },
       });
       if (drawNow?.distributed) {
@@ -5021,6 +5079,31 @@ export class QuestsService {
           feeCc: 0,
           rewardVariant: drawNow.rewardVariant as 'CODE' | 'CC' | null,
           rewardStatus,
+        };
+      }
+
+      // External fee was already executed before this endpoint was called.
+      // Persist it before DrawWinner so retries reuse the same fee and never
+      // send a second fee/reward when the ledger guard rejects the draw.
+      if (
+        drawNow &&
+        params.walletKind === 'external' &&
+        params.externalFeeTxId &&
+        !drawNow.claimFeeLedgerTxId
+      ) {
+        await this.prisma.winnerDraw.updateMany({
+          where: {
+            id: draw.id,
+            questId,
+            userId,
+            distributed: false,
+            claimFeeLedgerTxId: null,
+          },
+          data: { claimFeeLedgerTxId: params.externalFeeTxId },
+        });
+        drawNow = {
+          ...drawNow,
+          claimFeeLedgerTxId: params.externalFeeTxId,
         };
       }
 
@@ -5110,19 +5193,26 @@ export class QuestsService {
               );
           }
           if (claimResult.errors.length > 0) {
-            this.logger.warn(
-              `DrawRaffleWinner (CC+Code) warnings: ${claimResult.errors.join(' | ')}`,
-            );
+            const drawError = claimResult.errors.join(' | ');
+            this.logger.warn(`DrawRaffleWinner (CC+Code) failed: ${drawError}`);
+            throw new BadRequestException(drawError);
           } else {
             this.logger.log(
               `DrawRaffleWinner (CC+Code) OK: user=@${username} quest=${questId.slice(0, 8)} claim=${ccCodeClaimSessionId?.slice(0, 12)}`,
             );
           }
         } catch (err) {
-          this.logger.warn(
-            `DrawRaffleWinner (CC+Code) failed (non-blocking): ${String(err)}`,
-          );
+          const drawError = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`DrawRaffleWinner (CC+Code) failed: ${drawError}`);
+          throw new BadRequestException(drawError);
         }
+      } else if (
+        this.questLedger.isClaimSessionConfigured() &&
+        !ccCodeClaimSessionId
+      ) {
+        throw new BadRequestException(
+          'Claim session ledger is unavailable; reward was not sent.',
+        );
       }
 
       // ── BRANCH: atomic Settle vs fallback (non-atomic) ──────────────────────
@@ -5367,7 +5457,7 @@ export class QuestsService {
       userId: params.userId,
       amountCc: params.feeCc,
       type: 'TRANSFER_OUT',
-      description: `Sent ${params.feeCc} CC claim fee`,
+      description: 'Claim Fee',
       // Penanda "fee:" → filter visibility (CC_TRANSACTION_HISTORY_WHERE) sembunyikan
       // baris ini dari history & notifikasi. Party fee tetap tercatat untuk audit.
       referenceId: `fee:${feeLabel}`,

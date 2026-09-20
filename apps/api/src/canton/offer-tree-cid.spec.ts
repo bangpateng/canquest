@@ -27,7 +27,7 @@ describe('isOfferTemplate', () => {
       isOfferTemplate(
         'abc:Splice.AmuletTransferInstruction:AmuletTransferInstruction',
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(isOfferTemplate('x:TransferInstruction')).toBe(true);
   });
 
@@ -53,6 +53,19 @@ describe('extractTransferInstructionCid', () => {
         '1': {
           templateId:
             '7a75ef6e:Utility.Registry.App.V0.Model.Transfer:TransferOffer',
+          contractId: OFFER_CID,
+        },
+      },
+    });
+    expect(extractTransferInstructionCid(response)).toBe(OFFER_CID);
+  });
+
+  it('extracts CC AmuletTransferInstruction from a transaction tree', () => {
+    const response = JSON.stringify({
+      eventsById: {
+        '0': {
+          templateId:
+            'abc:Splice.AmuletTransferInstruction:AmuletTransferInstruction',
           contractId: OFFER_CID,
         },
       },

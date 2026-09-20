@@ -51,8 +51,16 @@ export function useExternalClaimFee() {
         hash?: string;
         description?: string;
         message?: string;
+        alreadyPaid?: boolean;
+        externalFeeTxId?: string;
       } | null;
-      if (!prep.ok || !prepRaw?.hash) {
+      if (!prep.ok) {
+        throw new Error(prepRaw?.message ?? 'Failed to prepare the claim fee.');
+      }
+      if (prepRaw?.alreadyPaid && prepRaw.externalFeeTxId) {
+        return prepRaw.externalFeeTxId;
+      }
+      if (!prepRaw?.hash) {
         throw new Error(prepRaw?.message ?? 'Failed to prepare the claim fee.');
       }
 

@@ -601,6 +601,51 @@ export class SigningRelayService {
       return;
     }
 
+    // External campaign claim fee: the signed update is already committed on-chain.
+    // Project it into the visible CC history so a successful fee is not invisible
+    // just because this path bypasses collectClaimFee().
+    if (
+      entry.flow === 'quest_claim_fcfs_fee' ||
+      entry.flow === 'quest_claim_draw_cc_fee' ||
+      entry.flow === 'quest_claim_invite_fee' ||
+      entry.flow === 'quest_claim_cc_code_raffle_fee'
+    ) {
+      const meta = entry.meta;
+      const feeCc = readNumOrUndefined(meta.feeCc) ?? 0;
+      const questId = readStr(meta.questId);
+      const updateId = result?.updateId;
+      if (feeCc <= 0 || !updateId) {
+        this.logger.warn(
+          `claim fee bookkeeping skipped: missing fee/updateId flow=${entry.flow}`,
+        );
+        return;
+      }
+      try {
+        await this.users.recordTransaction({
+          userId: entry.userId,
+          amountCc: feeCc,
+          type: 'TRANSFER_OUT',
+          description: 'Claim Fee',
+          referenceId: questId ? `claim:${questId}` : `claim:${entry.flow}`,
+          ledgerTxId: updateId,
+          cantonUpdateId: updateId,
+          status: 'COMPLETED',
+        });
+      } catch (err) {
+        const msg = String(err);
+        if (msg.includes('P2002') || msg.includes('Unique constraint')) {
+          this.logger.log(
+            `claim fee history already recorded (idempotent) flow=${entry.flow} updateId=${updateId.slice(0, 16)}...`,
+          );
+        } else {
+          this.logger.error(
+            `AUDIT-TRAIL LOSS: claim fee on-chain succeeded flow=${entry.flow} updateId=${updateId.slice(0, 16)}... error=${msg.slice(0, 160)}`,
+          );
+        }
+      }
+      return;
+    }
+
     if (entry.flow === 'send_cc' || entry.flow === 'send_token') {
       const meta = entry.meta as {
         amount: number;
