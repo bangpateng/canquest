@@ -1031,13 +1031,19 @@ export class UsersService {
         const unread = !lastSeenAt || d.drawnAt > lastSeenAt;
         const code = (d.inviteCode ?? '').trim();
         if (!code) return null;
+        // Pool kode bisa memuat masked placeholder ("hashed-…") dari generator
+        // wallet invite code — plaintext tidak pernah disimpan. Jangan
+        // dipajang sebagai kode user; notifikasi tetap jalan tanpa kode.
+        const isMasked = code.startsWith('hashed-');
         return {
           kind: 'code' as const,
           id: `code-claim-${d.questId}`,
           questId: d.questId,
           questTitle: d.quest.title,
-          code,
-          description: `You successfully claimed a code for "${d.quest.title}". Your code is ready: ${code}`,
+          code: isMasked ? '' : code,
+          description: isMasked
+            ? `You successfully claimed a code for "${d.quest.title}".`
+            : `You successfully claimed a code for "${d.quest.title}". Your code is ready: ${code}`,
           createdAt,
           unread,
         };
@@ -1072,7 +1078,12 @@ export class UsersService {
     rewardToken: string;
     winnerMessage: string | null;
     won: boolean;
-    userDraw: { distributed: boolean; inviteCode: string | null } | null;
+    userDraw: {
+      distributed: boolean;
+      inviteCode: string | null;
+      /** CC aktual pemenang — mengikuti varian undian (0 untuk varian CODE). */
+      ccAmount?: number;
+    } | null;
   }): { description: string; rewardCc: number | null } {
     const {
       rewardType,
@@ -1116,18 +1127,36 @@ export class UsersService {
     }
 
     if (rewardType === RewardType.CC_AND_CODE_RAFFLE) {
-      const codePart = userDraw?.inviteCode
-        ? ` + code: ${userDraw.inviteCode}`
-        : '';
+      // CC aktual pemenang mengikuti varian undian: varian CODE → ccAmount 0
+      // (hanya kode), varian CC/legacy → ccAmount penuh. quest.rewardCc hanya
+      // konfigurasi quest — memakainya di sini pernah janji "3 CC" ke pemenang
+      // yang tidak menerima CC apa pun.
+      const actualCc = userDraw?.ccAmount ?? 0;
+      // Pool kode bisa memuat masked placeholder ("hashed-…") dari generator
+      // wallet invite code — plaintext-nya tidak pernah disimpan, jadi jangan
+      // dipajang ke user sebagai kode.
+      const rawCode = userDraw?.inviteCode?.trim() ?? '';
+      const realCode =
+        rawCode && !rawCode.startsWith('hashed-') ? rawCode : null;
+      const parts: string[] = [];
+      if (actualCc > 0) parts.push(`${actualCc} ${rewardToken}`);
+      if (realCode) parts.push(`code: ${realCode}`);
+      const headline =
+        parts.length > 0
+          ? `You won ${questTitle}! ${parts.join(' + ')}`
+          : `You won ${questTitle}`;
       if (userDraw?.distributed) {
         return {
-          description: `You won ${questTitle}! ${rewardCc} ${rewardToken}${codePart} sent to your wallet.`,
-          rewardCc: rewardCc > 0 ? rewardCc : null,
+          description:
+            parts.length > 0
+              ? `${headline} sent to your wallet.`
+              : `${headline} — your reward has been processed.`,
+          rewardCc: actualCc > 0 ? actualCc : null,
         };
       }
       return {
-        description: `You won ${questTitle}! ${rewardCc} ${rewardToken}${codePart} — claim your reward now.`,
-        rewardCc: rewardCc > 0 ? rewardCc : null,
+        description: `${headline} — claim your reward now.`,
+        rewardCc: actualCc > 0 ? actualCc : null,
       };
     }
 
