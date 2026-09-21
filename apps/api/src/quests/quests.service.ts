@@ -656,7 +656,19 @@ export class QuestsService {
         receiptContractId: null,
         claimStatus: null,
         drawnAt: { lt: cutoff },
-        quest: { is: { ledgerPackage: { not: 'canquest-v30' } } },
+        // Hanya quest FCFS (CC_ONLY) yang punya alur reservasi slot. Baris
+        // WinnerDraw "telanjang" di quest RAFFLE (CC_MANUAL / INVITE_CODE_* /
+        // CC_AND_CODE_RAFFLE) adalah pemenang undian yang BELUM klaim — bukan
+        // reservasi bocor. Tanpa filter rewardType ini, sweeper menghapus
+        // pemenang undian v29 5 menit setelah draw (bug Loyal Code 2,
+        // 2026-09-21: baris pemenang hilang, quest balik ke "Awaiting winner
+        // draw").
+        quest: {
+          is: {
+            ledgerPackage: { not: 'canquest-v30' },
+            rewardType: RewardType.CC_ONLY,
+          },
+        },
       },
     });
     if (result.count > 0) {
@@ -1951,7 +1963,15 @@ export class QuestsService {
         receiptContractId: null,
         claimStatus: null,
         drawnAt: { lt: cutoff },
-        quest: { is: { ledgerPackage: { not: 'canquest-v30' } } },
+        // Sama seperti releaseStaleFcfsReservations: hanya quest FCFS (CC_ONLY)
+        // yang barinya bisa jadi reservasi bocor. Pemenang undian di quest
+        // raffle (v29) tidak boleh tersapu walaupun belum klaim.
+        quest: {
+          is: {
+            ledgerPackage: { not: 'canquest-v30' },
+            rewardType: RewardType.CC_ONLY,
+          },
+        },
       },
     });
     if (result.count > 0) {
