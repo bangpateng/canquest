@@ -13,6 +13,7 @@ import {
   RewardType,
   SubmissionStatus,
   normalizeRewardType,
+  resolveQuestDisplayStatus,
 } from '../common/prisma-types';
 import { errorMessage } from '../common/error-message';
 import { randomInt, randomUUID } from 'crypto';
@@ -223,6 +224,11 @@ export class AdminService {
           ...q,
           tags: this.parseTags(q.tags),
           socialLinks: parseQuestSocialLinks(q.socialLinks),
+          // Status tampilan mengikuti jadwal (endsAt/startsAt) seperti sisi user —
+          // kolom status mentah tetap ACTIVE walau event sudah lewat, sehingga
+          // dashboard admin dulu menampilkan "Active" untuk campaign yang sudah
+          // berakhir (user sudah lihat "Ended").
+          status: resolveQuestDisplayStatus(q),
           codesRemaining: codesByQuest.get(q.id) ?? 0,
         },
         this.storage,
@@ -380,6 +386,8 @@ export class AdminService {
         ...q,
         tags: this.parseTags(q.tags),
         socialLinks: parseQuestSocialLinks(q.socialLinks),
+        // Sama seperti listQuests: status tampilan dari jadwal, bukan kolom mentah.
+        status: resolveQuestDisplayStatus(q),
       },
       this.storage,
     );
