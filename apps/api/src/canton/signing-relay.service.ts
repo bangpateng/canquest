@@ -919,8 +919,19 @@ export class SigningRelayService {
       }
 
       // Cari row sender yang baru di-settle — dari situ ambil detail offer.
+      // userId != receiver: baris bercid bisa milik PENERIMA sendiri — quest
+      // reward ditulis claim flow sebagai QUEST_REWARD dengan cid yang SAMA
+      // (sisi reward wallet tidak nulis baris pengirim). Menganggapnya baris
+      // sender membuat "pengirim" ter-resolve ke party penerima → baris
+      // TRANSFER_IN self-reference ("You → You") di Activity (bug Loyal
+      // Wave 2026-09-21). Reward punya baris sendiri (QUEST_REWARD) — relay
+      // tidak perlu nulis baris penerima untuk kasus itu.
       const senderCc = await this.prisma.ccTransaction.findFirst({
-        where: { transferInstructionCid, status: 'COMPLETED' },
+        where: {
+          transferInstructionCid,
+          status: 'COMPLETED',
+          userId: { not: receiverUserId },
+        },
         select: {
           amountMicroCc: true,
           description: true,
@@ -931,7 +942,11 @@ export class SigningRelayService {
       const senderToken = senderCc
         ? null
         : await this.prisma.tokenTransaction.findFirst({
-            where: { transferInstructionCid, status: 'COMPLETED' },
+            where: {
+              transferInstructionCid,
+              status: 'COMPLETED',
+              userId: { not: receiverUserId },
+            },
             select: {
               amount: true,
               instrumentId: true,

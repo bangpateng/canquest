@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
@@ -7,6 +8,7 @@ import {
 } from '../common/quest-reward-labels';
 import {
   CcTransactionType,
+  QuestKind,
   RewardType,
   TOKEN_TX_DEBIT_TYPES,
   TokenTxType,
@@ -234,6 +236,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly points: PointsService,
     private readonly realtime: RealtimeService,
+    private readonly config: ConfigService,
   ) {}
 
   findByEmail(email: string) {
@@ -309,6 +312,31 @@ export class UsersService {
     }
 
     return ref;
+  }
+
+  /**
+   * Party pengirim untuk baris QUEST_REWARD. Baris reward tidak menyimpan
+   * party lawan (referenceId = questId), sehingga Activity dulu menampilkan
+   * reward tanpa "From". Pengirim aktual:
+   *   - quest CAMPAIGN (klaim FCFS/draw/CC+Code, distribute admin): reward
+   *     wallet — CANTON_REWARD_PARTY_ID (sendReward/settleAndRecord).
+   *   - quest non-campaign (auto-send saat submit): validator —
+   *     CANTON_VALIDATOR_PARTY_ID (queue SendCcReward).
+   */
+  async resolveQuestRewardSender(
+    questId: string | null | undefined,
+  ): Promise<string | null> {
+    if (!questId) return null;
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      select: { questKind: true },
+    });
+    if (!quest) return null;
+    const party =
+      quest.questKind === QuestKind.CAMPAIGN
+        ? this.config.get<string>('CANTON_REWARD_PARTY_ID')?.trim()
+        : this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    return party || null;
   }
 
   async create(params: {
@@ -925,7 +953,9 @@ export class UsersService {
         const counterparty =
           tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT'
             ? await this.resolveTransferCounterparty(tx.referenceId)
-            : null;
+            : tx.type === 'QUEST_REWARD'
+              ? await this.resolveQuestRewardSender(tx.referenceId)
+              : null;
         return {
           kind: 'transaction' as const,
           id: `cc-${tx.id}`,
@@ -948,23 +978,33 @@ export class UsersService {
     );
     // Serialize token rows — amount pakai decimal asli, instrumentId terisi.
     // Dedup supaya duplikat on-chain (sama seperti CC) collapse jadi 1 baris.
-    const serializedTokenTx = dedupByKey(tokenFeedRows).map((tx) => ({
-      kind: 'transaction' as const,
-      id: `tok-${tx.id}`,
-      type: tx.type,
-      description: tx.description ?? '',
-      amountMicroCc: '0',
-      referenceId: tx.referenceId,
-      counterparty: tx.referenceId,
-      createdAt: tx.createdAt.toISOString(),
-      instrumentId: tx.instrumentId,
-      amountDecimal: tx.amount.toString(),
-      // Cancelled-amount field (TOKEN_OFFER_WITHDRAWN / REJECTED).
-      cancelledAmount: tx.cancelledAmount
-        ? tx.cancelledAmount.toString()
-        : null,
-      cancelledInstrumentId: tx.instrumentId,
-    }));
+    const serializedTokenTx = await Promise.all(
+      dedupByKey(tokenFeedRows).map(async (tx) => {
+        // QUEST_REWARD token: pengirim = reward wallet / validator (dari quest),
+        // bukan questId mentah.
+        const counterparty =
+          tx.type === 'QUEST_REWARD'
+            ? await this.resolveQuestRewardSender(tx.referenceId)
+            : tx.referenceId;
+        return {
+          kind: 'transaction' as const,
+          id: `tok-${tx.id}`,
+          type: tx.type,
+          description: tx.description ?? '',
+          amountMicroCc: '0',
+          referenceId: tx.referenceId,
+          counterparty,
+          createdAt: tx.createdAt.toISOString(),
+          instrumentId: tx.instrumentId,
+          amountDecimal: tx.amount.toString(),
+          // Cancelled-amount field (TOKEN_OFFER_WITHDRAWN / REJECTED).
+          cancelledAmount: tx.cancelledAmount
+            ? tx.cancelledAmount.toString()
+            : null,
+          cancelledInstrumentId: tx.instrumentId,
+        };
+      }),
+    );
 
     const merged = [
       ...serializedCcTx,
@@ -1433,7 +1473,9 @@ export class UsersService {
           const counterparty =
             tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT'
               ? await this.resolveTransferCounterparty(tx.referenceId)
-              : null;
+              : tx.type === 'QUEST_REWARD'
+                ? await this.resolveQuestRewardSender(tx.referenceId)
+                : null;
           return {
             ...tx,
             id: row.id,
@@ -1466,7 +1508,11 @@ export class UsersService {
           createdAt: tx.createdAt,
           status: tx.status,
           transferInstructionCid: tx.transferInstructionCid,
-          counterparty: tx.referenceId,
+          // QUEST_REWARD token: pengirim = reward wallet / validator (dari quest).
+          counterparty:
+            tx.type === 'QUEST_REWARD'
+              ? await this.resolveQuestRewardSender(tx.referenceId)
+              : tx.referenceId,
           // Token-aware fields.
           instrumentId: tx.instrumentId,
           instrumentAdmin: tx.instrumentAdmin,

@@ -159,7 +159,12 @@ export function TransactionDetailContent({
   const ccAmt = microCcToCc(detail.amountMicroCc);
   const isOut = detail.type === "TRANSFER_OUT";
   // Kaki masuk (transfer maupun hasil swap) → satu bahasa: panah hijau.
-  const isIn = detail.type === "TRANSFER_IN" || detail.type === "SWAP_IN";
+  // QUEST_REWARD juga dana masuk (dari reward wallet / validator) → From/To
+  // ditampilkan seperti transfer, dengan pengirim asli dari counterparty.
+  const isIn =
+    detail.type === "TRANSFER_IN" ||
+    detail.type === "SWAP_IN" ||
+    detail.type === "QUEST_REWARD";
   const isLock = detail.type === "CC_LOCK";
   const isUnlock = detail.type === "CC_UNLOCK";
   // Token non-CC (CIP-0056 P2P transfer, mis. USDCx).
@@ -382,11 +387,14 @@ export function TransactionDetailContent({
               Deskripsi teknis (hasil inbound-sync / fee) BUKAN memo. */}
           {(() => {
             const desc = detail.description?.trim() ?? "";
-            const isPeerTransfer = isOut || isIn || isTokenTransfer;
+            const isPeerTransfer =
+              (isOut || isIn || isTokenTransfer) &&
+              detail.type !== "QUEST_REWARD";
             const isTechnical =
               !desc ||
               /^received .*\bon-chain\b/i.test(desc) ||
               /^received .*from @/i.test(desc) ||
+              /^received .*reward\b/i.test(desc) ||
               /^platform fee\b/i.test(desc);
             return isPeerTransfer && !isTechnical ? (
               <ReceiptField label="Memo">

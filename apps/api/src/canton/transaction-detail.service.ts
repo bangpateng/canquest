@@ -353,13 +353,16 @@ export class TransactionDetailService {
 
     // Counterparty baris token: resolve seperti jalur CC supaya party lawan
     // (peer transfer / escrow swap) tampil ternormalisasi, bukan id mentah.
+    // QUEST_REWARD token: pengirim = reward wallet / validator (dari quest).
     const tokenCounterparty =
       tx.type === 'TOKEN_TRANSFER_IN' ||
       tx.type === 'TOKEN_TRANSFER_OUT' ||
       tx.type === 'SWAP_IN' ||
       tx.type === 'SWAP_OUT'
         ? await this.users.resolveTransferCounterparty(tx.referenceId)
-        : tx.referenceId;
+        : tx.type === 'QUEST_REWARD'
+          ? await this.users.resolveQuestRewardSender(tx.referenceId)
+          : tx.referenceId;
 
     // Offer pending → detail ledger khusus (bukan receipt TX). null = TX final.
     const { offer, offerRole } = await this.attachPendingOffer({
@@ -464,13 +467,17 @@ export class TransactionDetailService {
 
     // Counterparty untuk baris pergerakan (transfer ATAU kaki swap): referenceId
     // menyimpan party lawan (escrow OneSwap untuk swap, party peer untuk transfer).
+    // QUEST_REWARD: pengirim = reward wallet (campaign) / validator (auto-send) —
+    // di-resolve dari quest-nya supaya modal menampilkan From yang benar.
     const counterparty =
       tx.type === 'TRANSFER_IN' ||
       tx.type === 'TRANSFER_OUT' ||
       tx.type === 'SWAP_IN' ||
       tx.type === 'SWAP_OUT'
         ? await this.users.resolveTransferCounterparty(tx.referenceId)
-        : null;
+        : tx.type === 'QUEST_REWARD'
+          ? await this.users.resolveQuestRewardSender(tx.referenceId)
+          : null;
 
     // Offer pending → detail ledger khusus (bukan receipt TX). null = TX final.
     const { offer, offerRole } = await this.attachPendingOffer({
