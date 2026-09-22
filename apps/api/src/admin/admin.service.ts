@@ -19,6 +19,7 @@ import { errorMessage } from '../common/error-message';
 import { randomInt, randomUUID } from 'crypto';
 import { hashCode } from '../party/wallet-invite-code.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TokenInstrumentHelper } from '../canton/token-instrument.helper';
 import {
   defaultClaimFeeCc,
   requiresPaidInviteClaim,
@@ -129,6 +130,7 @@ export class AdminService {
     private readonly notifications: NotificationsService,
     private readonly claimOffers: ClaimOfferService,
     private readonly lockProposals: LockProposalService,
+    private readonly tokenInstrument: TokenInstrumentHelper,
   ) {}
 
   /**
@@ -428,6 +430,75 @@ export class AdminService {
   }
 
   /**
+   * Precheck pool reward SEBELUM campaign dibuat — supaya campaign tidak
+   * pernah lahir dengan pool tak tercover. Tanpa ini, klaim bisa gagal di
+   * tengah: fee user sudah terbayar on-chain, lalu transfer reward ditolak
+   * "insufficient funds" (kasus nyata Canton Loyal Wave 2026-09-22: reward
+   * wallet 2,49 CC, campaign butuh 5 CC).
+   *
+   * Wallet pendanai per template:
+   *   - CC_ONLY (FCFS) / CC_MANUAL (draw) / CC_AND_CODE_RAFFLE → reward wallet
+   *     (CANTON_REWARD_PARTY_ID) — klaim: fee lalu reward dari wallet itu.
+   *   - CC_AND_INVITE → validator party (CANTON_VALIDATOR_PARTY_ID) — reward
+   *     auto-send saat submit, per-completer.
+   *   - INVITE_CODE_FCFS / INVITE_CODE_RANDOM / INVITE_CODE / WAITLIST_EMAIL
+   *     → tanpa reward CC → skip.
+   *
+   * Exposure = rewardCc × maxWinners (maxWinners null → 1 pemenang). Fail-closed:
+   * saldo tak terbaca (0) → campaign ditolak — admin top-up dulu, daripada
+   * campaign lahir tak terdanai.
+   */
+  private async assertRewardPoolFunded(params: {
+    rewardType: string | undefined;
+    rewardCc: number | undefined;
+    rewardToken: string | undefined;
+    maxWinners: number | null | undefined;
+  }): Promise<void> {
+    const rt = normalizeRewardType(
+      (params.rewardType ?? RewardType.CC_ONLY) as RewardType,
+    );
+    const hasCcReward =
+      rt === RewardType.CC_ONLY ||
+      rt === RewardType.CC_MANUAL ||
+      rt === RewardType.CC_AND_CODE_RAFFLE ||
+      rt === RewardType.CC_AND_INVITE;
+    const rewardCc = params.rewardCc ?? 0;
+    if (!hasCcReward || rewardCc <= 0) return;
+
+    const winners = Math.max(1, params.maxWinners ?? 1);
+    const required = rewardCc * winners;
+    const token = (params.rewardToken ?? 'CC').trim() || 'CC';
+    const validatorFunded = rt === RewardType.CC_AND_INVITE;
+    const party = validatorFunded
+      ? this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim()
+      : this.config.get<string>('CANTON_REWARD_PARTY_ID')?.trim();
+    if (!party) {
+      throw new BadRequestException(
+        validatorFunded
+          ? 'CANTON_VALIDATOR_PARTY_ID not configured — cannot verify the reward pool.'
+          : 'CANTON_REWARD_PARTY_ID not configured — cannot verify the reward pool.',
+      );
+    }
+
+    const balance =
+      token === 'CC'
+        ? await this.ledger.getAmuletBalanceOnChain(party)
+        : await this.ledger.getTokenBalanceOnChain(
+            party,
+            (await this.tokenInstrument.resolveInstrument(token as 'CC'))
+              .instrumentId,
+          );
+
+    if (balance < required) {
+      throw new BadRequestException(
+        `Reward pool not funded: ${party.split('::')[0]} has ${balance.toFixed(2)} ${token}, ` +
+          `but this campaign needs ${required} ${token} (${rewardCc} × ${winners} winner${winners === 1 ? '' : 's'}). ` +
+          `Top up the ${validatorFunded ? 'validator' : 'reward'} wallet before creating the campaign.`,
+      );
+    }
+  }
+
+  /**
    * Field on-chain (reward, fee, kuota, gate) DIBEKUKAN saat QuestCampaign
    * dibuat — kontrak di-recreate per claim dan tidak punya choice update.
    * Mengubah nilai DB setelah campaign live membuat claim pemenang DITOLAK
@@ -603,6 +674,17 @@ export class AdminService {
     }
     const questKind = data.questKind ?? QuestKind.CAMPAIGN;
     this.assertCcFcfsMaxWinners(data.rewardType, data.maxWinners, questKind);
+    // Precheck pool reward: campaign tak boleh lahir kalau wallet pendanai
+    // tidak cukup cover rewardCc × maxWinners (cegah klaim gagal di tengah —
+    // fee terbayar, reward ditolak "insufficient funds").
+    if (questKind === QuestKind.CAMPAIGN) {
+      await this.assertRewardPoolFunded({
+        rewardType: data.rewardType,
+        rewardCc: data.rewardCc,
+        rewardToken: data.rewardToken,
+        maxWinners: data.maxWinners,
+      });
+    }
     if (questKind === QuestKind.EARN_HUB) {
       const existing = await this.prisma.quest.findFirst({
         where: { questKind: QuestKind.EARN_HUB },

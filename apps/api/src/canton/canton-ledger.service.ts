@@ -4248,8 +4248,10 @@ export class CantonLedgerService {
    */
   async queryTokenHoldingsByInterface(
     partyId: string,
+    opts?: { includeAmulet?: boolean },
   ): Promise<Record<string, number>> {
     if (!partyId) return {};
+    const includeAmulet = opts?.includeAmulet === true;
 
     let offset: number | string = 0;
     try {
@@ -4324,11 +4326,23 @@ export class CantonLedgerService {
 
       // Instrument id: coba nested {id} atau flat string.
       const instNested = args.instrument as { id?: string } | undefined;
-      const instId =
+      let instId =
         instNested?.id ??
         (typeof args.instrumentId === 'string' ? args.instrumentId : null);
+      // Kontrak Splice.Amulet:Amulet TIDAK punya field instrument — CC
+      // dikenali dari templateId. Diperlukan saat includeAmulet (precheck
+      // reward pool): tanpa ini holding Amulet ke-skip (`!instId` → continue)
+      // dan saldo reward wallet selalu terbaca 0.
+      if (!instId && includeAmulet) {
+        const templateId =
+          typeof ev.templateId === 'string' ? ev.templateId : '';
+        if (templateId.endsWith(':Splice.Amulet:Amulet')) instId = 'Amulet';
+      }
       if (!instId) continue;
-      if (instId.toLowerCase() === 'amulet') continue; // CC, skip
+      // CC (Amulet) default di-skip — saldo CC dikelola terpisah (WSS/CcBalance).
+      // includeAmulet=true dipakai precheck reward pool yang butuh saldo Amulet
+      // on-chain party non-user (reward wallet).
+      if (!includeAmulet && instId.toLowerCase() === 'amulet') continue;
 
       // Amount: coba nested {initialAmount|amount} atau flat string.
       const amtObj = args.amount as Record<string, unknown> | undefined;
@@ -4378,6 +4392,32 @@ export class CantonLedgerService {
   ): Promise<number> {
     const holdings = await this.queryTokenHoldingsByInterface(partyId);
     return holdings[instrumentId.toLowerCase()] ?? 0;
+  }
+
+  /**
+   * Saldo Amulet (CC) on-chain sebuah party — khusus precheck reward pool.
+   *
+   * queryTokenHoldingsByInterface default skip Amulet (saldo CC dikelola
+   * terpisah), jadi reward wallet — yang BUKAN user (tak punya CcBalance) —
+   * tidak bisa dicek lewat jalur biasa. Method ini menghitung holding Amulet
+   * via interface view HoldingV1; LockedAmulet (dana terkunci) tidak match
+   * interface ini sehingga hasilnya = saldo yang benar-benar bisa dikirim.
+   *
+   * @returns total CC available, atau 0 kalau tidak ada / query gagal.
+   */
+  async getAmuletBalanceOnChain(partyId: string): Promise<number> {
+    if (!partyId) return 0;
+    try {
+      const holdings = await this.queryTokenHoldingsByInterface(partyId, {
+        includeAmulet: true,
+      });
+      return holdings['amulet'] ?? 0;
+    } catch (err) {
+      this.logger.warn(
+        `getAmuletBalanceOnChain ${partyId.split('::')[0]}: ${String(err).slice(0, 120)}`,
+      );
+      return 0;
+    }
   }
 
   /**

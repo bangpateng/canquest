@@ -12,6 +12,7 @@ import { PointsService } from '../users/points.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ClaimOfferService } from '../canton/v30/claim-offer.service';
 import { LockProposalService } from '../canton/v30/lock-proposal.service';
+import { TokenInstrumentHelper } from '../canton/token-instrument.helper';
 
 /**
  * Unit tests untuk anti-silent-failure fix di AdminService.distributeRewards.
@@ -161,6 +162,9 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
         // & ops lock) — distributeRewards tidak memakainya; mock kosong cukup.
         { provide: ClaimOfferService, useValue: {} },
         { provide: LockProposalService, useValue: {} },
+        // Precheck pool reward (createQuest) — distributeRewards tidak
+        // memakainya; mock kosong cukup.
+        { provide: TokenInstrumentHelper, useValue: {} },
       ],
     }).compile();
 

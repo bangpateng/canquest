@@ -1236,11 +1236,16 @@ export class QuestsService {
     }
 
     if (token === 'CC') {
-      const rewardUsername = this.rewardSenderUsername;
-      const balance = await this.splice.getUserBalance(rewardUsername);
-      if (balance !== null && balance < amount) {
-        throw new Error(
-          `Reward wallet too low (@${rewardUsername} has ${balance.toFixed(2)} CC, need ${amount} CC)`,
+      // Saldo Amulet ON-CHAIN reward wallet. Sebelumnya cek saldo DB user
+      // (splice.getUserBalance) — reward wallet bukan user (tak punya baris
+      // User) → hasil null → cek di-skip → klaim lanjut, fee terbayar, lalu
+      // transfer reward gagal "insufficient funds" (kasus Loyal Wave
+      // 2026-09-22: wallet 2,49 CC, reward 5 CC).
+      const balance =
+        await this.cantonLedger.getAmuletBalanceOnChain(rewardPartyId);
+      if (balance < amount) {
+        throw new BadRequestException(
+          `Reward wallet too low (${rewardPartyId.split('::')[0]} has ${balance.toFixed(2)} CC, need ${amount} CC). Top-up reward wallet first.`,
         );
       }
       return;
@@ -3563,6 +3568,16 @@ export class QuestsService {
       if (!allDone) {
         throw new BadRequestException('Complete all missions before claiming.');
       }
+      // Guard SEBELUM user tanda tangan fee: kalau reward sudah terkirim,
+      // jangan minta tanda tangan (fee eksternal dieksekusi relay saat
+      // signing — guard di claimCc/claimFcfsReward jalan SETELAH fee).
+      const fcfsDraw = await this.prisma.winnerDraw.findUnique({
+        where: { questId_userId: { questId, userId } },
+        select: { distributed: true },
+      });
+      if (fcfsDraw?.distributed) {
+        throw new BadRequestException('You already claimed this FCFS reward.');
+      }
       feeCc = resolveClaimFeeCc(quest) ?? 3;
     } else if (claimType === 'draw_cc' || claimType === 'cc_code_raffle') {
       if (claimType === 'draw_cc' && !this.requiresDrawCcClaim(quest)) {
@@ -3635,6 +3650,31 @@ export class QuestsService {
     if (feeCc <= 0) {
       throw new BadRequestException(
         'This campaign has no claim fee — claim directly without signing.',
+      );
+    }
+
+    // Precheck pool reward SEBELUM user tanda tangan fee. Fee eksternal
+    // dieksekusi relay SAAT signing — guard di claimFcfsReward/claimDrawCc/
+    // claimCcAndCodeRaffleReward jalan SETELAH fee terbayar. Tanpa cek di sini,
+    // wallet reward kosong = user kena fee tapi reward gagal (kasus Loyal Wave
+    // 2026-09-22). Varian CODE (CC+Code raffle) tidak kirim CC → skip.
+    const prepareRewardCc =
+      claimType === 'invite'
+        ? 0
+        : claimType === 'cc_code_raffle'
+          ? (
+              await this.prisma.winnerDraw.findUnique({
+                where: { questId_userId: { questId, userId } },
+                select: { rewardVariant: true },
+              })
+            )?.rewardVariant === 'CODE'
+            ? 0
+            : quest.rewardCc
+          : quest.rewardCc;
+    if (prepareRewardCc > 0) {
+      await this.assertRewardPool(
+        prepareRewardCc,
+        normalizeRewardToken(quest.rewardToken),
       );
     }
 
