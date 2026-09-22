@@ -28,6 +28,9 @@ export const CLAIM_FEE_DEFAULTS = {
   combined: 1, // CC_AND_CODE_RAFFLE
 } as const;
 
+/** Fee claim paling murah yang boleh diisi (default & custom). */
+export const CLAIM_FEE_MIN_CC = 0.5;
+
 export interface ClaimFeeSettings {
   tokenFeeCc: number;
   codeFeeCc: number;
@@ -139,7 +142,7 @@ export class ClaimFeeSettingsService {
     const configured = {} as Record<keyof ClaimFeeSettings, boolean>;
     for (const [group, key] of Object.entries(CLAIM_FEE_KEYS)) {
       configured[`${group}FeeCc` as keyof ClaimFeeSettings] =
-        Number((map.get(key) ?? '').trim()) > 0;
+        Number((map.get(key) ?? '').trim()) >= CLAIM_FEE_MIN_CC;
     }
     return { ...this.snapshot, configured };
   }
@@ -178,7 +181,8 @@ export class ClaimFeeSettingsService {
       const next = input[`${group.key}FeeCc` as keyof ClaimFeeSettings];
       if (next === undefined) continue; // tak dikirim → biarkan nilai lama
       const key = CLAIM_FEE_KEYS[group.key];
-      if (next === null || !Number.isFinite(next) || next <= 0) {
+      // null / non-angka / di bawah floor → hapus key → kembali ke default.
+      if (next === null || !Number.isFinite(next) || next < CLAIM_FEE_MIN_CC) {
         await this.prisma.appSetting.deleteMany({ where: { key } });
       } else {
         await this.prisma.appSetting.upsert({
@@ -208,7 +212,8 @@ export class ClaimFeeSettingsService {
       const raw = (map.get(key) ?? '').trim();
       if (!raw) return fallback;
       const n = Number(raw);
-      return Number.isFinite(n) && n > 0 ? n : fallback;
+      // Di bawah floor = anggap tak ter-set → default.
+      return Number.isFinite(n) && n >= CLAIM_FEE_MIN_CC ? n : fallback;
     };
     return {
       tokenFeeCc: parse(CLAIM_FEE_KEYS.token, CLAIM_FEE_DEFAULTS.token),

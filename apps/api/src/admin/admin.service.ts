@@ -24,7 +24,10 @@ import {
   defaultClaimFeeCc,
   requiresPaidInviteClaim,
 } from '../quests/quest-reward-config';
-import { ClaimFeeSettingsService } from '../quests/claim-fee-settings.service';
+import {
+  CLAIM_FEE_MIN_CC,
+  ClaimFeeSettingsService,
+} from '../quests/claim-fee-settings.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { UsersService } from '../users/users.service';
 import { R2StorageService } from '../storage/r2-storage.service';
@@ -566,7 +569,7 @@ export class AdminService {
           this.claimFees.getSnapshot(),
         ) ?? 3;
       const eff = (v: number | null | undefined) =>
-        v != null && v > 0 ? v : feeDefault;
+        v != null && v >= CLAIM_FEE_MIN_CC ? v : feeDefault;
       if (eff(data.claimFeeCc) !== eff(existing.claimFeeCc)) {
         changed.push('claimFeeCc');
       }
@@ -886,8 +889,11 @@ export class AdminService {
               normalizeRewardType(data.rewardType ?? RewardType.CC_ONLY),
               this.claimFees.getSnapshot(),
             ) ?? 3;
+          // Floor 0.5 CC: nilai di bawah itu dianggap "tak diisi" →
+          // pakai default (kontrak juga menolak fee-0; produk bahas
+          // fee termurah 0.5 CC).
           const claimFeeCc =
-            quest.claimFeeCc && quest.claimFeeCc > 0
+            quest.claimFeeCc && quest.claimFeeCc >= CLAIM_FEE_MIN_CC
               ? quest.claimFeeCc
               : claimFeeCcDefault;
           // v29 dedupe pre-submit (pengganti contract keys): jangan buat

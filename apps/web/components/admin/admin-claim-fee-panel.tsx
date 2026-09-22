@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/services/api/client";
+import { CLAIM_FEE_MIN_CC } from "@/lib/quest/quest-engine";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Info, RotateCcw, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
@@ -83,8 +84,10 @@ export function AdminClaimFeePanel() {
       const raw = (draft[g.key] ?? "").trim();
       if (!raw) return null; // reset ke default
       const n = Number(raw);
-      if (!Number.isFinite(n) || n <= 0) {
-        throw new Error(`Fee ${g.label} harus angka lebih dari 0.`);
+      if (!Number.isFinite(n) || n < CLAIM_FEE_MIN_CC) {
+        throw new Error(
+          `Fee ${g.label} minimal ${CLAIM_FEE_MIN_CC} CC.`,
+        );
       }
       return n;
     };
@@ -208,7 +211,7 @@ export function AdminClaimFeePanel() {
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <input
                   type="number"
-                  min="0.01"
+                  min={CLAIM_FEE_MIN_CC}
                   step="any"
                   value={draft[g.key] ?? ""}
                   onChange={(e) =>
@@ -231,8 +234,7 @@ export function AdminClaimFeePanel() {
               <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                 <Info className="h-3.5 w-3.5 shrink-0" />
                 Biarkan kosong / tekan “Default” untuk pakai nilai bawaan (
-                {g.fallback} CC). Kosong tidak sama dengan 0 — 0 CC ditolak
-                kontrak on-chain.
+                {g.fallback} CC). Fee termurah {CLAIM_FEE_MIN_CC} CC.
               </p>
             </div>
           );

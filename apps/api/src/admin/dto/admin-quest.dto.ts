@@ -22,6 +22,7 @@ import {
   QuestStatus,
   RewardType,
 } from '../../common/prisma-types';
+import { CLAIM_FEE_MIN_CC } from '../../quests/claim-fee-settings.service';
 
 /**
  * SECURITY (C2): All admin money-bearing endpoints MUST use class-validator
@@ -113,10 +114,14 @@ abstract class QuestMoneyFields {
   @Max(100000)
   rewardCc?: number;
 
-  /** Fee charged to a claimant on-chain. Negative would pay the user a fee. */
+  /**
+   * Fee charged to a claimant on-chain (custom per-campaign). Kosong/null =
+   * pakai default global (Settings → Claim fee). Minimum 0.5 CC — kontrak
+   * on-chain menolak fee-0 dan produk menetapkan fee termurah 0.5 CC.
+   */
   @IsOptional()
-  @IsNumber()
-  @Min(0)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(CLAIM_FEE_MIN_CC, { message: 'Fee claim minimal 0.5 CC' })
   @Max(10000)
   claimFeeCc?: number | null;
 

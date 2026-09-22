@@ -122,6 +122,33 @@ describe('ClaimFeeSettingsService — nilai efektif', () => {
       combinedFeeCc: false,
     });
   });
+
+  it('fee di bawah floor 0.5 dianggap tak ter-set → default', async () => {
+    const { prisma, store } = makePrisma([]);
+    store.set(CLAIM_FEE_KEYS.token, '0.3');
+    store.set(CLAIM_FEE_KEYS.code, '0.01');
+    const svc = new ClaimFeeSettingsService(prisma as unknown as PrismaService);
+    await settle();
+    await svc.refresh();
+    expect(svc.getSnapshot()).toEqual({
+      tokenFeeCc: 1,
+      codeFeeCc: 0.5,
+      combinedFeeCc: 1,
+    });
+    expect((await svc.getStatus()).configured.tokenFeeCc).toBe(false);
+  });
+
+  it('update dengan nilai di bawah floor → key dihapus (bukan disimpan)', async () => {
+    const { prisma, store } = makePrisma([]);
+    const svc = new ClaimFeeSettingsService(prisma as unknown as PrismaService);
+    await settle();
+    await svc.refresh();
+    await svc.update({ tokenFeeCc: 4 });
+    expect(store.get(CLAIM_FEE_KEYS.token)).toBe('4');
+    const res = await svc.update({ tokenFeeCc: 0.25 });
+    expect(store.has(CLAIM_FEE_KEYS.token)).toBe(false);
+    expect(res.settings.tokenFeeCc).toBe(1); // kembali ke default
+  });
 });
 
 describe('ClaimFeeSettingsService.update', () => {
@@ -139,7 +166,7 @@ describe('ClaimFeeSettingsService.update', () => {
     });
     expect(store.get(CLAIM_FEE_KEYS.token)).toBe('7');
 
-    // codeFeeCc tidak dikirim → tetap 2 (tak ada tulis apa pun).
+    // codeFeeCc tidak dikirim → tak ada tulis apa pun.
     expect(store.has(CLAIM_FEE_KEYS.code)).toBe(false);
 
     // null → hapus key → kembali ke default produk (1).

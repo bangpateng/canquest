@@ -216,6 +216,9 @@ export function getRewardConfig(
 // 2b. Default claim fee global (AppSetting, admin settings)
 // ═══════════════════════════════════════════════════════════
 
+/** Fee claim paling murah yang boleh diisi (custom per-campaign / global). */
+export const CLAIM_FEE_MIN_CC = 0.5;
+
 /** Nilai efektif default claim fee per kelompok (dari /api/admin/claim-fee). */
 export interface ClaimFeeDefaults {
   tokenFeeCc: number;
@@ -682,6 +685,21 @@ export function validateQuestForm(data: QuestFormData): FormError[] {
       errors.push({
         field: "maxWinners",
         message: "Set max winners / FCFS slots (at least 1).",
+      });
+    }
+  }
+
+  // Claim fee custom — kosong = pakai default; diisi harus >= 0.5 CC.
+  if (
+    data.claimFeeCc !== null &&
+    data.claimFeeCc !== undefined &&
+    data.claimFeeCc !== ""
+  ) {
+    const fee = Number(data.claimFeeCc);
+    if (!Number.isFinite(fee) || fee < CLAIM_FEE_MIN_CC) {
+      errors.push({
+        field: "claimFeeCc",
+        message: `Claim fee minimal ${CLAIM_FEE_MIN_CC} CC. Kosongkan untuk pakai default.`,
       });
     }
   }

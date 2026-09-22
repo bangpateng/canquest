@@ -18,6 +18,7 @@ import {
   getRewardConfig,
   validateQuestForm,
   resolveDefaultClaimFee,
+  CLAIM_FEE_MIN_CC,
   type ActiveRewardCode,
   type ClaimFeeDefaults,
 } from "@/lib/quest/quest-engine";
@@ -1223,7 +1224,7 @@ export function QuestForm({
               </label>
               <input
                 type="number"
-                min="0"
+                min={CLAIM_FEE_MIN_CC}
                 step="any"
                 disabled={frozenOnChain}
                 value={form.claimFeeCc}
@@ -1236,7 +1237,8 @@ export function QuestForm({
                 className={inputCls}
               />
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Leave empty to use the default for this reward type (
+                Isi bebas (minimal {CLAIM_FEE_MIN_CC} CC), atau kosongkan untuk
+                pakai default untuk reward type ini (
                 {defaultClaimFee != null
                   ? `${defaultClaimFee} CC`
                   : "no fee"}
