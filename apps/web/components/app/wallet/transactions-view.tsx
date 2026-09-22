@@ -15,6 +15,7 @@ import { TxTypeIcon, txIconBg } from "@/lib/canton/tx-icons";
 import { queryKeys } from "@/lib/queries/query-keys";
 import {
   TX_TYPE_KEYS as TX_TYPE_KEYS_SHARED,
+  rewardTxLabel,
 } from "@/lib/canton/tx-labels";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
@@ -351,13 +352,18 @@ function txDisplayDescription(
   // Label lock/unlock ringkas (baris lama menyimpan "CC Locked"/"CC Unlocked").
   if (/^CC Locked\b/.test(d)) return "Lock";
   if (/^CC Unlocked\b/.test(d)) return "Unlock";
-  // Reward campaign: pengirim = party reward wallet (canquest-reward-user::…).
-  // Label "Reward" (bukan "Receive") supaya beda dari kiriman P2P biasa.
-  if (
-    tx.type === "QUEST_REWARD" ||
-    (/^Received\b/.test(d) &&
-      (tx.referenceId?.startsWith("canquest-reward-user") ?? false))
-  ) {
+  // Reward campaign: SATU teks konsisten "Received 1 CC Reward" (dari nominal
+  // + token, bukan description DB yang beda per jalur: klaim "Received 1 CC
+  // reward", distribute "Raffle reward", auto-send judul quest).
+  if (tx.type === "QUEST_REWARD") {
+    return rewardTxLabel({
+      amountMicroCc: tx.amountMicroCc,
+      amountDecimal: tx.amountDecimal,
+      instrumentId: tx.instrumentId,
+    });
+  }
+  // Reward dari reward wallet yang tercatat sebagai TRANSFER_IN (jalur WSS).
+  if (/^Received\b/.test(d) && tx.referenceId?.startsWith("canquest-reward-user")) {
     return "Reward";
   }
   if (/^Received\b/.test(d)) return "Receive";

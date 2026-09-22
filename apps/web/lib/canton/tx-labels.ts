@@ -85,3 +85,42 @@ export function txTypeLabel(
   if (t) return t(known);
   return TX_TYPE_FALLBACK[type as TxType] ?? type.replace(/_/g, " ");
 }
+
+/** Format jumlah bersih: "1", "0.2", "5.5" (tanpa nol trailing). */
+export function formatTxAmount(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  return String(parseFloat(n.toFixed(6)));
+}
+
+/**
+ * Label reward token — SATU teks untuk semua tempat (toast, bell, Activity
+ * list, modal): "Received 1 CC Reward".
+ *
+ * Deskripsi DB berbeda-beda per jalur pencatatan (klaim: "Received 1 CC
+ * reward", distribute: "Raffle reward", auto-send: judul quest), jadi
+ * tampilan dinormalkan dari nominal + token — bukan dari description.
+ */
+export function rewardTxLabel(params: {
+  /** Nominal CC dalam microCC (string). Dipakai kalau bukan token. */
+  amountMicroCc?: string | null;
+  /** Nominal token unit asli (Decimal string) — dipakai kalau ada instrumentId. */
+  amountDecimal?: string | null;
+  instrumentId?: string | null;
+  /** Nominal langsung (toast memakai number); token diambil dari rewardToken. */
+  amountCc?: number | null;
+  /** Simbol token (toast) — "CC" default. */
+  rewardToken?: string | null;
+}): string {
+  const tokenFromInstrument =
+    params.instrumentId && params.instrumentId !== "Amulet"
+      ? params.instrumentId
+      : null;
+  const token = tokenFromInstrument ?? params.rewardToken ?? "CC";
+  const isToken = token !== "CC";
+  const raw = isToken
+    ? Number(params.amountDecimal ?? params.amountCc ?? 0)
+    : params.amountCc != null
+      ? params.amountCc
+      : Number(params.amountMicroCc ?? 0) / 1_000_000;
+  return `Received ${formatTxAmount(Math.abs(raw))} ${token} Reward`;
+}

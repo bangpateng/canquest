@@ -20,6 +20,7 @@ import {
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
+import { rewardTxLabel } from "@/lib/canton/tx-labels";
 import {
   useTransactionNotifications,
   type NotificationItem,
@@ -62,7 +63,13 @@ function txLabel(
   const cp = counterpartyLabel(tx.counterparty);
   switch (tx.type) {
     case "QUEST_REWARD":
-      return t("transactions.questReward");
+      // SATU teks konsisten dengan Activity list & modal — bukan label
+      // generik i18n: "Received 1 CC Reward".
+      return rewardTxLabel({
+        amountMicroCc: tx.amountMicroCc,
+        amountDecimal: tx.amountDecimal,
+        instrumentId: tx.instrumentId,
+      });
     case "SPIN_REWARD":
       return t("transactions.spinReward");
     case "TRANSFER_IN":
@@ -459,7 +466,11 @@ export function TransactionNotifications() {
     const cp = counterpartyLabel(toast.counterparty);
     switch (toast.txType) {
       case "QUEST_REWARD":
-        return t("notifications.toastEarn", { amount });
+        // Sama dengan bell row & Activity list: "Received 1 CC Reward".
+        return rewardTxLabel({
+          amountCc: toast.amountCc,
+          rewardToken: toast.rewardToken,
+        });
       case "SPIN_REWARD":
         return t("notifications.toastEarn", { amount });
       case "TRANSFER_OUT":
