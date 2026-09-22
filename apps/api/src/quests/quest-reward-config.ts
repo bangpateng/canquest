@@ -1,37 +1,57 @@
 import { RewardType, normalizeRewardType } from '../common/prisma-types';
+import {
+  CLAIM_FEE_DEFAULTS,
+  ClaimFeeSettings,
+} from './claim-fee-settings.service';
 
-/** Default platform claim fee (CC) when quest.claimFeeCc is null. */
-export function defaultClaimFeeCc(rewardType: string): number | null {
+/** Snapshot fallback bila caller tidak menyuntikkan setting dari DB. */
+const FALLBACK_SETTINGS: ClaimFeeSettings = {
+  tokenFeeCc: CLAIM_FEE_DEFAULTS.token,
+  codeFeeCc: CLAIM_FEE_DEFAULTS.code,
+  combinedFeeCc: CLAIM_FEE_DEFAULTS.combined,
+};
+
+/**
+ * Default platform claim fee (CC) when quest.claimFeeCc is null.
+ * Nilai bisa diubah admin (AppSetting) — param `settings` = snapshot aktif.
+ */
+export function defaultClaimFeeCc(
+  rewardType: string,
+  settings: ClaimFeeSettings = FALLBACK_SETTINGS,
+): number | null {
   const rt = normalizeRewardType(rewardType as RewardType);
   switch (rt) {
     case RewardType.INVITE_CODE_FCFS:
     case RewardType.INVITE_CODE_RANDOM:
     case RewardType.INVITE_CODE:
     case RewardType.CC_AND_INVITE:
-      return 2;
+      return settings.codeFeeCc;
     case RewardType.CC_ONLY:
     case RewardType.CC_MANUAL:
-      return 3;
+      return settings.tokenFeeCc;
     case RewardType.CC_AND_CODE_RAFFLE:
       // Combined CC + Code raffle. HARUS cocok dengan default yang dikirim
       // admin.service saat membuat QuestCampaign on-chain (kind non-CODE = 3).
       // Dulu 5 di sini vs 3 on-chain → Settle ditolak "Fee amount tidak
       // sesuai kontrak!" untuk campaign berfee default. Admin masih bisa
       // set fee eksplisit (mis. 5) saat create — nilai itu yang naik chain.
-      return 3;
+      return settings.combinedFeeCc;
     default:
       return null;
   }
 }
 
-export function resolveClaimFeeCc(quest: {
-  claimFeeCc?: number | null;
-  rewardType: string;
-}): number | null {
+export function resolveClaimFeeCc(
+  quest: {
+    claimFeeCc?: number | null;
+    rewardType: string;
+  },
+  settings: ClaimFeeSettings = FALLBACK_SETTINGS,
+): number | null {
   if (quest.claimFeeCc != null && quest.claimFeeCc >= 0) {
     return quest.claimFeeCc > 0 ? quest.claimFeeCc : null;
   }
-  return defaultClaimFeeCc(quest.rewardType);
+  return defaultClaimFeeCc(quest.rewardType, settings);
 }
 
 export function fcfsSlotsTakenCount(
@@ -85,11 +105,14 @@ export type QuestCampaignSummary = {
 };
 
 /** Invite / code rewards that require on-chain fee before revealing the code. */
-export function requiresPaidInviteClaim(quest: {
-  claimFeeCc?: number | null;
-  rewardType: string;
-}): boolean {
-  const fee = resolveClaimFeeCc(quest);
+export function requiresPaidInviteClaim(
+  quest: {
+    claimFeeCc?: number | null;
+    rewardType: string;
+  },
+  settings: ClaimFeeSettings = FALLBACK_SETTINGS,
+): boolean {
+  const fee = resolveClaimFeeCc(quest, settings);
   if (fee == null || fee <= 0) return false;
   const rt = normalizeRewardType(quest.rewardType as RewardType);
   return (

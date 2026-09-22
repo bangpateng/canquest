@@ -3,6 +3,8 @@
 import {
   getActiveRewardTypes,
   getRewardConfig,
+  resolveDefaultClaimFee,
+  type ClaimFeeDefaults,
 } from "@/lib/quest/quest-engine";
 import { cn } from "@/lib/utils/utils";
 import { CheckCircle2 } from "lucide-react";
@@ -14,11 +16,14 @@ export function RewardTypePicker({
   value,
   onChange,
   disabled = false,
+  feeDefaults,
 }: {
   value: string;
   onChange: (value: string) => void;
   /** Locked when the campaign is already on-chain (frozen questKind). */
   disabled?: boolean;
+  /** Setting fee default global — badge mengikuti nilai aktif di admin. */
+  feeDefaults?: ClaimFeeDefaults | null;
 }) {
   return (
     <div
@@ -81,18 +86,24 @@ export function RewardTypePicker({
             </p>
 
             {/* Claim fee badge */}
-            {option.defaultClaimFee != null ? (
-              <p className="text-[10px] font-semibold text-[var(--muted-foreground)]">
-                Default claim fee:{" "}
-                <span className="font-bold text-amber-600">
-                  {option.defaultClaimFee} CC
-                </span>
-              </p>
-            ) : (
-              <p className="text-[10px] font-semibold text-[var(--muted-foreground)]">
-                No on-chain claim fee
-              </p>
-            )}
+            {(() => {
+              const defaultFee = resolveDefaultClaimFee(
+                option.code,
+                feeDefaults,
+              );
+              return defaultFee != null ? (
+                <p className="text-[10px] font-semibold text-[var(--muted-foreground)]">
+                  Default claim fee:{" "}
+                  <span className="font-bold text-amber-600">
+                    {defaultFee} CC
+                  </span>
+                </p>
+              ) : (
+                <p className="text-[10px] font-semibold text-[var(--muted-foreground)]">
+                  No on-chain claim fee
+                </p>
+              );
+            })()}
           </button>
         );
       })}

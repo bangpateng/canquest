@@ -13,11 +13,13 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { QuestKind } from '../common/prisma-types';
 import { MaintenanceService } from '../common/maintenance.service';
+import { ClaimFeeSettingsService } from '../quests/claim-fee-settings.service';
 
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
 import { SetUserStatusDto } from './dto/set-user-status.dto';
 import { SetMaintenanceDto } from './dto/maintenance.dto';
+import { SetClaimFeeDto } from './dto/claim-fee.dto';
 import {
   AddTaskDto,
   CreateQuestDto,
@@ -40,6 +42,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly maintenance: MaintenanceService,
+    private readonly claimFees: ClaimFeeSettingsService,
   ) {}
 
   /* ── Dashboard stats ── */
@@ -364,6 +367,29 @@ export class AdminController {
       title: body.title,
       message: body.message,
       estimatedEnd: body.estimatedEnd ?? null,
+    });
+  }
+
+  /* ── Claim fee defaults (live settings via AppSetting) ── */
+
+  /** Nilai efektif (setting DB atau default bawaan) + penanda mana yang di-set. */
+  @Get('claim-fee')
+  getClaimFee() {
+    return this.claimFees.getStatus();
+  }
+
+  /**
+   * Ubah default claim fee per kelompok reward type. Campaign lama yang masih
+   * pakai default (fee null/0) otomatis dibekukan ke nilai LAMA dulu —
+   * lihat ClaimFeeSettingsService.update. Balikan: setting baru + jumlah
+   * campaign yang dibekukan.
+   */
+  @Put('claim-fee')
+  setClaimFee(@Body() body: SetClaimFeeDto) {
+    return this.claimFees.update({
+      tokenFeeCc: body.tokenFeeCc,
+      codeFeeCc: body.codeFeeCc,
+      combinedFeeCc: body.combinedFeeCc,
     });
   }
 }

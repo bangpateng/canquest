@@ -12,6 +12,7 @@ import { hasRealWallet } from '../../common/wallet-policy';
 import { readStr } from '../ledger-json';
 import { RewardType } from '@prisma/client';
 import { resolveClaimFeeCc } from '../../quests/quest-reward-config';
+import { ClaimFeeSettingsService } from '../../quests/claim-fee-settings.service';
 import {
   V30RewardKindLabel,
   isV30Quest,
@@ -59,6 +60,7 @@ export class ClaimOfferService {
     private readonly prisma: PrismaService,
     private readonly instruments: TokenInstrumentHelper,
     private readonly users: UsersService,
+    private readonly claimFees: ClaimFeeSettingsService,
   ) {}
 
   // ── Party helpers ─────────────────────────────────────────────────────────
@@ -364,7 +366,7 @@ export class ClaimOfferService {
     if (fee != null && fee > 0) return fee;
     // Reuse the canonical product defaults: code claims 2 CC, token claims
     // 3 CC, combined claims 3 CC. Explicit quest fees still win.
-    return resolveClaimFeeCc(quest) ?? 0;
+    return resolveClaimFeeCc(quest, this.claimFees.getSnapshot()) ?? 0;
   }
 
   /**

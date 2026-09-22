@@ -212,6 +212,54 @@ export function getRewardConfig(
   return REWARD_CONFIGS.CC_ONLY;
 }
 
+// ═══════════════════════════════════════════════════════════
+// 2b. Default claim fee global (AppSetting, admin settings)
+// ═══════════════════════════════════════════════════════════
+
+/** Nilai efektif default claim fee per kelompok (dari /api/admin/claim-fee). */
+export interface ClaimFeeDefaults {
+  tokenFeeCc: number;
+  codeFeeCc: number;
+  combinedFeeCc: number;
+}
+
+/**
+ * Reward type → key setting fee global. Mirror pengelompokan backend
+ * (claim-fee-settings.service.ts FEE_GROUPS). Null = tanpa fee on-chain
+ * (WAITLIST_EMAIL).
+ */
+export function claimFeeGroupOf(
+  rewardType: RewardType | string | undefined | null,
+): keyof ClaimFeeDefaults | null {
+  switch (rewardType) {
+    case "CC_ONLY":
+    case "CC_MANUAL":
+      return "tokenFeeCc";
+    case "INVITE_CODE_FCFS":
+    case "INVITE_CODE_RANDOM":
+    case "INVITE_CODE":
+    case "CC_AND_INVITE":
+      return "codeFeeCc";
+    case "CC_AND_CODE_RAFFLE":
+      return "combinedFeeCc";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Default claim fee efektif: setting global admin kalau sudah dimuat,
+ * fallback ke nilai statis di REWARD_CONFIGS (kalau belum/ fetch gagal).
+ */
+export function resolveDefaultClaimFee(
+  rewardType: RewardType | string | undefined | null,
+  settings?: ClaimFeeDefaults | null,
+): number | null {
+  if (!settings) return getRewardConfig(rewardType).defaultClaimFee;
+  const group = claimFeeGroupOf(rewardType);
+  return group ? settings[group] : null;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // 3. getQuestMeta() — derived UI state
 // ═══════════════════════════════════════════════════════════════

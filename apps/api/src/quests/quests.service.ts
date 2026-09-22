@@ -28,6 +28,10 @@ import {
   type QuestCampaignSummary,
 } from './quest-reward-config';
 import {
+  ClaimFeeSettingsService,
+  type ClaimFeeSettings,
+} from './claim-fee-settings.service';
+import {
   QuestLedgerService,
   type QuestLedgerSubmitResult,
 } from '../canton/quest-ledger.service';
@@ -131,7 +135,21 @@ export class QuestsService {
     private readonly tokenInstrument: TokenInstrumentHelper,
     private readonly signRelay: SigningRelayService,
     private readonly claimOffers: ClaimOfferService,
+    private readonly claimFees: ClaimFeeSettingsService,
   ) {}
+
+  /** Snapshot default claim fee global (AppSetting, cache TTL). */
+  private claimFeeSettings(): ClaimFeeSettings {
+    return this.claimFees.getSnapshot();
+  }
+
+  /** Wrapper requiresPaidInviteClaim dengan setting fee global aktif. */
+  private paidInviteClaim(quest: {
+    claimFeeCc?: number | null;
+    rewardType: string;
+  }): boolean {
+    return requiresPaidInviteClaim(quest, this.claimFeeSettings());
+  }
 
   /** Default biaya poin ikut Earn (jalur method='points'). Bisa di-override via AppSetting/env. */
   private static readonly EARN_ENTRY_COST_DEFAULT = 200;
@@ -610,10 +628,10 @@ export class QuestsService {
       maxWinners,
       slotsTaken,
       slotsFull,
-      fcfsClaimFeeCc: resolveClaimFeeCc(quest) ?? 0,
+      fcfsClaimFeeCc: resolveClaimFeeCc(quest, this.claimFeeSettings()) ?? 0,
       requiresFcfsClaim: this.requiresFcfsCcClaim(quest),
       requiresDrawCcClaim: this.requiresDrawCcClaim(quest),
-      requiresPaidInviteClaim: requiresPaidInviteClaim(quest),
+      requiresPaidInviteClaim: this.paidInviteClaim(quest),
       codesRemaining: await this.countAvailableInviteCodes(questId),
       redeemUrl: quest.redeemUrl ?? null,
       redeemInstructions: quest.redeemInstructions ?? null,
@@ -1933,7 +1951,7 @@ export class QuestsService {
       const summary: QuestCampaignSummary = {
         requiresFcfsClaim,
         requiresDrawCcClaim: this.requiresDrawCcClaim(q),
-        requiresPaidInviteClaim: requiresPaidInviteClaim(q),
+        requiresPaidInviteClaim: this.paidInviteClaim(q),
         maxWinners,
         remainingSlots,
         slotsTaken,
@@ -2914,7 +2932,7 @@ export class QuestsService {
       rewardType === RewardType.INVITE_CODE_FCFS ||
       rewardType === RewardType.CC_AND_INVITE;
 
-    if (needsInvite && quest.maxWinners && !requiresPaidInviteClaim(quest)) {
+    if (needsInvite && quest.maxWinners && !this.paidInviteClaim(quest)) {
       const slotsUsed = await this.prisma.winnerDraw.count({
         where: { questId },
       });
@@ -3214,7 +3232,7 @@ export class QuestsService {
               : `You received an invite code: ${draw.inviteCode}`,
         };
       }
-      if (requiresPaidInviteClaim(quest) && completion) {
+      if (this.paidInviteClaim(quest) && completion) {
         const codesLeft = await this.countAvailableInviteCodes(questId);
         const maxW = quest.maxWinners ?? 0;
         const claimed = await this.prisma.winnerDraw.count({
@@ -3254,7 +3272,7 @@ export class QuestsService {
           message: `Congratulations! Your invite code: ${draw.inviteCode}`,
         };
       }
-      if (draw && requiresPaidInviteClaim(quest)) {
+      if (draw && this.paidInviteClaim(quest)) {
         const codesLeft = await this.countAvailableInviteCodes(questId);
         if (codesLeft <= 0) {
           return {
@@ -3617,7 +3635,7 @@ export class QuestsService {
       // invite berbayar
       const rewardType = normalizeRewardType(quest.rewardType);
       const paidInvite =
-        requiresPaidInviteClaim(quest) &&
+        this.paidInviteClaim(quest) &&
         (rewardType === RewardType.INVITE_CODE_FCFS ||
           rewardType === RewardType.INVITE_CODE_RANDOM ||
           rewardType === RewardType.INVITE_CODE);
@@ -4586,7 +4604,7 @@ export class QuestsService {
 
     const rewardType = normalizeRewardType(quest.rewardType);
     const paidInvite =
-      requiresPaidInviteClaim(quest) &&
+      this.paidInviteClaim(quest) &&
       (rewardType === RewardType.INVITE_CODE_FCFS ||
         rewardType === RewardType.INVITE_CODE_RANDOM ||
         rewardType === RewardType.INVITE_CODE);

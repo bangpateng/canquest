@@ -17,6 +17,13 @@ describe('ClaimOfferService fee defaults', () => {
       {} as never,
       {} as never,
       {} as never,
+      {
+        getSnapshot: () => ({
+          tokenFeeCc: 3,
+          codeFeeCc: 2,
+          combinedFeeCc: 3,
+        }),
+      } as never,
     );
     resolveFee = (
       service as unknown as { resolveFee: FeeResolver }

@@ -23,6 +23,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { throttlerConfig } from './common/throttler.config';
 import { MaintenanceModule } from './common/maintenance.module';
 import { MaintenanceGuard } from './common/maintenance.guard';
+import { ClaimFeeSettingsModule } from './quests/claim-fee-settings.module';
 import { RealtimeModule } from './realtime/realtime.module';
 
 /** Load API env from `apps/api/.env` even when npm workspaces run Nest with cwd at repo root. */
@@ -60,6 +61,8 @@ const resolveApiEnvPaths = (): string[] => [
     NotificationsModule,
     // ── Global maintenance mode (live toggle via AppSetting) ─────
     MaintenanceModule,
+    // ── Global default claim fee per reward type (live via AppSetting) ──
+    ClaimFeeSettingsModule,
     // ── Realtime SSE push (@Global, supaya RealtimeService bisa di-inject
     //    di service mana pun untuk emit event) ──────────────────────
     RealtimeModule,

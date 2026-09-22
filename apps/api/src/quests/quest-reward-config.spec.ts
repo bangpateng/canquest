@@ -5,7 +5,9 @@ import {
   defaultClaimFeeCc,
   fcfsSlotsTakenCount,
   formatFcfsSlotsRemainingLabel,
+  resolveClaimFeeCc,
 } from './quest-reward-config';
+import { ClaimFeeSettingsService } from './claim-fee-settings.service';
 import { QuestsService } from './quests.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
@@ -18,6 +20,8 @@ import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { LockEligibilityService } from '../canton/lock-eligibility.service';
 import { TokenInstrumentHelper } from '../canton/token-instrument.helper';
+import { SigningRelayService } from '../canton/signing-relay.service';
+import { ClaimOfferService } from '../canton/v30/claim-offer.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -46,6 +50,29 @@ describe('quest-reward-config (pure helpers)', () => {
   it('formatFcfsSlotsRemainingLabel — habis = Ended', () => {
     expect(formatFcfsSlotsRemainingLabel(0, 10)).toBe('Ended');
     expect(formatFcfsSlotsRemainingLabel(5, 10)).toMatch(/5/);
+  });
+
+  it('defaultClaimFeeCc menghormati setting global dari admin', () => {
+    const settings = { tokenFeeCc: 7, codeFeeCc: 4, combinedFeeCc: 6 };
+    expect(defaultClaimFeeCc('CC_ONLY', settings)).toBe(7);
+    expect(defaultClaimFeeCc('CC_MANUAL', settings)).toBe(7);
+    expect(defaultClaimFeeCc('INVITE_CODE_FCFS', settings)).toBe(4);
+    expect(defaultClaimFeeCc('CC_AND_CODE_RAFFLE', settings)).toBe(6);
+    expect(defaultClaimFeeCc('WAITLIST_EMAIL', settings)).toBeNull();
+  });
+
+  it('resolveClaimFeeCc — fee eksplisit per-campaign selalu menang', () => {
+    const settings = { tokenFeeCc: 7, codeFeeCc: 4, combinedFeeCc: 6 };
+    expect(
+      resolveClaimFeeCc({ claimFeeCc: 0.01, rewardType: 'CC_ONLY' }, settings),
+    ).toBe(0.01);
+    // 0 = fee eksplisit "tanpa fee" (null); kosong = setting global.
+    expect(
+      resolveClaimFeeCc({ claimFeeCc: 0, rewardType: 'CC_ONLY' }, settings),
+    ).toBeNull();
+    expect(
+      resolveClaimFeeCc({ claimFeeCc: null, rewardType: 'CC_ONLY' }, settings),
+    ).toBe(7);
   });
 });
 
@@ -90,6 +117,9 @@ describe('QuestsService.claimFcfsReward — gerbang claim (pre-money)', () => {
       stub<R2StorageService>(),
       stub<LockEligibilityService>(),
       stub<TokenInstrumentHelper>(),
+      stub<SigningRelayService>(),
+      stub<ClaimOfferService>(),
+      stub<ClaimFeeSettingsService>(),
     );
   });
 

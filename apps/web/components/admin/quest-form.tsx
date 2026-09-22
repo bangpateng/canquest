@@ -17,7 +17,9 @@ import {
 import {
   getRewardConfig,
   validateQuestForm,
+  resolveDefaultClaimFee,
   type ActiveRewardCode,
+  type ClaimFeeDefaults,
 } from "@/lib/quest/quest-engine";
 import { isInviteRewardType } from "@/lib/quest/quest-types";
 import { RewardTypePicker } from "@/components/admin/reward-type-picker";
@@ -224,6 +226,15 @@ export function QuestForm({
       .then((rows) => setPartnerOptions(rows))
       .catch(() => setPartnerOptions([]));
   }, []);
+  // Default claim fee global (AppSetting) — dipakai buat placeholder/hint
+  // "Default N CC" dan auto-fill saat ganti reward type. Gagal fetch =
+  // fallback ke nilai statis quest-engine (3/2 CC).
+  const [feeDefaults, setFeeDefaults] = useState<ClaimFeeDefaults | null>(null);
+  useEffect(() => {
+    apiFetch<ClaimFeeDefaults>("/api/admin/claim-fee")
+      .then(setFeeDefaults)
+      .catch(() => setFeeDefaults(null));
+  }, []);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string[] | null>(null);
@@ -329,7 +340,7 @@ export function QuestForm({
   function updateRewardType(value: string) {
     const config = getRewardConfig(value);
     const noCc = !config.needsCcAmount;
-    const claimFee = config.defaultClaimFee;
+    const claimFee = resolveDefaultClaimFee(config.code, feeDefaults);
     setForm((prev) => ({
       ...prev,
       rewardType: config.code,
@@ -341,6 +352,9 @@ export function QuestForm({
 
   // Field visibility driven by quest-engine config
   const rewardConfig = getRewardConfig(form.rewardType);
+  // Default fee efektif: setting global admin (kalau sudah dimuat) →
+  // fallback nilai statis quest-engine.
+  const defaultClaimFee = resolveDefaultClaimFee(form.rewardType, feeDefaults);
   const showCcField = rewardConfig.needsCcAmount;
   const needsMaxWinners = rewardConfig.needsMaxWinners;
 
@@ -925,6 +939,7 @@ export function QuestForm({
               value={form.rewardType}
               onChange={updateRewardType}
               disabled={frozenOnChain}
+              feeDefaults={feeDefaults}
             />
             {frozenOnChain && (
               <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
@@ -1214,18 +1229,19 @@ export function QuestForm({
                 value={form.claimFeeCc}
                 onChange={(e) => updateField("claimFeeCc", e.target.value)}
                 placeholder={
-                  rewardConfig.defaultClaimFee != null
-                    ? `Default ${rewardConfig.defaultClaimFee}`
+                  defaultClaimFee != null
+                    ? `Default ${defaultClaimFee}`
                     : "No fee"
                 }
                 className={inputCls}
               />
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                 Leave empty to use the default for this reward type (
-                {rewardConfig.defaultClaimFee != null
-                  ? `${rewardConfig.defaultClaimFee} CC`
+                {defaultClaimFee != null
+                  ? `${defaultClaimFee} CC`
                   : "no fee"}
-                ).
+                ). Fee campaign yang sudah on-chain tidak bisa diubah — Settle
+                akan menolak klaim.
               </p>
             </div>
           </details>

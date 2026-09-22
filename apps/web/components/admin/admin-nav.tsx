@@ -3,7 +3,7 @@
 import type React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Gift, Globe, KeyRound, LayoutGrid, Scroll, Settings, UserCheck, Users } from "lucide-react";
+import { Gift, Globe, KeyRound, LayoutGrid, Scroll, Settings, UserCheck, Users, Coins } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 
 const NAV_ITEMS: {
@@ -20,6 +20,7 @@ const NAV_ITEMS: {
   { href: "/admin/referrals", label: "Referral audit", icon: UserCheck, exact: false },
   { href: "/admin/wallet-invites", label: "Generate wallet codes", icon: KeyRound, exact: false },
   { href: "/admin/settings/ecosystem", label: "Ecosystem settings", icon: Globe, exact: false },
+  { href: "/admin/settings/claim-fee", label: "Claim fee", icon: Coins, exact: false },
   { href: "/admin/settings/maintenance", label: "Settings", icon: Settings, exact: false },
 ];
 

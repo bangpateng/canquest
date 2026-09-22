@@ -24,6 +24,7 @@ import {
   defaultClaimFeeCc,
   requiresPaidInviteClaim,
 } from '../quests/quest-reward-config';
+import { ClaimFeeSettingsService } from '../quests/claim-fee-settings.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { UsersService } from '../users/users.service';
 import { R2StorageService } from '../storage/r2-storage.service';
@@ -131,6 +132,7 @@ export class AdminService {
     private readonly claimOffers: ClaimOfferService,
     private readonly lockProposals: LockProposalService,
     private readonly tokenInstrument: TokenInstrumentHelper,
+    private readonly claimFees: ClaimFeeSettingsService,
   ) {}
 
   /**
@@ -561,6 +563,7 @@ export class AdminService {
       const feeDefault =
         defaultClaimFeeCc(
           normalizeRewardType(existing.rewardType as RewardType),
+          this.claimFees.getSnapshot(),
         ) ?? 3;
       const eff = (v: number | null | undefined) =>
         v != null && v > 0 ? v : feeDefault;
@@ -881,6 +884,7 @@ export class AdminService {
           const claimFeeCcDefault =
             defaultClaimFeeCc(
               normalizeRewardType(data.rewardType ?? RewardType.CC_ONLY),
+              this.claimFees.getSnapshot(),
             ) ?? 3;
           const claimFeeCc =
             quest.claimFeeCc && quest.claimFeeCc > 0
@@ -919,6 +923,12 @@ export class AdminService {
                 // Version-pinning: catat paket kontrak campaign ini (claim
                 // path memilih template/payload sesuai versi — cutover v28→v29).
                 ledgerPackage: this.questLedger.packageName,
+                // FREEZE fee efektif ke baris DB. Fee campaign on-chain
+                // dibekankan ke kontrak saat dibuat dan Settle menolak bila
+                // feeTransfer ≠ claimFeeCc kontrak. Tanpa freeze ini, ubah
+                // setting global nanti bikin claim campaign lama mentok di
+                // "Fee amount tidak sesuai kontrak!".
+                claimFeeCc,
               },
             });
             this.logger.log(
