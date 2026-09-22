@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
+import { ModalPortal } from "@/lib/ui/modal-portal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { rewardTxLabel } from "@/lib/canton/tx-labels";
@@ -587,15 +588,22 @@ export function TransactionNotifications() {
         ) : null}
       </div>
 
-      <div
-        className="pointer-events-none fixed bottom-20 right-4 z-[60] flex flex-col gap-2 sm:bottom-6 sm:right-6"
-        aria-live="polite"
-      >
-        {!txModalOpen && toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className="pointer-events-auto flex max-w-sm items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 shadow-lg"
-          >
+      {/* Toast di-portal ke document.body: header punya backdrop-blur-xl yang
+          jadi containing block buat fixed descendant — tanpa portal, offset
+          bottom/right toast dihitung dari kotak header (nempel atas), bukan
+          viewport, jadi toast mendarat di atas/hilang di beberapa ukuran
+          screen. Portal ke body = viewport-fixed + z-[60] bersaing di root
+          level (di atas bottom nav mobile z-50, konsisten dgn RealtimeStatusToast). */}
+      <ModalPortal>
+        <div
+          className="pointer-events-none fixed bottom-20 right-4 z-[60] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2 sm:bottom-6 sm:right-6"
+          aria-live="polite"
+        >
+          {!txModalOpen && toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className="pointer-events-auto flex w-full items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 shadow-lg"
+            >
             {toastIcon(toast)}
             <p className="min-w-0 flex-1 text-sm text-[var(--foreground)]">
               {toastMessage(toast)}
@@ -613,7 +621,8 @@ export function TransactionNotifications() {
             </button>
           </div>
         ))}
-      </div>
+        </div>
+      </ModalPortal>
     </>
   );
 }
