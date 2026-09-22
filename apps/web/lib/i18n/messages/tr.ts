@@ -267,6 +267,7 @@ export const tr: PlatformMessages = {
     airdrop: "Airdrop",
     ccLocked: "Kilit",
     ccUnlocked: "Kilit Aç",
+    claimFee: "Talep ücreti",
     offerRejected: "Reddedildi",
     offerWithdrawn: "İptal edildi",
     preapprovalEnabled: "Ön onay etkinleştirildi",

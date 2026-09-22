@@ -266,6 +266,7 @@ export const en: PlatformMessages = {
     airdrop: "Airdrop",
     ccLocked: "Lock",
     ccUnlocked: "Unlock",
+    claimFee: "Claim Fee",
     offerRejected: "Rejected",
     offerWithdrawn: "Cancelled",
     preapprovalEnabled: "Preapproval enabled",

@@ -77,6 +77,11 @@ function txLabel(
         ? t("transactions.receivedFrom", { counterparty: cp })
         : t("transactions.receivedCc");
     case "TRANSFER_OUT":
+      // Claim fee (marker internal "claim:<questId>") — label pendek seperti
+      // Lock/Unlock, bukan "Sent to claim:cmu…" yang kepanjangan.
+      if (tx.referenceId?.startsWith("claim:")) {
+        return t("transactions.claimFee");
+      }
       return cp
         ? t("transactions.sentTo", { counterparty: cp })
         : t("transactions.sentCc");
@@ -475,6 +480,11 @@ export function TransactionNotifications() {
         return t("notifications.toastEarn", { amount });
       case "TRANSFER_OUT":
       case "TOKEN_TRANSFER_OUT":
+        // Claim fee (marker internal "claim:<questId>") — label pendek, bukan
+        // "You sent to claim:cmu…".
+        if (toast.referenceId?.startsWith("claim:")) {
+          return t("transactions.claimFee");
+        }
         return cp
           ? t("notifications.toastSentTo", { amount, counterparty: cp })
           : t("notifications.toastSent", { amount });

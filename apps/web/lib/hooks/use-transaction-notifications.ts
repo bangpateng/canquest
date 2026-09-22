@@ -86,6 +86,8 @@ type ToastPayload = {
   rewardToken?: string;
   description: string;
   counterparty?: string | null;
+  /** Marker internal dari baris tx (mis. "claim:<questId>") — buat label pendek. */
+  referenceId?: string | null;
 };
 
 type UseTransactionNotificationsOptions = {
@@ -171,6 +173,7 @@ export function useTransactionNotifications(
             amountCc,
             description: item.description,
             counterparty: item.counterparty,
+            referenceId: item.referenceId,
           });
         }
       }
