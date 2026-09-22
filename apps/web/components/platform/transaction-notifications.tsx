@@ -480,10 +480,10 @@ export function TransactionNotifications() {
         return t("notifications.toastEarn", { amount });
       case "TRANSFER_OUT":
       case "TOKEN_TRANSFER_OUT":
-        // Claim fee (marker internal "claim:<questId>") — label pendek, bukan
-        // "You sent to claim:cmu…".
+        // Claim fee (marker internal "claim:<questId>") — label pendek +
+        // nominal fee, bukan "You sent to claim:cmu…".
         if (toast.referenceId?.startsWith("claim:")) {
-          return t("transactions.claimFee");
+          return t("notifications.toastClaimFee", { amount });
         }
         return cp
           ? t("notifications.toastSentTo", { amount, counterparty: cp })

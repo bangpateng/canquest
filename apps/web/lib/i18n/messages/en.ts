@@ -40,6 +40,7 @@ export const en: PlatformMessages = {
     toastReceivedFrom: "Received +{amount} CC from {counterparty}",
     toastLocked: "You locked {amount} CC",
     toastUnlocked: "{amount} CC has been unlocked",
+    toastClaimFee: "Claim fee {amount} CC",
   },
   common: {
     loading: "Loading…",

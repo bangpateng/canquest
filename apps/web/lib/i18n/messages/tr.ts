@@ -40,6 +40,7 @@ export const tr: PlatformMessages = {
     toastReceivedFrom: "{counterparty} hesabından +{amount} CC alındı",
     toastLocked: "{amount} CC kilitledin",
     toastUnlocked: "{amount} CC kilidi açıldı",
+    toastClaimFee: "Talep ücreti {amount} CC",
   },
   common: {
     loading: "Yükleniyor…",
