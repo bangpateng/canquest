@@ -3,7 +3,7 @@ import { nestWithAdminAccessCookie } from '@/lib/auth/nest-proxy-admin-access';
 
 /**
  * Proxy DELETE referrals/:referredUserId → Nest admin.
- * Mencabut satu referral + clawback poin pengundang.
+ * Revokes a single referral + claws back the referrer's points.
  */
 export async function DELETE(
   req: NextRequest,

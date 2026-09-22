@@ -114,7 +114,7 @@ export function AdminReferralAuditPanel() {
     }
   };
 
-  /** Hapus SEMUA referral yang auto-flag (di luar allowlist) sekaligus di server. */
+  /** Delete ALL auto-flagged referrals (outside the allowlist) on the server at once. */
   const revokeAllFlagged = async () => {
     if (!data || data.totalFlagged === 0) return;
     if (
@@ -263,7 +263,7 @@ export function AdminReferralAuditPanel() {
             </p>
           </div>
 
-          {/* Ringkasan per-pengundang */}
+          {/* Summary per referrer */}
           <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
             <table className="w-full min-w-[36rem] text-left text-sm">
               <thead>

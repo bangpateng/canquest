@@ -17,8 +17,8 @@ const inputClass =
   "w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none focus:border-[rgb(111_230_0/0.45)]";
 
 /**
- * Field gambar ecosystem — input URL + Upload file + Browse gallery (hapus).
- * Dipakai untuk logo partner & foto team di panel admin.
+ * Ecosystem image field — URL input + file upload + browse gallery (delete).
+ * Used for partner logos & team photos in the admin panel.
  */
 export function EcoImageField({
   label,
@@ -119,7 +119,7 @@ export function EcoImageField({
           className={inputClass}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder ?? "https://… atau upload"}
+          placeholder={placeholder ?? "https://… or upload"}
         />
         <button
           type="button"

@@ -72,7 +72,7 @@ export default async function AdminPage() {
         </p>
       </div>
 
-      {/* Stat cards — warna ikon konsisten (semua canton), value pakai type-stat. */}
+      {/* Stat cards — consistent icon colors (all canton), values use type-stat. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => (
           <div

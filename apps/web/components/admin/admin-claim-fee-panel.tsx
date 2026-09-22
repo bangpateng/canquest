@@ -16,7 +16,7 @@ interface ClaimFeeStatus {
 
 const DEFAULTS = { tokenFeeCc: 1, codeFeeCc: 0.5, combinedFeeCc: 1 };
 
-/** Kelompok fee → reward type yang kena (buat label panel). */
+/** Fee group → the reward types it applies to (for the panel label). */
 const GROUPS: {
   key: keyof typeof DEFAULTS;
   label: string;
@@ -31,7 +31,7 @@ const GROUPS: {
   },
   {
     key: "codeFeeCc",
-    label: "Kode waitlist (FCFS / Raffle)",
+    label: "Waitlist code (FCFS / Raffle)",
     types: "INVITE_CODE_FCFS, INVITE_CODE_RANDOM, …",
     fallback: DEFAULTS.codeFeeCc,
   },
@@ -44,7 +44,7 @@ const GROUPS: {
 ];
 
 const FEE_ERROR =
-  "Gagal memuat setting claim fee. Coba refresh — kalau tetap, kabari backend.";
+  "Failed to load claim fee settings. Try refreshing — if it persists, let the backend team know.";
 
 export function AdminClaimFeePanel() {
   const [status, setStatus] = useState<ClaimFeeStatus | null>(null);
@@ -53,7 +53,7 @@ export function AdminClaimFeePanel() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
-  // Draft per group: "" = (belum diubah) pakai nilai efektif.
+  // Draft per group: "" = (not yet changed) use the effective value.
   const [draft, setDraft] = useState<Record<string, string>>({});
 
   async function refresh() {
@@ -86,7 +86,7 @@ export function AdminClaimFeePanel() {
       const n = Number(raw);
       if (!Number.isFinite(n) || n < CLAIM_FEE_MIN_CC) {
         throw new Error(
-          `Fee ${g.label} minimal ${CLAIM_FEE_MIN_CC} CC.`,
+          `Fee for ${g.label} must be at least ${CLAIM_FEE_MIN_CC} CC.`,
         );
       }
       return n;
@@ -101,17 +101,17 @@ export function AdminClaimFeePanel() {
           payload[g.key] !== Number((draft[g.key] ?? "").trim()),
       );
       if (!hasChange) {
-        setSaved("Tidak ada perubahan.");
+        setSaved("No changes to save.");
         return;
       }
       const affected = GROUPS.filter(
         (g) => status && payload[g.key] !== status[g.key as keyof ClaimFeeStatus],
       );
       const note = affected.length
-        ? `\n\nFee default baru hanya berlaku untuk campaign BARU. Campaign lama yang masih pakai default otomatis dibekukan ke fee lamanya, jadi klaim mereka tetap jalan.`
+        ? `\n\nNew default fees apply only to NEW campaigns. Older campaigns still on the default are automatically frozen at their current fee, so their claims keep working.`
         : "";
       const ok = window.confirm(
-        `Terapkan fee default baru?\n${GROUPS.filter(
+        `Apply new default fees?\n${GROUPS.filter(
           (g) => payload[g.key] !== Number((draft[g.key] ?? "").trim()),
         )
           .map((g) => `· ${g.label}: ${payload[g.key] ?? `${g.fallback} (default)`} CC`)
@@ -126,12 +126,12 @@ export function AdminClaimFeePanel() {
       }>("/api/admin/claim-fee", { method: "PUT", json: payload });
       setSaved(
         res.frozenQuests > 0
-          ? `Tersimpan. ${res.frozenQuests} campaign lama dibekukan ke fee lamanya (klaim mereka aman).`
-          : "Tersimpan. Berlaku untuk campaign yang dibuat mulai sekarang.",
+          ? `Saved. ${res.frozenQuests} older campaigns were frozen at their current fee (their claims are safe).`
+          : "Saved. Applies to campaigns created from now on.",
       );
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal menyimpan.");
+      setError(e instanceof Error ? e.message : "Could not save.");
     } finally {
       setSaving(false);
     }
@@ -145,25 +145,25 @@ export function AdminClaimFeePanel() {
     return (
       <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
         <LoadingSpinner size="md" />
-        <span>Memuat setting fee…</span>
+        <span>Loading fee settings…</span>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Ringkasan */}
+      {/* Summary */}
       <div className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
         <Wallet className="mt-0.5 h-5 w-5 shrink-0 text-canton" />
         <div className="text-sm text-[var(--muted-foreground)]">
           <p className="font-semibold text-[var(--foreground)]">
-            Fee default dipakai saat admin tidak mengisi “Claim fee” saat bikin
-            campaign.
+            Default fees apply when an admin leaves “Claim fee” empty when
+            creating a campaign.
           </p>
           <p className="mt-1">
-            Biaya dikenakan on-chain saat pemenang klaim reward. Fee campaign
-            lama yang sudah jalan tidak akan berubah — Admin bisa tetap override
-            per-campaign di form “Advanced — claim fee”.
+            Fees are charged on-chain when a winner claims a reward. Fees on
+            campaigns already running will not change — admins can still
+            override per campaign in the “Advanced — claim fee” form.
           </p>
         </div>
       </div>
@@ -179,7 +179,7 @@ export function AdminClaimFeePanel() {
         </div>
       )}
 
-      {/* Form per kelompok */}
+      {/* Form per group */}
       <div className="space-y-4">
         {GROUPS.map((g) => {
           const isCustom = status?.configured[g.key] ?? false;
@@ -205,7 +205,7 @@ export function AdminClaimFeePanel() {
                       : "border-[var(--border)] bg-[var(--muted)]/30 text-[var(--muted-foreground)]",
                   )}
                 >
-                  {isCustom ? "Diatur manual" : "Default bawaan"}
+                  {isCustom ? "Set manually" : "Built-in default"}
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -225,7 +225,7 @@ export function AdminClaimFeePanel() {
                   type="button"
                   onClick={() => resetGroup(g.key)}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                  title={`Kosongkan → kembali ke default ${g.fallback} CC`}
+                  title={`Clear → revert to default (${g.fallback} CC)`}
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   Default {g.fallback}
@@ -233,8 +233,8 @@ export function AdminClaimFeePanel() {
               </div>
               <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                 <Info className="h-3.5 w-3.5 shrink-0" />
-                Biarkan kosong / tekan “Default” untuk pakai nilai bawaan (
-                {g.fallback} CC). Fee termurah {CLAIM_FEE_MIN_CC} CC.
+                Leave empty / press “Default” to use the built-in value (
+                {g.fallback} CC). Minimum fee {CLAIM_FEE_MIN_CC} CC.
               </p>
             </div>
           );
@@ -251,7 +251,7 @@ export function AdminClaimFeePanel() {
             saving ? "opacity-60" : "hover:opacity-90",
           )}
         >
-          {saving ? "Menyimpan…" : "Simpan fee default"}
+          {saving ? "Saving…" : "Save default fees"}
         </button>
         <button
           type="button"
@@ -259,7 +259,7 @@ export function AdminClaimFeePanel() {
           disabled={saving}
           className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] px-4 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
         >
-          Muat ulang
+          Reload
         </button>
       </div>
     </div>

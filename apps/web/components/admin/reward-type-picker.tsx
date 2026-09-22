@@ -22,7 +22,7 @@ export function RewardTypePicker({
   onChange: (value: string) => void;
   /** Locked when the campaign is already on-chain (frozen questKind). */
   disabled?: boolean;
-  /** Setting fee default global — badge mengikuti nilai aktif di admin. */
+  /** Global default fee setting — the badge follows the active value in admin. */
   feeDefaults?: ClaimFeeDefaults | null;
 }) {
   return (

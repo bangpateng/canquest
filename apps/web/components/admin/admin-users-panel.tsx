@@ -243,7 +243,7 @@ export function AdminUsersPanel() {
     }
   };
 
-  /** Buka modal daftar referral seorang user. */
+  /** Open the modal listing a user's referrals. */
   const openReferrals = async (user: AdminUserRow) => {
     setReferralModalUser(user);
     setReferrals(null);
@@ -261,7 +261,7 @@ export function AdminUsersPanel() {
     }
   };
 
-  /** Cabut satu referral + clawback poin. */
+  /** Revoke a single referral + claw back points. */
   const revokeReferral = async (row: ReferralRow) => {
     const flagged = row.nonAllowedDomain
       ? '\n\n⚠️ This referral used a non-allowed email domain.'
@@ -283,7 +283,7 @@ export function AdminUsersPanel() {
       setReferralMessage(
         `Removed referral · clawed back ${json.pointsClawedBack ?? row.points} pts. Referrer now at ${json.referrerEarnPointsNow ?? '?'} pts.`,
       );
-      // Refresh modal + tabel utama.
+      // Refresh modal + main table.
       if (referralModalUser) await openReferrals(referralModalUser);
       await load();
     } catch {
@@ -508,7 +508,7 @@ export function AdminUsersPanel() {
         </div>
       )}
 
-      {/* Modal daftar referral */}
+      {/* Referral list modal */}
       {referralModalUser && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"

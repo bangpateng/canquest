@@ -54,7 +54,7 @@ interface QuestData {
   bannerImageUrl?: string | null;
   logoUrl?: string | null;
   rewardCc: number;
-  /** Token reward: "CC" (default) atau "USDCx". */
+  /** Token reward: "CC" (default) or "USDCx". */
   rewardToken?: string;
   rewardPool: string;
   deadline: string | null;
@@ -93,7 +93,7 @@ export function QuestDetail({ questId }: { questId: string }) {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    // apiFetch SUDAH me-parse JSON — jangan panggil .json() lagi (TypeError).
+    // apiFetch ALREADY parses the JSON — do not call .json() again (TypeError).
     apiFetch<QuestData>(`/api/admin/quests/${questId}`)
       .then((d: QuestData) => {
         if (d?.questKind === "EARN_HUB") {
@@ -184,7 +184,7 @@ export function QuestDetail({ questId }: { questId: string }) {
         correctAnswer: "",
       });
     } catch {
-      /* gagal tambah task — admin bisa retry */
+      /* failed to add task — admin can retry */
     }
     setTaskSaving(false);
   }

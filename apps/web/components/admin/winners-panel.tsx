@@ -36,7 +36,7 @@ interface Winner {
   ledgerTxId: string | null;
   drawnAt: string;
   distributedAt: string | null;
-  /** v30 mirror: ClaimOffer/ClaimReceipt state (null = quest v29 / belum offer). */
+  /** v30 mirror: ClaimOffer/ClaimReceipt state (null = v29 quest / no offer yet). */
   offerContractId?: string | null;
   claimStatus?: string | null;
   rewardKind?: string | null;
@@ -52,7 +52,7 @@ interface InviteCode {
 
 type Tab = "participants" | "winners" | "codes";
 
-/** Pesan error dari ApiError (BFF) dengan fallback generik. */
+/** Error message from ApiError (BFF) with a generic fallback. */
 function errMsg(err: unknown, fallback: string): string {
   return err instanceof ApiError && err.message ? err.message : fallback;
 }
@@ -180,9 +180,9 @@ export function WinnersPanel({ questId }: { questId: string }) {
       return;
     }
     {
-      // ccSent-aware: hanya mark distributed=true untuk winner yang BENAR-BENAR
-      // terkirim onchain. Yang gagal tetap "Pending" → tombol Send muncul lagi
-      // → admin bisa retry tanpa double-pay (backend filter distributed:false).
+      // ccSent-aware: only mark distributed=true for winners that were ACTUALLY
+      // delivered on-chain. Failed ones stay "Pending" → the Send button reappears
+      // → admin can retry without double-paying (backend filters distributed:false).
       const sentDrawIds = new Set(
         (data.results ?? []).filter((r) => r.ccSent).map((r) => r.drawId),
       );
@@ -249,7 +249,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
       );
       setCodes(Array.isArray(fresh) ? fresh : []);
     } catch {
-      /* diam — admin bisa retry */
+      /* silent — admin can retry */
     }
   }
 

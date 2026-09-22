@@ -47,7 +47,7 @@ export function AdminLoginForm() {
           ? err.message
           : 'Sign-in failed — try again.';
       setError(msg);
-      // Reset captcha supaya percobaan berikutnya meminta token baru.
+      // Reset captcha so the next attempt requests a new token.
       setTurnstileToken(null);
       setCaptchaReset((n) => n + 1);
     } finally {

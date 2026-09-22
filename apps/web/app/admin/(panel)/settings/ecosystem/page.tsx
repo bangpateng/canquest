@@ -118,7 +118,7 @@ export default function AdminEcosystemSettingsPage() {
             Ecosystem settings
           </h1>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Kelola kategori direktori & social media global /ecosystem.
+            Manage /ecosystem directory categories & global social media.
           </p>
         </div>
       </div>
@@ -129,7 +129,7 @@ export default function AdminEcosystemSettingsPage() {
         </p>
       )}
 
-      {/* ── Kategori ── */}
+      {/* ── Categories ── */}
       <section className="space-y-3">
         <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
           Categories (dropdown & tags)
@@ -137,13 +137,13 @@ export default function AdminEcosystemSettingsPage() {
         <div className="flex flex-wrap gap-2">
           <input
             className={cn(inputClass, "w-44")}
-            placeholder="Value (mis. PAYMENTS)"
+            placeholder="Value (e.g. PAYMENTS)"
             value={newCat.value}
             onChange={(e) => setNewCat({ ...newCat, value: e.target.value })}
           />
           <input
             className={cn(inputClass, "w-52")}
-            placeholder="Label (mis. Payments)"
+            placeholder="Label (e.g. Payments)"
             value={newCat.label}
             onChange={(e) => setNewCat({ ...newCat, label: e.target.value })}
           />
@@ -252,13 +252,13 @@ export default function AdminEcosystemSettingsPage() {
         )}
       </section>
 
-      {/* ── Social links global ── */}
+      {/* ── Global social links ── */}
       <section className="space-y-3">
         <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
           Global social links
         </h2>
         <p className="text-xs text-[var(--muted-foreground)]">
-          Ditampilkan di detail partner yang belum punya social links sendiri.
+          Shown on partners that have no social links of their own.
         </p>
         <div className="space-y-2">
           {socials.map((s, i) => (

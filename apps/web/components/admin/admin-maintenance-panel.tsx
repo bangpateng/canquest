@@ -161,7 +161,7 @@ export function AdminMaintenancePanel() {
           </button>
         </label>
 
-        {/* Pesan kustom */}
+        {/* Custom message */}
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-[var(--foreground)]">
             Title
@@ -236,7 +236,7 @@ export function AdminMaintenancePanel() {
   );
 }
 
-/** Konversi ISO string → value untuk <input type="datetime-local"> (YYYY-MM-DDTHH:mm, lokal). */
+/** Convert ISO string → value for <input type="datetime-local"> (YYYY-MM-DDTHH:mm, local). */
 function toLocalInputValue(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";

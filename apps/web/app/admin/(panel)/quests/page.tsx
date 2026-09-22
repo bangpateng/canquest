@@ -4,8 +4,8 @@ import { adminServerFetch } from "@/lib/auth/admin-server-fetch";
 import type { QuestHub } from "@/components/admin/admin-quest-hub-tasks-panel";
 
 async function fetchQuestHub(): Promise<QuestHub | null> {
-  // earn-hub merespon 404 saat belum ada hub — treat as null (panel akan
-  // menawarkan tombol setup), bukan error.
+  // earn-hub responds 404 when no hub exists yet — treat as null (the panel will
+  // offer a setup button), not an error.
   const data = await adminServerFetch<QuestHub | { message?: string }>(
     "/earn-hub",
   );

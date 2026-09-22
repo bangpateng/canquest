@@ -16,7 +16,7 @@ export interface AdminQuestRow {
   org: string;
   status: string;
   rewardCc: number;
-  /** Token reward: "CC" (default) atau "USDCx". */
+  /** Token reward: "CC" (default) or "USDCx". */
   rewardToken?: string;
   rewardType: string;
   maxWinners: number | null;

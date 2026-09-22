@@ -4,7 +4,7 @@ import { nestWithAdminAccessCookie } from '@/lib/auth/nest-proxy-admin-access';
 /**
  * Proxy POST referrals/revoke-bulk → Nest admin.
  * Body: { referredUserIds?: string[] } | { all?: true }
- * Menghapus banyak referral + clawback massal di server (untuk ribuan item).
+ * Deletes many referrals + bulk clawback on the server (for thousands of items).
  */
 export async function POST(req: NextRequest) {
   const body = await req.text();

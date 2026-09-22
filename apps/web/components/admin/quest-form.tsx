@@ -155,9 +155,9 @@ export function QuestForm({
 }: QuestFormProps) {
   const router = useRouter();
   const isEdit = !!initialData?.id;
-  // On-chain frozen: campaign sudah punya kontrak Canton → reward type/token,
-  // amount, max winners, claim fee, dan entry gate tidak bisa diubah (kontrak
-  // di-recreate per claim, tanpa choice update). Backend juga menolak (guard).
+  // On-chain frozen: the campaign already has a Canton contract → reward type/token,
+  // amount, max winners, claim fee, and entry gate cannot be changed (the contract
+  // is recreated per claim, with no choice update). The backend also rejects it (guard).
   const frozenOnChain = isEdit && !!initialData?.ledgerCampaignId;
 
   // Normalize legacy reward types on load
@@ -205,8 +205,8 @@ export function QuestForm({
         ? String(initialData.entryCostPoints)
         : "",
   });
-  // v30: claim via ClaimOffer (paket canquest-claim + canquest-lock). Create
-  // only — quest v29 lama tidak bisa dimigrasi (README v30: bukan upgrade).
+  // v30: claim via ClaimOffer (canquest-claim + canquest-lock packages). Create
+  // only — old v29 quests cannot be migrated (README v30: not an upgrade).
   const [useV30Claim, setUseV30Claim] = useState(
     initialData?.ledgerPackage === "canquest-v30",
   );
@@ -214,7 +214,7 @@ export function QuestForm({
   const [socialLinks, setSocialLinks] = useState<QuestSocialLink[]>(
     initialData?.socialLinks ?? [],
   );
-  // Ecosystem partner link (optional) — daftar dimuat dari admin API.
+  // Ecosystem partner link (optional) — the list is loaded from the admin API.
   const [partnerId, setPartnerId] = useState<string>(
     (initialData as { partnerId?: string } | undefined)?.partnerId ?? "",
   );
@@ -227,9 +227,9 @@ export function QuestForm({
       .then((rows) => setPartnerOptions(rows))
       .catch(() => setPartnerOptions([]));
   }, []);
-  // Default claim fee global (AppSetting) — dipakai buat placeholder/hint
-  // "Default N CC" dan auto-fill saat ganti reward type. Gagal fetch =
-  // fallback ke nilai statis quest-engine (3/2 CC).
+  // Default claim fee global (AppSetting) — used for the placeholder/hint
+  // "Default N CC" and auto-fill when the reward type changes. Fetch failure =
+  // fallback to the static quest-engine values (3/2 CC).
   const [feeDefaults, setFeeDefaults] = useState<ClaimFeeDefaults | null>(null);
   useEffect(() => {
     apiFetch<ClaimFeeDefaults>("/api/admin/claim-fee")
@@ -353,8 +353,8 @@ export function QuestForm({
 
   // Field visibility driven by quest-engine config
   const rewardConfig = getRewardConfig(form.rewardType);
-  // Default fee efektif: setting global admin (kalau sudah dimuat) →
-  // fallback nilai statis quest-engine.
+  // Default fee efektif: admin global setting (if already loaded) →
+  // fallback to the static quest-engine value.
   const defaultClaimFee = resolveDefaultClaimFee(form.rewardType, feeDefaults);
   const showCcField = rewardConfig.needsCcAmount;
   const needsMaxWinners = rewardConfig.needsMaxWinners;
@@ -470,7 +470,7 @@ export function QuestForm({
 
       const payload = {
         title: form.title,
-        // Ecosystem partner link — null = lepas link (legacy quest tanpa partner).
+        // Ecosystem partner link — null = detach the link (legacy quest without a partner).
         ...(partnerId !== "" ? { partnerId } : questKind === "CAMPAIGN" ? { partnerId: null } : {}),
         ...(questKind === "CAMPAIGN" && {
           projectName: form.projectName.trim() || null,
@@ -518,7 +518,7 @@ export function QuestForm({
           entryCostPoints: form.entryCostPoints.trim()
             ? Number(form.entryCostPoints)
             : null,
-          // v30 hanya bisa dipilih saat CREATE (paket v29 lama tidak dimigrasi).
+          // v30 can only be selected when CREATE (old v29 packages are not migrated).
           ...(!isEdit &&
             useV30Claim && { ledgerPackage: "canquest-v30" }),
         }),
@@ -657,12 +657,12 @@ export function QuestForm({
               <select
                 value={partnerId}
                 onChange={(e) => {
-                  // "" = tanpa partner (null hanya dipakai saat submit).
+                  // "" = no partner (null is only used at submit).
                   const id = e.target.value;
                   setPartnerId(id);
                   const p = partnerOptions.find((o) => o.id === id);
                   if (p) {
-                    // Autofill dari profil partner — tetap bisa diedit manual.
+                    // Autofill from the partner profile — still editable manually.
                     updateField("org", p.name);
                     if (p.logoUrl) updateField("logoUrl", p.logoUrl);
                   }
@@ -677,8 +677,8 @@ export function QuestForm({
                 ))}
               </select>
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Link campaign ke profil /ecosystem — org, logo &amp; socials
-                diisi otomatis dari partner.
+                Link the campaign to an /ecosystem profile — org, logo &amp;
+                socials are auto-filled from the partner.
               </p>
             </div>
             <div>
@@ -944,9 +944,10 @@ export function QuestForm({
             />
             {frozenOnChain && (
               <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
-                🔒 Reward type, token, amount, max winners, claim fee, dan entry
-                gate terkunci — nilai-nilai ini dibekukan di kontrak Canton saat
-                campaign dibuat. Buat campaign baru untuk nilai yang berbeda.
+                🔒 Reward type, token, amount, max winners, claim fee, and entry
+                gate are locked — these values are frozen in the Canton contract
+                when the campaign is created. Create a new campaign for
+                different values.
               </p>
             )}
             {recommendedTaskType &&
@@ -1237,13 +1238,13 @@ export function QuestForm({
                 className={inputCls}
               />
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Isi bebas (minimal {CLAIM_FEE_MIN_CC} CC), atau kosongkan untuk
-                pakai default untuk reward type ini (
+                Enter any value (minimum {CLAIM_FEE_MIN_CC} CC), or leave empty
+                to use the default for this reward type (
                 {defaultClaimFee != null
                   ? `${defaultClaimFee} CC`
                   : "no fee"}
-                ). Fee campaign yang sudah on-chain tidak bisa diubah — Settle
-                akan menolak klaim.
+                ). Fees on campaigns already on-chain cannot be changed —
+                Settle will reject the claim.
               </p>
             </div>
           </details>
@@ -1379,7 +1380,7 @@ export function QuestForm({
               )}
 
               {/* v30: claim via ClaimOffer (canquest-claim + canquest-lock).
-                  Create only — paket v29 lama tidak bisa dimigrasi. */}
+                  Create only — old v29 packages cannot be migrated. */}
               {!isEdit ? (
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 p-3">
                   <input

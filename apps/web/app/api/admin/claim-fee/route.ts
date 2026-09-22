@@ -3,8 +3,8 @@ import { nestWithAdminAccessCookie } from '@/lib/auth/nest-proxy-admin-access';
 
 /**
  * BFF proxy ke Nest /api/admin/claim-fee.
- * GET  → nilai efektif + penanda mana yang di-set, PUT → ubah setting
- * (di-guard AdminGuard di backend).
+ * GET  → effective values + which keys are set, PUT → update the setting
+ * (guarded by AdminGuard in the backend).
  */
 export async function GET(req: NextRequest) {
   return nestWithAdminAccessCookie(req, '/admin/claim-fee', { method: 'GET' });

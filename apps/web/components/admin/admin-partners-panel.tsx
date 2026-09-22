@@ -101,7 +101,7 @@ function safeParseJson(raw: string): { ok: true; value: unknown } | { ok: false;
   }
 }
 
-/** Parse JSON yang sudah lolos validasi loop di atas — throw bila invalid. */
+/** Parse JSON that already passed the validation loop above — throw if invalid. */
 function jsonOr(raw: string): unknown {
   const parsed = safeParseJson(raw);
   if (!parsed.ok) throw new Error(parsed.error);
@@ -139,7 +139,7 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** Baris editable social link { platform, url }. */
+/** Editable social link row { platform, url }. */
 function SocialRow({
   value,
   onChange,
@@ -473,7 +473,7 @@ export function AdminPartnersPanel({
               />
             </label>
             <div className="space-y-2 sm:col-span-2">
-              <span className="text-sm font-medium">Categories (pilih satu atau lebih, boleh kosong)</span>
+              <span className="text-sm font-medium">Categories (select one or more, optional)</span>
               <div className="flex flex-wrap gap-1.5">
                 {categories.map((c) => {
                   const active = form.categories.includes(c.value);
@@ -482,8 +482,8 @@ export function AdminPartnersPanel({
                       key={c.id}
                       type="button"
                       onClick={() => {
-                        // Satu setForm (bukan dua upd berurutan — yang kedua
-                        // menimpa balik state pertama dgn snapshot lama).
+                        // One setForm (not two sequential updates — the second
+                        // would overwrite the first state back with the old snapshot).
                         const next = active
                           ? form.categories.filter((v) => v !== c.value)
                           : [...form.categories, c.value];
@@ -506,7 +506,7 @@ export function AdminPartnersPanel({
                 <input
                   className={cn(inputClass, "max-w-56")}
                   value={newCat}
-                  placeholder="Kategori baru (mis. Infrastructure)"
+                  placeholder="New category (e.g. Infrastructure)"
                   onChange={(e) => setNewCat(e.target.value)}
                 />
                 <button
@@ -534,17 +534,17 @@ export function AdminPartnersPanel({
                       upd("categories", [...form.categories, created.value]);
                       setNewCat("");
                     } else {
-                      setFormError("Gagal menambah kategori (mungkin sudah ada).");
+                      setFormError("Could not add category (it may already exist).");
                     }
                   }}
                   className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "shrink-0 gap-1.5")}
                 >
                   {catBusy ? <LoadingSpinner size="sm" /> : null}
-                  + Tambah
+                  + Add
                 </button>
               </div>
               <p className="text-[11px] text-[var(--muted-foreground)]">
-                Kategori baru langsung tersedia di dropdown menu Ecosystem.
+                New categories are immediately available in the Ecosystem dropdown.
               </p>
             </div>
             <div className="min-w-0">
@@ -552,7 +552,7 @@ export function AdminPartnersPanel({
                 label="Logo (upload / URL)"
                 value={form.logoUrl}
                 onChange={(v) => upd("logoUrl", v)}
-                placeholder="https://… atau klik Upload"
+                placeholder="https://… or click Upload"
               />
             </div>
             <label className="space-y-1 text-sm sm:col-span-2">
@@ -570,7 +570,7 @@ export function AdminPartnersPanel({
                 className={cn(inputClass, "min-h-[90px]")}
                 value={form.about}
                 onChange={(e) => upd("about", e.target.value)}
-                placeholder="Deskripsi partner untuk tab About…"
+                placeholder="Partner description for the About tab…"
               />
             </label>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
@@ -580,7 +580,7 @@ export function AdminPartnersPanel({
                 onChange={(e) => upd("published", e.target.checked)}
               />
               <span className="font-medium">
-                Published (tampil di /ecosystem)
+                Published (visible on /ecosystem)
               </span>
             </label>
 
@@ -609,7 +609,7 @@ export function AdminPartnersPanel({
                 ))}
               </div>
               <span className="text-[11px] text-[var(--muted-foreground)]">
-                Yes = tombol biru &quot;Featured App&quot; muncul setelah nama partner.
+                Yes = the blue &quot;Featured App&quot; button appears after the partner name.
               </span>
             </div>
           </div>
@@ -752,7 +752,7 @@ export function AdminPartnersPanel({
             />
           </fieldset>
 
-          {/* Team (Add More + foto + sosmed per anggota) */}
+          {/* Team (Add More + photo + socials per member) */}
           <fieldset className="space-y-3 rounded-xl border border-[var(--border)] p-3">
             <legend className="px-1 text-xs font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
               Team
@@ -765,7 +765,7 @@ export function AdminPartnersPanel({
                 <input
                   className={inputClass}
                   value={t.name}
-                  placeholder="Nama *"
+                  placeholder="Name *"
                   onChange={(e) =>
                     upd(
                       "team",
@@ -792,7 +792,7 @@ export function AdminPartnersPanel({
                   className={inputClass}
                   value={t.initials}
                   maxLength={4}
-                  placeholder="Initials (AR — kosong = dari nama)"
+                  placeholder="Initials (AR — leave empty to derive from name)"
                   onChange={(e) =>
                     upd(
                       "team",
@@ -804,7 +804,7 @@ export function AdminPartnersPanel({
                 />
                 <div className="min-w-0">
                   <EcoImageField
-                    label="Foto"
+                    label="Photo"
                     value={t.photoUrl}
                     onChange={(v) =>
                       upd(
@@ -814,13 +814,13 @@ export function AdminPartnersPanel({
                         ),
                       )
                     }
-                    placeholder="URL atau Upload"
+                    placeholder="URL or upload"
                     compact
                   />
                 </div>
                 <div className="space-y-2 sm:col-span-2">
                   <p className="text-[11px] font-semibold text-[var(--muted-foreground)]">
-                    Social media anggota:
+                    Member social media:
                   </p>
                   {(t.socials ?? []).map((s, k) => (
                     <SocialRow
@@ -901,7 +901,7 @@ export function AdminPartnersPanel({
             />
           </fieldset>
 
-          {/* Features & apps — JSON (opsional, lanjutan) */}
+          {/* Features & apps — JSON (optional, advanced) */}
           <div className="grid gap-3 sm:grid-cols-2">
             {(
               [
