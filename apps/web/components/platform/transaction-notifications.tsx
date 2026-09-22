@@ -223,8 +223,12 @@ function NotificationRow({ item }: { item: NotificationItem }) {
     "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
     isSwap
       ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-      : tx.type === "TRANSFER_IN" || tx.type === "TOKEN_TRANSFER_IN"
-      ? "bg-green-500/10 text-green-600 dark:text-green-400"
+      : tx.type === "TRANSFER_IN" ||
+          tx.type === "TOKEN_TRANSFER_IN" ||
+          tx.type === "QUEST_REWARD" ||
+          tx.type === "SPIN_REWARD"
+      ? // Semua dana masuk (transfer maupun reward) — panah hijau.
+        "bg-green-500/10 text-green-600 dark:text-green-400"
       : tx.type === "TRANSFER_OUT" || tx.type === "TOKEN_TRANSFER_OUT"
         ? "bg-red-500/10 text-red-600 dark:text-red-400"
         : tx.type === "CC_LOCK"
@@ -260,8 +264,10 @@ function NotificationRow({ item }: { item: NotificationItem }) {
             <ArrowLeftRight className="h-4 w-4" aria-hidden />
           ) : tx.type === "TRANSFER_IN" ||
             tx.type === "TOKEN_TRANSFER_IN" ||
-            tx.type === "SWAP_IN" ? (
-            // Semua dana masuk (transfer maupun hasil swap) — panah hijau.
+            tx.type === "SWAP_IN" ||
+            tx.type === "QUEST_REWARD" ||
+            tx.type === "SPIN_REWARD" ? (
+            // Semua dana masuk (transfer maupun hasil swap/reward) — panah hijau.
             <ArrowDownLeft className="h-4 w-4" aria-hidden />
           ) : tx.type === "TRANSFER_OUT" || tx.type === "TOKEN_TRANSFER_OUT" ? (
             <ArrowUpRight className="h-4 w-4" aria-hidden />
@@ -406,7 +412,9 @@ export function TransactionNotifications() {
       case "TRANSFER_IN":
       case "TOKEN_TRANSFER_IN":
       case "SWAP_IN":
-        // Semua dana masuk (transfer maupun hasil swap) — panah hijau.
+      case "QUEST_REWARD":
+      case "SPIN_REWARD":
+        // Semua dana masuk (transfer, hasil swap, maupun reward) — panah hijau.
         return <ArrowDownLeft className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
       case "CC_LOCK":
         return <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />;

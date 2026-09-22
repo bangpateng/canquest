@@ -5,7 +5,6 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   Ban,
-  Gift,
   Lock,
   LockOpen,
   ShieldCheck,
@@ -45,10 +44,6 @@ export function TxTypeIcon({ type }: { type: TxType }) {
       return <ShieldCheck className="h-4 w-4" />;
     case "PREAPPROVAL_DISABLED":
       return <ShieldOff className="h-4 w-4" />;
-    case "QUEST_REWARD":
-    case "SPIN_REWARD":
-    case "AIRDROP":
-      return <Gift className="h-4 w-4" />;
     case "SWAP_OUT":
       // Hanya kaki keluar swap yang ber-ikon swap.
       return <ArrowLeftRight className="h-4 w-4" />;
@@ -57,7 +52,12 @@ export function TxTypeIcon({ type }: { type: TxType }) {
     case "TRANSFER_IN":
     case "TOKEN_TRANSFER_IN":
     case "SWAP_IN":
-      // Dana masuk (transfer maupun hasil swap) — SATU bahasa: panah hijau.
+    case "QUEST_REWARD":
+    case "SPIN_REWARD":
+    case "AIRDROP":
+      // Dana masuk (transfer, hasil swap, maupun reward) — SATU bahasa:
+      // panah hijau. Notifikasi KEMENANGAN undian tetap pakai ikon earn
+      // (Sparkles) di bell — itu alert draw, bukan baris dana.
       return <ArrowDownLeft className="h-4 w-4" />;
     default:
       return <Zap className="h-4 w-4" />;
@@ -72,7 +72,10 @@ export function txIconBg(type: TxType): string {
     case "TRANSFER_IN":
     case "TOKEN_TRANSFER_IN":
     case "SWAP_IN":
-      // Semua dana masuk — hijau (panah hijau konsisten).
+    case "QUEST_REWARD":
+    case "SPIN_REWARD":
+    case "AIRDROP":
+      // Semua dana masuk (termasuk reward) — hijau (panah hijau konsisten).
       return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "CC_LOCK":
       // Netral/amber — BUKAN merah transfer (dana dikunci, bukan keluar).
@@ -88,11 +91,6 @@ export function txIconBg(type: TxType): string {
       return "bg-[var(--muted)] text-[var(--muted-foreground)]";
     case "PREAPPROVAL_ENABLED":
       return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
-    case "QUEST_REWARD":
-      return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.20)]";
-    case "SPIN_REWARD":
-    case "AIRDROP":
-      return "bg-canton-subtle text-canton-muted ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "SWAP_OUT":
       // Kaki KELUAR swap — KUNING (satu-satunya yang berlabel Swap).
       return "bg-amber-500/15 text-amber-600 ring-1 ring-amber-500/25";
