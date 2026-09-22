@@ -10,7 +10,7 @@ import { OfferDetailContent } from "@/components/app/wallet/offer-detail-content
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useTokenPrices } from "@/lib/hooks/use-token-prices";
 import { tokenPriceKey } from "@/components/app/earn/cc-usd-value";
-import { txTypeLabel, rewardTxLabel } from "@/lib/canton/tx-labels";
+import { txTypeLabel } from "@/lib/canton/tx-labels";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 
@@ -350,13 +350,7 @@ export function TransactionDetailContent({
         </div>
 
         <dl className="mt-4 divide-y divide-[var(--border)]">
-          <ReceiptField label="Type">
-            {/* Reward: teks sama dengan notifikasi & list ("Received 1 CC
-                Reward") — bukan label generik. */}
-            {detail.type === "QUEST_REWARD"
-              ? rewardTxLabel(detail)
-              : txTypeLabel(detail.type, t)}
-          </ReceiptField>
+          <ReceiptField label="Type">{txTypeLabel(detail.type, t)}</ReceiptField>
 
           {isTransfer ? (
             <>
