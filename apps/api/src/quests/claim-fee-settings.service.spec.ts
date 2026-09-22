@@ -82,19 +82,19 @@ const settle = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('ClaimFeeSettingsService — nilai efektif', () => {
-  it('tanpa setting di DB → default bawaan (token 3, code 2, combined 3)', async () => {
+  it('tanpa setting di DB → default produk (token 1, code 0.5, combined 1)', async () => {
     const { prisma } = makePrisma([]);
     const svc = new ClaimFeeSettingsService(prisma as unknown as PrismaService);
     await settle();
     expect(svc.getSnapshot()).toEqual({
-      tokenFeeCc: 3,
-      codeFeeCc: 2,
-      combinedFeeCc: 3,
+      tokenFeeCc: 1,
+      codeFeeCc: 0.5,
+      combinedFeeCc: 1,
     });
     await expect(svc.getStatus()).resolves.toMatchObject({
-      tokenFeeCc: 3,
-      codeFeeCc: 2,
-      combinedFeeCc: 3,
+      tokenFeeCc: 1,
+      codeFeeCc: 0.5,
+      combinedFeeCc: 1,
       configured: {
         tokenFeeCc: false,
         codeFeeCc: false,
@@ -112,8 +112,8 @@ describe('ClaimFeeSettingsService — nilai efektif', () => {
     await svc.refresh();
     expect(svc.getSnapshot()).toEqual({
       tokenFeeCc: 7.5,
-      codeFeeCc: 2, // fallback default
-      combinedFeeCc: 3,
+      codeFeeCc: 0.5, // fallback default
+      combinedFeeCc: 1,
     });
     const status = await svc.getStatus();
     expect(status.configured).toEqual({
@@ -134,17 +134,17 @@ describe('ClaimFeeSettingsService.update', () => {
     const r1 = await svc.update({ tokenFeeCc: 7 });
     expect(r1.settings).toEqual({
       tokenFeeCc: 7,
-      codeFeeCc: 2,
-      combinedFeeCc: 3,
+      codeFeeCc: 0.5,
+      combinedFeeCc: 1,
     });
     expect(store.get(CLAIM_FEE_KEYS.token)).toBe('7');
 
     // codeFeeCc tidak dikirim → tetap 2 (tak ada tulis apa pun).
     expect(store.has(CLAIM_FEE_KEYS.code)).toBe(false);
 
-    // null → hapus key → kembali ke default 3.
+    // null → hapus key → kembali ke default produk (1).
     const r2 = await svc.update({ tokenFeeCc: null });
-    expect(r2.settings.tokenFeeCc).toBe(3);
+    expect(r2.settings.tokenFeeCc).toBe(1);
     expect(store.has(CLAIM_FEE_KEYS.token)).toBe(false);
   });
 
@@ -178,18 +178,18 @@ describe('ClaimFeeSettingsService.update', () => {
 
     const res = await svc.update({ tokenFeeCc: 9, codeFeeCc: 5 });
     expect(res.frozenQuests).toBe(3);
-    // Nilai LAMA yang dipaku: token 3, code 2 — bukan nilai baru.
-    expect(quests[0].claimFeeCc).toBe(3);
-    expect(quests[1].claimFeeCc).toBe(3);
+    // Nilai LAMA yang dipaku: token 1, code 0.5 — bukan nilai baru.
+    expect(quests[0].claimFeeCc).toBe(1);
+    expect(quests[1].claimFeeCc).toBe(1);
     expect(quests[2].claimFeeCc).toBe(0.01);
-    expect(quests[3].claimFeeCc).toBe(2);
+    expect(quests[3].claimFeeCc).toBe(0.5);
     expect(quests[4].claimFeeCc).toBeNull();
     expect(quests[5].claimFeeCc).toBeNull();
     // Setting baru sudah aktif untuk campaign SELANJUTNYA.
     expect(res.settings).toEqual({
       tokenFeeCc: 9,
       codeFeeCc: 5,
-      combinedFeeCc: 3,
+      combinedFeeCc: 1,
     });
   });
 
@@ -203,6 +203,6 @@ describe('ClaimFeeSettingsService.update', () => {
     await svc.refresh();
     expect((await svc.update({ tokenFeeCc: 5 })).frozenQuests).toBe(1);
     expect((await svc.update({ tokenFeeCc: 6 })).frozenQuests).toBe(0);
-    expect(quests[0].claimFeeCc).toBe(3); // tetap fee kontrak aslinya
+    expect(quests[0].claimFeeCc).toBe(1); // tetap fee kontrak aslinya
   });
 });

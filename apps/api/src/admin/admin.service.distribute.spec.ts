@@ -170,9 +170,9 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
           provide: ClaimFeeSettingsService,
           useValue: {
             getSnapshot: () => ({
-              tokenFeeCc: 3,
-              codeFeeCc: 2,
-              combinedFeeCc: 3,
+              tokenFeeCc: 1,
+              codeFeeCc: 0.5,
+              combinedFeeCc: 1,
             }),
           },
         },

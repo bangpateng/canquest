@@ -13,7 +13,7 @@ interface ClaimFeeStatus {
   configured: Record<string, boolean>;
 }
 
-const DEFAULTS = { tokenFeeCc: 3, codeFeeCc: 2, combinedFeeCc: 3 };
+const DEFAULTS = { tokenFeeCc: 1, codeFeeCc: 0.5, combinedFeeCc: 1 };
 
 /** Kelompok fee → reward type yang kena (buat label panel). */
 const GROUPS: {

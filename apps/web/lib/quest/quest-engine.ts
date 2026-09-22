@@ -90,9 +90,9 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     isRaffle: false,
     needsCcAmount: true,
     needsMaxWinners: true,
-    defaultClaimFee: 3,
+    defaultClaimFee: 1,
     adminHint:
-      "User selesaikan task → bayar 3 CC fee → terima CC reward. Slot terbatas, siapa cepat dapat.",
+      "User selesaikan task → bayar 1 CC fee → terima CC reward. Slot terbatas, siapa cepat dapat.",
     chipClass: "bg-canton-soft text-canton border-canton-muted",
     accentClass: "text-canton",
   },
@@ -106,7 +106,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     isRaffle: true,
     needsCcAmount: true,
     needsMaxWinners: true,
-    defaultClaimFee: 3,
+    defaultClaimFee: 1,
     adminHint:
       "Setelah event: admin Draw Winners → pemenang bayar fee → terima CC. Yang kalah: You Not Lucky.",
     chipClass: "bg-canton-soft text-canton border-canton-muted",
@@ -122,9 +122,9 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     isRaffle: false,
     needsCcAmount: false,
     needsMaxWinners: true,
-    defaultClaimFee: 2,
+    defaultClaimFee: 0.5,
     adminHint:
-      "User selesaikan task → bayar 2 CC fee → dapat kode dari pool. Upload kode di Winners.",
+      "User selesaikan task → bayar 0.5 CC fee → dapat kode dari pool. Upload kode di Winners.",
     chipClass: "bg-canton-soft text-canton border-canton-muted",
     accentClass: "text-canton",
   },
@@ -138,9 +138,9 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     isRaffle: true,
     needsCcAmount: false,
     needsMaxWinners: true,
-    defaultClaimFee: 2,
+    defaultClaimFee: 0.5,
     adminHint:
-      "Setelah event: admin Draw Winners → pemenang bayar 2 CC fee → dapat kode. Yang kalah: You Not Lucky.",
+      "Setelah event: admin Draw Winners → pemenang bayar 0.5 CC fee → dapat kode. Yang kalah: You Not Lucky.",
     chipClass: "bg-canton-soft text-canton border-canton-muted",
     accentClass: "text-canton",
   },
@@ -170,7 +170,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     isRaffle: true,
     needsCcAmount: true,
     needsMaxWinners: true,
-    defaultClaimFee: 3,
+    defaultClaimFee: 1,
     adminHint:
       "Satu event gabungan: admin draw pemenang → pemenang bayar claim fee → dapat CC reward + invite code.",
     chipClass:

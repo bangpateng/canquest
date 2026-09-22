@@ -16,11 +16,16 @@ export const CLAIM_FEE_KEYS = {
   combined: 'claim_fee_combined_cc',
 } as const;
 
-/** Nilai bawaan (hardcoded lama sebelum setting ini ada). */
+/**
+ * Default produk claim fee (CC). Sebelum setting global ada nilainya
+ * hardcoded 3/2/3; sejak 2026-09-22 produk pakai 1/0.5/1 (keputusan user:
+ * CC_ONLY terbaru sudah dibuat berfee 1). Campaign yang fee-nya eksplisit di
+ * DB (sudah dibekukan) tidak terpengaruh.
+ */
 export const CLAIM_FEE_DEFAULTS = {
-  token: 3, // CC_ONLY, CC_MANUAL
-  code: 2, // INVITE_CODE_FCFS / RANDOM / INVITE_CODE / CC_AND_INVITE
-  combined: 3, // CC_AND_CODE_RAFFLE
+  token: 1, // CC_ONLY, CC_MANUAL
+  code: 0.5, // INVITE_CODE_FCFS / RANDOM / INVITE_CODE / CC_AND_INVITE
+  combined: 1, // CC_AND_CODE_RAFFLE
 } as const;
 
 export interface ClaimFeeSettings {

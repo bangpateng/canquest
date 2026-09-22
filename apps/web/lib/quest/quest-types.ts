@@ -892,7 +892,7 @@ export const REWARD_TYPE_OPTIONS: {
   {
     value: "INVITE_CODE_FCFS",
     label: "1 · Kode waitlist (FCFS)",
-    hint: "User selesaikan sosial → submit quest → bayar claim fee (default 2 CC) → dapat kode dari pool. Upload kode di Winners.",
+    hint: "User selesaikan sosial → submit quest → bayar claim fee (default 0.5 CC) → dapat kode dari pool. Upload kode di Winners.",
   },
   {
     value: "INVITE_CODE_RANDOM",
@@ -907,7 +907,7 @@ export const REWARD_TYPE_OPTIONS: {
   {
     value: "CC_ONLY",
     label: "4 · Token CC (FCFS)",
-    hint: "Max winners = slot FCFS. User claim dengan fee (default 3 CC) → CC dari pool validator. Bukan bulk manual.",
+    hint: "Max winners = slot FCFS. User claim dengan fee (default 1 CC) → CC dari pool validator. Bukan bulk manual.",
   },
   {
     value: "CC_MANUAL",

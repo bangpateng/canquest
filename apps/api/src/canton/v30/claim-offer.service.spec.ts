@@ -19,9 +19,9 @@ describe('ClaimOfferService fee defaults', () => {
       {} as never,
       {
         getSnapshot: () => ({
-          tokenFeeCc: 3,
-          codeFeeCc: 2,
-          combinedFeeCc: 3,
+          tokenFeeCc: 1,
+          codeFeeCc: 0.5,
+          combinedFeeCc: 1,
         }),
       } as never,
     );
@@ -31,11 +31,11 @@ describe('ClaimOfferService fee defaults', () => {
   });
 
   it('matches the canonical defaults for every active paid template', () => {
-    expect(resolveFee({ rewardType: 'CC_ONLY' })).toBe(3);
-    expect(resolveFee({ rewardType: 'CC_MANUAL' })).toBe(3);
-    expect(resolveFee({ rewardType: 'INVITE_CODE_FCFS' })).toBe(2);
-    expect(resolveFee({ rewardType: 'INVITE_CODE_RANDOM' })).toBe(2);
-    expect(resolveFee({ rewardType: 'CC_AND_CODE_RAFFLE' })).toBe(3);
+    expect(resolveFee({ rewardType: 'CC_ONLY' })).toBe(1);
+    expect(resolveFee({ rewardType: 'CC_MANUAL' })).toBe(1);
+    expect(resolveFee({ rewardType: 'INVITE_CODE_FCFS' })).toBe(0.5);
+    expect(resolveFee({ rewardType: 'INVITE_CODE_RANDOM' })).toBe(0.5);
+    expect(resolveFee({ rewardType: 'CC_AND_CODE_RAFFLE' })).toBe(1);
     expect(resolveFee({ rewardType: 'WAITLIST_EMAIL' })).toBe(0);
   });
 

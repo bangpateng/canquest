@@ -32,11 +32,11 @@ import { PrismaService } from '../prisma/prisma.service';
 
 describe('quest-reward-config (pure helpers)', () => {
   it('defaultClaimFeeCc matches active campaign defaults', () => {
-    expect(defaultClaimFeeCc('CC_ONLY')).toBe(3);
-    expect(defaultClaimFeeCc('CC_MANUAL')).toBe(3);
-    expect(defaultClaimFeeCc('INVITE_CODE_FCFS')).toBe(2);
-    expect(defaultClaimFeeCc('INVITE_CODE_RANDOM')).toBe(2);
-    expect(defaultClaimFeeCc('CC_AND_CODE_RAFFLE')).toBe(3);
+    expect(defaultClaimFeeCc('CC_ONLY')).toBe(1);
+    expect(defaultClaimFeeCc('CC_MANUAL')).toBe(1);
+    expect(defaultClaimFeeCc('INVITE_CODE_FCFS')).toBe(0.5);
+    expect(defaultClaimFeeCc('INVITE_CODE_RANDOM')).toBe(0.5);
+    expect(defaultClaimFeeCc('CC_AND_CODE_RAFFLE')).toBe(1);
     expect(defaultClaimFeeCc('WAITLIST_EMAIL')).toBeNull();
   });
 
