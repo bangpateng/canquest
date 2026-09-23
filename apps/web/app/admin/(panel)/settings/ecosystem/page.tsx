@@ -5,6 +5,7 @@ import { Globe, Pencil, Plus, Trash2 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 
 type Category = { id: string; value: string; label: string; sortOrder: number };
 type SocialLink = { platform: string; url: string };
@@ -25,14 +26,22 @@ export default function AdminEcosystemSettingsPage() {
   const [catBusy, setCatBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [catsRes, settingsRes] = await Promise.all([
-      fetch("/api/admin/ecosystem/categories", { cache: "no-store" }),
-      fetch("/api/admin/ecosystem/settings", { cache: "no-store" }),
-    ]);
-    if (catsRes.ok) setCategories(await catsRes.json());
-    if (settingsRes.ok) {
-      const data = (await settingsRes.json()) as { socialLinks?: SocialLink[] };
-      setSocials(data.socialLinks ?? []);
+    // fetchWithTimeout: hang → AbortError → Promise.all reject → kategori
+    // tetap null dan spinner kategori berhenti lewat pesan error di bawah.
+    try {
+      const [catsRes, settingsRes] = await Promise.all([
+        fetchWithTimeout("/api/admin/ecosystem/categories", { cache: "no-store" }),
+        fetchWithTimeout("/api/admin/ecosystem/settings", { cache: "no-store" }),
+      ]);
+      if (catsRes.ok) setCategories(await catsRes.json());
+      if (settingsRes.ok) {
+        const data = (await settingsRes.json()) as { socialLinks?: SocialLink[] };
+        setSocials(data.socialLinks ?? []);
+      }
+    } catch {
+      // Kategori null = spinner menggantung selamanya → tampilkan pesan jelas.
+      setCategories((prev) => prev ?? []);
+      setMessage("Failed to load ecosystem settings — check your connection and retry.");
     }
   }, []);
 

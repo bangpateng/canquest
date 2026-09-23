@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AdminPartnersPanel } from "@/components/admin/admin-partners-panel";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 
 export default function AdminPartnersPage() {
   const [partners, setPartners] = useState<unknown[] | null>(null);
@@ -16,7 +17,11 @@ export default function AdminPartnersPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/partners", { cache: "no-store" });
+      // fetchWithTimeout: hang → AbortError → catch di bawah (error tampil,
+      // spinner berhenti), nggak nyangkut selamanya.
+      const res = await fetchWithTimeout("/api/admin/partners", {
+        cache: "no-store",
+      });
       if (!res.ok) {
         setError("Failed to load partners.");
         return;

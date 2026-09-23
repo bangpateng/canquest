@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus, Sparkles, RefreshCw } from "lucide-react";
 import { AdminQuestTable, type AdminQuestRow } from "@/components/admin/admin-quest-table";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 
 export default function AdminEarnPage() {
   const [quests, setQuests] = useState<AdminQuestRow[] | null>(null);
@@ -17,7 +18,11 @@ export default function AdminEarnPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/quests?kind=CAMPAIGN", { cache: "no-store" });
+      // fetchWithTimeout: request yang hang → AbortError → jatuh ke catch di
+      // bawah (pesan error + loading berhenti), tombol nggak muter selamanya.
+      const res = await fetchWithTimeout("/api/admin/quests?kind=CAMPAIGN", {
+        cache: "no-store",
+      });
       if (!res.ok) {
         setError("Failed to load campaigns.");
         return;
