@@ -33,7 +33,7 @@ export default function AdminEcosystemSettingsPage() {
         fetchWithTimeout("/api/admin/ecosystem/categories", { cache: "no-store" }),
         fetchWithTimeout("/api/admin/ecosystem/settings", { cache: "no-store" }),
       ]);
-      if (catsRes.ok) setCategories(await catsRes.json());
+      setCategories(catsRes.ok ? await catsRes.json() : []);
       if (settingsRes.ok) {
         const data = (await settingsRes.json()) as { socialLinks?: SocialLink[] };
         setSocials(data.socialLinks ?? []);

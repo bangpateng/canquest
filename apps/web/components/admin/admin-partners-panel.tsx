@@ -295,7 +295,7 @@ export function AdminPartnersPanel({
     };
     setSaving(true);
     try {
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         form.id ? `/api/admin/partners/${form.id}` : "/api/admin/partners",
         {
           method: form.id ? "PATCH" : "POST",
@@ -326,10 +326,15 @@ export function AdminPartnersPanel({
       )
     )
       return;
-    const res = await fetch(`/api/admin/partners/${r.id}`, {
-      method: "DELETE",
-    });
-    if (res.ok) onChanged();
+    try {
+      const res = await fetchWithTimeout(`/api/admin/partners/${r.id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) onChanged();
+      else setFormError("Delete failed. Try again.");
+    } catch {
+      setFormError("Delete failed — check your connection and retry.");
+    }
   };
 
   if (!form) {
