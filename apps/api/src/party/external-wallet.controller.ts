@@ -34,6 +34,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ExternalWalletService } from '../canton/external-wallet.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
+import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
 import { UsersService } from '../users/users.service';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
@@ -53,6 +54,7 @@ export class ExternalWalletController {
   constructor(
     private readonly externalWallet: ExternalWalletService,
     private readonly ledger: CantonLedgerService,
+    private readonly splice: SpliceValidatorService,
     private readonly featuredActivity: FeaturedAppActivityService,
     private readonly users: UsersService,
     private readonly walletInvites: WalletInviteCodeService,
@@ -63,6 +65,25 @@ export class ExternalWalletController {
     if (!this.externalWallet.isEnabled) {
       throw new ServiceUnavailableException(
         'Non-custodial wallet is not enabled yet.',
+      );
+    }
+  }
+
+  /** Fail before wallet registration starts if either Canton service is down. */
+  private async assertOnboardingServicesReachable(): Promise<void> {
+    const [cantonReachable, spliceReachable] = await Promise.all([
+      this.ledger.isReachable(),
+      this.splice.isReachable(),
+    ]);
+    if (!cantonReachable || !spliceReachable) {
+      const unavailable = [
+        !cantonReachable ? 'Canton Ledger API' : null,
+        !spliceReachable ? 'Splice Validator API' : null,
+      ]
+        .filter(Boolean)
+        .join(' and ');
+      throw new ServiceUnavailableException(
+        `${unavailable} is temporarily unavailable. Wallet setup has not started; please retry shortly.`,
       );
     }
   }
@@ -79,6 +100,7 @@ export class ExternalWalletController {
         'You already have a wallet. Only one wallet is allowed per account.',
       );
     }
+    await this.assertOnboardingServicesReachable();
 
     return this.externalWallet.prepare(
       req.user.userId,
@@ -102,6 +124,10 @@ export class ExternalWalletController {
         'You already have a wallet. Only one wallet is allowed per account.',
       );
     }
+    // The prepare check is not enough: the node may go down while the user
+    // reviews/signs. Check again before allocating the external party; on
+    // failure, keep the pending prepared session so the user can retry.
+    await this.assertOnboardingServicesReachable();
 
     const username = dto.username
       ? (normalizeWalletUsername(dto.username) ?? undefined)
