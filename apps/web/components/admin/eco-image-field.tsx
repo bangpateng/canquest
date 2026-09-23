@@ -47,7 +47,7 @@ export function EcoImageField({
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/admin/uploads/ecosystem", {
+      const res = await fetchWithTimeout("/api/admin/uploads/ecosystem", {
         method: "POST",
         body: fd,
       });
@@ -69,7 +69,7 @@ export function EcoImageField({
   const loadAssets = async () => {
     setAssets(null);
     try {
-      const res = await fetch("/api/admin/uploads/ecosystem", {
+      const res = await fetchWithTimeout("/api/admin/uploads/ecosystem", {
         cache: "no-store",
       });
       setAssets(res.ok ? await res.json() : []);

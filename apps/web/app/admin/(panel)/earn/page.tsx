@@ -40,7 +40,9 @@ export default function AdminEarnPage() {
   }, [load]);
 
   async function handleDelete(id: string) {
-    const res = await fetch(`/api/admin/quests/${id}`, { method: "DELETE" });
+    const res = await fetchWithTimeout(`/api/admin/quests/${id}`, {
+      method: "DELETE",
+    });
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { message?: string };
       throw new Error(data.message ?? "Delete failed");
