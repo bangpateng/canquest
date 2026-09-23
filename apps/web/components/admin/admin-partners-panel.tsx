@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EcoImageField } from "@/components/admin/eco-image-field";
 
@@ -514,27 +515,31 @@ export function AdminPartnersPanel({
                   disabled={catBusy || !newCat.trim()}
                   onClick={async () => {
                     setCatBusy(true);
-                    const res = await fetch("/api/admin/ecosystem/categories", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        value: newCat.trim(),
-                        label: newCat.trim(),
-                      }),
-                    });
-                    setCatBusy(false);
-                    if (res.ok) {
-                      const created = (await res.json()) as {
-                        value: string;
-                      };
-                      const list = await fetch("/api/admin/ecosystem/categories", {
-                        cache: "no-store",
-                      }).then((r) => r.json());
-                      setCategories(list);
-                      upd("categories", [...form.categories, created.value]);
-                      setNewCat("");
-                    } else {
-                      setFormError("Could not add category (it may already exist).");
+                    try {
+                      const res = await fetchWithTimeout("/api/admin/ecosystem/categories", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          value: newCat.trim(),
+                          label: newCat.trim(),
+                        }),
+                      });
+                      if (res.ok) {
+                        const created = (await res.json()) as { value: string };
+                        const list = await fetchWithTimeout(
+                          "/api/admin/ecosystem/categories",
+                          { cache: "no-store" },
+                        ).then((r) => r.json());
+                        setCategories(list);
+                        upd("categories", [...form.categories, created.value]);
+                        setNewCat("");
+                      } else {
+                        setFormError("Could not add category (it may already exist).");
+                      }
+                    } catch {
+                      setFormError("Could not add category — check your connection and retry.");
+                    } finally {
+                      setCatBusy(false);
                     }
                   }}
                   className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "shrink-0 gap-1.5")}

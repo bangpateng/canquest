@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ImageIcon, Trash2, Upload, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
+import { fetchWithTimeout } from "@/lib/utils/fetch-with-timeout";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 type EcoAsset = {
@@ -89,15 +90,22 @@ export function EcoImageField({
     )
       return;
     setBusyFile(asset.filename);
-    const res = await fetch("/api/admin/uploads/ecosystem", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename: asset.filename }),
-    });
-    setBusyFile(null);
-    if (res.ok) {
-      if (value === asset.url) onChange("");
-      void loadAssets();
+    try {
+      const res = await fetchWithTimeout("/api/admin/uploads/ecosystem", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: asset.filename }),
+      });
+      if (res.ok) {
+        if (value === asset.url) onChange("");
+        void loadAssets();
+      } else {
+        setError("Delete failed. Try again.");
+      }
+    } catch {
+      setError("Delete failed — check your connection and retry.");
+    } finally {
+      setBusyFile(null);
     }
   };
 

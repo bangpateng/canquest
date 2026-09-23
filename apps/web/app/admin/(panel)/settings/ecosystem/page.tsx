@@ -52,39 +52,54 @@ export default function AdminEcosystemSettingsPage() {
   const addCategory = async () => {
     if (!newCat.value.trim() || !newCat.label.trim()) return;
     setCatBusy(true);
-    const res = await fetch("/api/admin/ecosystem/categories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        value: newCat.value.trim(),
-        label: newCat.label.trim(),
-        sortOrder: (categories?.length ?? 0) + 1,
-      }),
-    });
-    setCatBusy(false);
-    if (res.ok) {
-      setNewCat({ value: "", label: "" });
-      setMessage(null);
-      void load();
-    } else {
-      const body = (await res.json().catch(() => null)) as
-        | { message?: string }
-        | null;
-      setMessage(body?.message ?? "Failed to add category.");
+    try {
+      const res = await fetchWithTimeout("/api/admin/ecosystem/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          value: newCat.value.trim(),
+          label: newCat.label.trim(),
+          sortOrder: (categories?.length ?? 0) + 1,
+        }),
+      });
+      if (res.ok) {
+        setNewCat({ value: "", label: "" });
+        setMessage(null);
+        void load();
+      } else {
+        const body = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        setMessage(body?.message ?? "Failed to add category.");
+      }
+    } catch {
+      setMessage("Failed to add category — check your connection and retry.");
+    } finally {
+      setCatBusy(false);
     }
   };
 
   const saveCategoryLabel = async () => {
     if (!editCat) return;
     setCatBusy(true);
-    await fetch(`/api/admin/ecosystem/categories/${editCat.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label: editCat.label }),
-    });
-    setCatBusy(false);
-    setEditCat(null);
-    void load();
+    try {
+      const res = await fetchWithTimeout(`/api/admin/ecosystem/categories/${editCat.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: editCat.label }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null;
+        setMessage(body?.message ?? "Failed to save category.");
+        return;
+      }
+      setEditCat(null);
+      void load();
+    } catch {
+      setMessage("Failed to save category — check your connection and retry.");
+    } finally {
+      setCatBusy(false);
+    }
   };
 
   const deleteCategory = async (c: Category) => {
@@ -105,15 +120,20 @@ export default function AdminEcosystemSettingsPage() {
 
   const saveSocials = async () => {
     setSavingSocials(true);
-    const res = await fetch("/api/admin/ecosystem/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        socialLinks: socials.filter((s) => s.platform && s.url),
-      }),
-    });
-    setSavingSocials(false);
-    setMessage(res.ok ? "Global social links saved." : "Save failed.");
+    try {
+      const res = await fetchWithTimeout("/api/admin/ecosystem/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          socialLinks: socials.filter((s) => s.platform && s.url),
+        }),
+      });
+      setMessage(res.ok ? "Global social links saved." : "Save failed.");
+    } catch {
+      setMessage("Save failed — check your connection and retry.");
+    } finally {
+      setSavingSocials(false);
+    }
   };
 
   return (

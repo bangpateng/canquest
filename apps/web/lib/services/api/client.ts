@@ -66,10 +66,15 @@ export async function apiFetch<T = unknown>(
     headers.set('Content-Type', 'application/json');
   }
 
+  // Default timeout prevents admin loading/busy states from waiting forever
+  // when the BFF or API connection hangs. Callers may provide a custom signal.
+  const signal = rest.signal ?? AbortSignal.timeout(15_000);
+
   const res = await fetch(path, {
     credentials: 'include',
     cache: 'no-store',
     ...rest,
+    signal,
     headers,
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
