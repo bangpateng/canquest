@@ -36,6 +36,7 @@ import { hasRealWallet } from '../common/wallet-policy';
 import { isOneSwapEnabled } from './oneswap.config';
 import { OneSwapClient } from './oneswap-client';
 import { getOneSwapConfig } from './oneswap.config';
+import { assertUsableSwapQuote, SwapQuoteGuardError } from './swap-quote-guard';
 import type { ExecuteSwapParams, SwapExecResult } from './oneswap.types';
 import { OpenSwapExistsError } from '@oneswap/sdk';
 import type { Token } from '@oneswap/sdk';
@@ -193,6 +194,14 @@ export class SwapService {
       throw new BadRequestException(
         `Price impact too high (${quote.priceImpactPct.toFixed(2)}% > ${cfg.maxPriceImpactPct}%). Try a smaller amount.`,
       );
+    }
+    try {
+      assertUsableSwapQuote(params.amount, quote, cfg);
+    } catch (err) {
+      if (err instanceof SwapQuoteGuardError) {
+        throw new BadRequestException({ code: err.code, message: err.message });
+      }
+      throw err;
     }
 
     // Create-or-resume swap OneSwap (mirror step 2) → depositParty.
@@ -468,6 +477,14 @@ export class SwapService {
       throw new Error(
         `Price impact too high (${quote.priceImpactPct.toFixed(2)}% > ${cfg.maxPriceImpactPct}%). Try a smaller amount.`,
       );
+    }
+    try {
+      assertUsableSwapQuote(params.amount, quote, cfg);
+    } catch (err) {
+      if (err instanceof SwapQuoteGuardError) {
+        throw new Error(`${err.code}: ${err.message}`);
+      }
+      throw err;
     }
 
     // ── 2. Create-or-resume (anti OpenSwapExistsError) ───────────────────

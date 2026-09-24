@@ -29,6 +29,8 @@ export interface OneSwapConfig {
   minAmountToken: number;
   /** Reject swap bila price impact > ini (persen, default 5). */
   maxPriceImpactPct: number;
+  /** Reject bila network fee menyerap lebih dari rasio input (default 0.5). */
+  maxNetworkFeeRatio: number;
   /** Slippage tolerance default dalam basis points (default 200 = 2%). */
   defaultSlippageBps: number;
 }
@@ -48,6 +50,9 @@ export function getOneSwapConfig(): OneSwapConfig {
     minAmountCc: Number(process.env.ONESWAP_MIN_AMOUNT_CC ?? 10),
     minAmountToken: Number(process.env.ONESWAP_MIN_AMOUNT_TOKEN ?? 2.5),
     maxPriceImpactPct: Number(process.env.ONESWAP_MAX_PRICE_IMPACT_PCT ?? 5),
+    maxNetworkFeeRatio: Number(
+      process.env.ONESWAP_MAX_NETWORK_FEE_RATIO ?? 0.5,
+    ),
     defaultSlippageBps: Number(process.env.ONESWAP_SLIPPAGE_BPS ?? 200),
   };
 }

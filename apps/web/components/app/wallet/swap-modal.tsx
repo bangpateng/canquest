@@ -211,10 +211,24 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           }),
         });
         const data = (await res.json()) as QuoteResponse & {
+          code?: string;
           message?: string;
         };
         if (!res.ok) {
-          setQuoteError(data.message ?? "Could not get quote.");
+          const quoteMessages: Record<string, string> = {
+            SWAP_INPUT_BELOW_NETWORK_FEE:
+              "This amount is below the current network fee. Try a larger amount.",
+            SWAP_NETWORK_FEE_TOO_HIGH:
+              "The current network fee is too high for this amount. Try a larger amount or try again later.",
+            SWAP_NO_EFFECTIVE_INPUT:
+              "This quote has no effective input. Try again later.",
+            SWAP_NO_OUTPUT:
+              "This quote has no usable output. Try again later.",
+          };
+          setQuoteError(
+            (data.code && quoteMessages[data.code]) ||
+              "Could not get a usable quote. Try again later.",
+          );
           setQuote(null);
           return;
         }

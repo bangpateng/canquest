@@ -31,6 +31,10 @@ import { SwapDto, SwapQuoteDto } from './dto/swap.dto';
 import { SwapService } from '../oneswap/swap.service';
 import { UsersService } from '../users/users.service';
 import { getOneSwapConfig, isOneSwapEnabled } from '../oneswap/oneswap.config';
+import {
+  SwapQuoteGuardError,
+  assertUsableSwapQuote,
+} from '../oneswap/swap-quote-guard';
 import { hasRealWallet } from '../common/wallet-policy';
 import { isSwapInstrument, isVisibleInstrument } from './visible-instruments';
 import type { AuthedReq } from './party-shared';
@@ -296,6 +300,17 @@ export class PartySwapController {
         to: await this.swapService.canonicalSymbol(body.to),
         amount: body.amount,
       });
+      try {
+        assertUsableSwapQuote(body.amount, quote, getOneSwapConfig());
+      } catch (err) {
+        if (err instanceof SwapQuoteGuardError) {
+          throw new BadRequestException({
+            code: err.code,
+            message: err.message,
+          });
+        }
+        throw err;
+      }
       // Shape OneSwap native sesuai dokumentasi Quote type. Field:
       //  - amountOut        : output yang dibeli user
       //  - effInput         : input aktual di-swap SETELAH networkFeeIn dipotong
